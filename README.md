@@ -5,10 +5,6 @@ references used to compare representations from existing one-dimensional NMR
 models. It also contains the small canonical-data layer that will later support
 training a new NMR foundation model.
 
-The repository does **not** version datasets, downloaded checkpoints, model
-weights, embeddings, or machine-local Python environments. Those assets can be
-very large and must be obtained separately on each machine.
-
 ## Clone the project
 
 The existing-model repositories are Git submodules pinned to the versions used
