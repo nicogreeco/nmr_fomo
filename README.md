@@ -11,8 +11,8 @@ The existing-model repositories are Git submodules pinned to the versions used
 by this project. Clone them at the same time:
 
 ```bash
-git clone --recurse-submodules git@github.com:YOUR-ACCOUNT/YOUR-PRIVATE-REPOSITORY.git
-cd YOUR-PRIVATE-REPOSITORY
+git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
+cd nmr_fomo
 ```
 
 If the repository was cloned without submodules:
