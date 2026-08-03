@@ -150,18 +150,3 @@ change one model path directly in
 `scripts/model_benchmarks/processors/<model>.py` and
 `scripts/model_benchmarks/embedders/<model>.py`; keep source parsing only in
 `scripts/canonicalize/`.
-
-## Private-repository hygiene
-
-Before committing or pushing, inspect changes:
-
-```bash
-git status
-git diff --cached
-git submodule status
-```
-
-Never add credentials, SSH keys, tokens, private URLs, raw PDFs with restricted
-distribution, datasets, or checkpoints. If an ignored large file appears in a
-submodule's own `git status`, it is still local, but should not be committed in
-that submodule.
