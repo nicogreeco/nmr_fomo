@@ -65,32 +65,6 @@ Read [scripts/envs_scr/README.md](scripts/envs_scr/README.md) before setting up
 a new VM. PyArrow is installed in every environment because it is used to
 stream canonical Parquet files and write incremental embedding outputs.
 
-## Large local assets
-
-The following are intentionally ignored by Git:
-
-- canonical and raw datasets under `datasets/`;
-- NMRPeak weights and downloaded data;
-- NMRTrans cached splits and checkpoints;
-- the NMR-Solver FAISS index and PubChem metadata LMDB;
-- UltraNMR checkpoints and downloaded model assets;
-- embedding outputs, experiment outputs, logs, and local environments.
-
-After cloning, download or copy the assets that you need into the matching
-submodule paths. For example, the current local layout is:
-
-```text
-models/NMRPeak/data/ and models/NMRPeak/weights/
-models/NMRTrans/data/ and models/NMRTrans/model/
-models/NMR-Solver/database/index/ and models/NMR-Solver/database/metadata/
-models/UltraNMR/model_checkpoint/
-datasets/<source>/
-```
-
-Assets inside a submodule are also not part of this repository's commit. Do
-not commit them inside the submodule unless there is an explicit reason and the
-upstream licence permits it.
-
 ## Project layout
 
 ```text
@@ -120,16 +94,6 @@ The canonical dataset layer is model-independent. It does not tokenize, pad,
 normalise, or know how a source release was originally stored.
 
 ## Common tasks
-
-### Inspect a canonical dataset
-
-Run the streaming validator and summary tool without changing the Parquet file:
-
-```bash
-PYTHONPATH=scripts python scripts/canonicalize/analyze_parquet.py \
-  datasets/nmrtrans/all.parquet \
-  --output datasets/nmrtrans/canonical_analysis.json
-```
 
 ### Extract embeddings
 
