@@ -1,207 +1,108 @@
-# NMR latent-space project
+# NMR FoMo
 
-This private repository contains the code, notes, and reproducible model
-references used to compare representations from existing one-dimensional NMR
-models. It also contains the small canonical-data layer that will later support
-training a new NMR foundation model.
+This is the private working repository for the NMR foundation-model project
+described in [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>).
+It contains the project notes, the canonical NMR-data code, data-preparation
+tools, and a small bridge for comparing this future model with published NMR
+encoders.
 
-The repository does **not** version datasets, downloaded checkpoints, model
-weights, embeddings, or machine-local Python environments. Those assets can be
-very large and must be obtained separately on each machine.
+The central goal is to learn useful representations from combined `1H + 13C`
+NMR spectra. The project plan is the source of truth for scope, milestones, and
+deliverables; this README only explains how the repository is arranged.
 
-## Clone the project
+## Clone
 
-The existing-model repositories are Git submodules pinned to the versions used
-by this project. Clone them at the same time:
+The published model repositories are included as Git submodules. Clone them
+with the project:
 
 ```bash
-git clone --recurse-submodules git@github.com:YOUR-ACCOUNT/YOUR-PRIVATE-REPOSITORY.git
-cd YOUR-PRIVATE-REPOSITORY
+git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
+cd nmr_fomo
 ```
 
-If the repository was cloned without submodules:
+If you already cloned the repository, initialise them with:
 
 ```bash
 git submodule update --init --recursive
 ```
 
-The currently pinned upstream repositories are:
+The submodules are pinned to specific revisions so that the benchmark code is
+reproducible. Do not update one casually: test the relevant benchmark path and
+then commit the new submodule pointer in this repository.
 
-| Path | Upstream repository | Role |
+## Published-model benchmarks
+
+`models/` contains code from published repositories, used here only to extract
+latent representations from their existing encoders. Those embeddings are a
+benchmark for the future foundation model; the upstream models are not part of
+the new model itself.
+
+| Local path | Published repository | Role here |
 |---|---|---|
-| `models/NMRPeak` | `Colin-Jay/NMRPeak` | rich peak-token baseline |
-| `models/NMRTrans` | `little1d/NMRTrans` | experimental peak-set baseline |
-| `models/NMR-Solver` | `YongqiJin/NMR-Solver` | fixed Gaussian shift featurizer |
-| `models/UltraNMR` | `wuycM/UltraNMR` | large-scale shift-only encoder |
+| `models/NMRPeak` | NMRPeak | peak-token encoder baseline |
+| `models/NMRTrans` | NMRTrans | paired H/C peak-set encoder baseline |
+| `models/NMR-Solver` | NMR-Solver | fixed Gaussian-spectrum featurizer |
+| `models/UltraNMR` | UltraNMR | shift-only encoder baseline |
 
-Do not casually run `git pull` inside a submodule. Update one deliberately,
-test the corresponding processor/embedder, then commit the changed submodule
-pointer in this repository.
+Each checkpoint, dataset release, and model asset must be downloaded according
+to the instructions and licence in that model's own upstream README. They are
+large local assets and are deliberately not versioned here.
 
-## Local environments
+## Environments and local assets
 
-The models have incompatible dependencies, so use one environment per model
-family. The setup scripts create environments on local VM storage while code
-and large data remain on the shared filesystem.
-
-For a CPU machine:
+The four published projects have incompatible dependencies, so the project
+uses one Python environment per model family. Set them up on the VM's local
+disk, while keeping code and large assets on the shared filesystem:
 
 ```bash
 ./scripts/setup_cpu_envs.sh /path/on/local/disk/nmr
-```
-
-For a GPU machine:
-
-```bash
+# or, on a prepared GPU VM:
 ./scripts/setup_gpu_envs.sh /path/on/local/disk/nmr
 ```
 
-After setup, activate one environment with the installed helper:
+After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`, or
+`nmr-env ultranmr`. See [scripts/envs_scr/README.md](scripts/envs_scr/README.md)
+for the exact environment setup and repair commands.
 
-```bash
-nmr-env main
-nmr-env nmrpeak
-nmr-env nmrtrans
-nmr-env ultranmr
-```
+Datasets, downloaded checkpoints, embedding outputs, local virtual
+environments, credentials, and restricted material must not be committed.
 
-Read [scripts/envs_scr/README.md](scripts/envs_scr/README.md) before setting up
-a new VM. PyArrow is installed in every environment because it is used to
-stream canonical Parquet files and write incremental embedding outputs.
-
-## Large local assets
-
-The following are intentionally ignored by Git:
-
-- canonical and raw datasets under `datasets/`;
-- NMRPeak weights and downloaded data;
-- NMRTrans cached splits and checkpoints;
-- the NMR-Solver FAISS index and PubChem metadata LMDB;
-- UltraNMR checkpoints and downloaded model assets;
-- embedding outputs, experiment outputs, logs, and local environments.
-
-After cloning, download or copy the assets that you need into the matching
-submodule paths. For example, the current local layout is:
+## Repository map
 
 ```text
-models/NMRPeak/data/ and models/NMRPeak/weights/
-models/NMRTrans/data/ and models/NMRTrans/model/
-models/NMR-Solver/database/index/ and models/NMR-Solver/database/metadata/
-models/UltraNMR/model_checkpoint/
-datasets/<source>/
-```
-
-Assets inside a submodule are also not part of this repository's commit. Do
-not commit them inside the submodule unless there is an explicit reason and the
-upstream licence permits it.
-
-## Project layout
-
-```text
-contex/                     project diary, paper notes, design decisions, analyses
-contex/DL Methods/          one note per relevant model or dataset paper
-datasets/                   local canonical Parquet files and analysis reports (ignored)
-models/                     pinned upstream model repositories (submodules)
+contex/                     project diary, literature notes, decisions, and analyses
+  DL Methods/               notes on the relevant papers and repositories
+datasets/                   local raw/canonical data and generated reports (ignored)
+models/                     pinned upstream repositories (Git submodules)
 scripts/
-  data/                     canonical schema, validation, and dataset readers
-  canonicalize/             source-to-canonical conversion and analysis tools
-  model_benchmarks/         model processors, embedders, extraction CLI, smoke tests
-  envs_scr/                 machine-local environment setup scripts and notes
-  notebooks/                small exploratory notebooks
+  data/                     reusable canonical schema, validation, and Parquet readers
+  canonicalize/             source-specific conversion and dataset-analysis tools
+  model_benchmarks/         processors and embedders for published-model comparison
+  envs_scr/                 model-specific environment setup material
+  notebooks/                exploratory work
 ```
 
-The core data flow is:
+The reusable data layer remains independent of the published models:
 
 ```text
-CanonicalParquetDataset
-    -> model-specific processor/collator
-    -> model-specific batch
-    -> lightweight embedder
-    -> fixed-size embeddings with record IDs
+CanonicalParquetDataset -> processor/collator -> model batch -> embedder -> embeddings
 ```
 
-The canonical dataset layer is model-independent. It does not tokenize, pad,
-normalise, or know how a source release was originally stored.
+## How to navigate the project
 
-## Common tasks
+Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:
 
-### Inspect a canonical dataset
+- [NMR foundations and AI](<contex/NMR%20foundations%20and%20AI.md>) and
+  [DL Methods](<contex/DL%20Methods/>) collect the literature context.
+- [Datasets](<contex/Datasets.md>), [Dataset Analysis](<contex/Dataset%20Analysis.md>),
+  and [Dataset Filtering and Processing](<contex/Dataset_Filtering_and_Processing.md>) explain the data choices and observed distributions.
+- [Embedding Pipeline Architecture](<contex/Embedding_Pipeline_Architecture.md>) and
+  [Canonicalization Implementation Notes](<contex/Canonicalization_Implementation_Notes.md>) describe the current implementation decisions.
 
-Run the streaming validator and summary tool without changing the Parquet file:
+Each `scripts/` subfolder has a short README with the practical details for
+that part of the code. In particular, start from `scripts/README.md` for the
+Python layout, and from `scripts/canonicalize/README.md` for conversion or
+canonical-dataset analysis.
 
-```bash
-PYTHONPATH=scripts python scripts/canonicalize/analyze_parquet.py \
-  datasets/nmrtrans/all.parquet \
-  --output datasets/nmrtrans/canonical_analysis.json
-```
-
-### Extract embeddings
-
-Activate the matching model environment, then run from the repository root:
-
-```bash
-PYTHONPATH=scripts python scripts/extract_embeddings.py \
-  --model nmrpeak \
-  --input datasets/mst_nmr/test.parquet \
-  --output embeddings/mst_nmr_nmrpeak.parquet \
-  --device cuda \
-  --batch-size 64 \
-  --mode canonical
-```
-
-The extractor reads input incrementally and writes one Parquet row group per
-embedding batch. Add `--on-incompatible skip --rejections rejections.json` for
-bulk extraction where some records do not meet a model's requirements.
-
-### Use the reusable dataset in Python
-
-```python
-from torch.utils.data import DataLoader
-
-from data import CanonicalParquetDataset
-from model_benchmarks import build_embedder, build_processor
-
-dataset = CanonicalParquetDataset("datasets/mst_nmr/test.parquet")
-processor = build_processor("nmrpeak", mode="canonical", strict=True)
-embedder = build_embedder("nmrpeak", device="cpu")
-
-loader = DataLoader(dataset, batch_size=64, collate_fn=processor)
-for batch in loader:
-    result = embedder.encode(batch)
-    break
-```
-
-Only combined `1H + 13C` input is supported by the current benchmark bridge.
-
-## Where to read and edit
-
-- [Embedding Pipeline Architecture](contex/Embedding_Pipeline_Architecture.md):
-  data flow, embedding definitions, extraction behaviour.
-- [Canonicalization Implementation Notes](contex/Canonicalization_Implementation_Notes.md):
-  canonical fields and converter rules.
-- [Dataset Analysis](contex/Dataset%20Analysis.md): measured canonical dataset
-  statistics and processor compatibility.
-- [Dataset Filtering and Processing](contex/Dataset_Filtering_and_Processing.md):
-  how paper-level filtering explains distribution differences.
-- [scripts/README.md](scripts/README.md): the practical map of the Python code.
-
-For an implementation change, keep common schema logic in `scripts/data/`;
-change one model path directly in
-`scripts/model_benchmarks/processors/<model>.py` and
-`scripts/model_benchmarks/embedders/<model>.py`; keep source parsing only in
-`scripts/canonicalize/`.
-
-## Private-repository hygiene
-
-Before committing or pushing, inspect changes:
-
-```bash
-git status
-git diff --cached
-git submodule status
-```
-
-Never add credentials, SSH keys, tokens, private URLs, raw PDFs with restricted
-distribution, datasets, or checkpoints. If an ignored large file appears in a
-submodule's own `git status`, it is still local, but should not be committed in
-that submodule.
+Before a push, check `git status`, `git diff --cached`, and
+`git submodule status`.
