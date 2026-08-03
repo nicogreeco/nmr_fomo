@@ -1,0 +1,12 @@
+[submodule "models/NMRPeak"]
+	path = models/NMRPeak
+	url = https://github.com/Colin-Jay/NMRPeak.git
+[submodule "models/NMRTrans"]
+	path = models/NMRTrans
+	url = https://github.com/little1d/NMRTrans.git
+[submodule "models/NMR-Solver"]
+	path = models/NMR-Solver
+	url = https://github.com/YongqiJin/NMR-Solver.git
+[submodule "models/UltraNMR"]
+	path = models/UltraNMR
+	url = https://github.com/wuycM/UltraNMR.git
