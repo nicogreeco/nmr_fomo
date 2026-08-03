@@ -1,0 +1,55 @@
+{
+  "dataset": "mst_nmr",
+  "input": "datasets/mst_nmr/all.parquet",
+  "mode": "canonical",
+  "models": {
+    "nmrpeak": {
+      "accepted_records": 26429,
+      "issue_occurrence_counts": {
+        "invalid_integration": 9085,
+        "missing_j_values": 3114029
+      },
+      "record_issue_code_counts": {
+        "invalid_integration": 7093,
+        "missing_j_values": 767854
+      },
+      "rejected_records": 767941
+    },
+    "nmrsolver": {
+      "accepted_records": 787277,
+      "issue_occurrence_counts": {
+        "missing_proton_expansion": 9085
+      },
+      "record_issue_code_counts": {
+        "missing_proton_expansion": 7093
+      },
+      "rejected_records": 7093
+    },
+    "nmrtrans": {
+      "accepted_records": 26278,
+      "issue_occurrence_counts": {
+        "missing_integration": 9085,
+        "missing_j_values": 3114029,
+        "too_many_c_peaks": 2203
+      },
+      "record_issue_code_counts": {
+        "missing_integration": 7093,
+        "missing_j_values": 767854,
+        "too_many_c_peaks": 2203
+      },
+      "rejected_records": 768092
+    },
+    "ultranmr": {
+      "accepted_records": 787277,
+      "issue_occurrence_counts": {
+        "missing_proton_expansion": 9085
+      },
+      "record_issue_code_counts": {
+        "missing_proton_expansion": 7093
+      },
+      "rejected_records": 7093
+    }
+  },
+  "rows": 794370,
+  "scope": "processor field validation; NMRPeak sequence length is checked later during collation"
+}

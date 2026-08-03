@@ -1,0 +1,268 @@
+{
+  "files": [
+    {
+      "both_modality_usable_count": 670668,
+      "bytes": 721008254,
+      "c_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 55,
+        "null_record_count": 134556,
+        "shift_max": 297.45,
+        "shift_min": -35.54,
+        "total_peak_count": 11881119
+      },
+      "canonical_multiplicity_counts": {
+        "<unk>": 90838,
+        "bd": 2638,
+        "br": 20492,
+        "d": 1459789,
+        "dd": 484967,
+        "ddd": 80257,
+        "dddd": 6236,
+        "ddp": 100,
+        "ddq": 1041,
+        "ddt": 13924,
+        "dq": 15307,
+        "dqd": 842,
+        "dt": 69547,
+        "m": 2260268,
+        "q": 102140,
+        "qd": 7247,
+        "quint": 15934,
+        "s": 1451865,
+        "sept": 10229,
+        "t": 595976,
+        "td": 65456,
+        "tt": 13310
+      },
+      "duplicate_record_id_count": 0,
+      "h_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 28,
+        "null_record_count": 115572,
+        "shift_max": 16.99,
+        "shift_min": -2.94,
+        "total_peak_count": 6768403
+      },
+      "path": "datasets/nmrexp/train.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 0
+      },
+      "proton_j_values": {
+        "empty_count": 3795067,
+        "nonempty_count": 2973336,
+        "null_count": 0
+      },
+      "row_groups": 19,
+      "rows": 920796,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "converter": "convert_nmrexp.py",
+        "source_dataset": "NMRPeak-NMRexp"
+      },
+      "source_values": {
+        "NMRPeak-NMRexp": 920796
+      }
+    },
+    {
+      "both_modality_usable_count": 35286,
+      "bytes": 37987582,
+      "c_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 55,
+        "null_record_count": 7080,
+        "shift_max": 247.6,
+        "shift_min": -19.5,
+        "total_peak_count": 626637
+      },
+      "canonical_multiplicity_counts": {
+        "<unk>": 4722,
+        "bd": 121,
+        "br": 1054,
+        "d": 77023,
+        "dd": 25812,
+        "ddd": 4169,
+        "dddd": 331,
+        "ddp": 5,
+        "ddq": 47,
+        "ddt": 723,
+        "dq": 802,
+        "dqd": 36,
+        "dt": 3667,
+        "m": 119200,
+        "q": 5399,
+        "qd": 358,
+        "quint": 842,
+        "s": 76609,
+        "sept": 563,
+        "t": 31316,
+        "td": 3482,
+        "tt": 716
+      },
+      "duplicate_record_id_count": 0,
+      "h_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 24,
+        "null_record_count": 6097,
+        "shift_max": 16.87,
+        "shift_min": -2.79,
+        "total_peak_count": 356997
+      },
+      "path": "datasets/nmrexp/val.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 0
+      },
+      "proton_j_values": {
+        "empty_count": 200141,
+        "nonempty_count": 156856,
+        "null_count": 0
+      },
+      "row_groups": 1,
+      "rows": 48463,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "converter": "convert_nmrexp.py",
+        "source_dataset": "NMRPeak-NMRexp"
+      },
+      "source_values": {
+        "NMRPeak-NMRexp": 48463
+      }
+    },
+    {
+      "both_modality_usable_count": 78297,
+      "bytes": 84579607,
+      "c_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 54,
+        "null_record_count": 15866,
+        "shift_max": 260.4,
+        "shift_min": -15.53,
+        "total_peak_count": 1385241
+      },
+      "canonical_multiplicity_counts": {
+        "<unk>": 10812,
+        "bd": 317,
+        "br": 2382,
+        "d": 171285,
+        "dd": 56445,
+        "ddd": 9351,
+        "dddd": 696,
+        "ddp": 9,
+        "ddq": 121,
+        "ddt": 1604,
+        "dq": 1717,
+        "dqd": 93,
+        "dt": 8032,
+        "m": 264337,
+        "q": 11978,
+        "qd": 848,
+        "quint": 1801,
+        "s": 169968,
+        "sept": 1130,
+        "t": 69803,
+        "td": 7610,
+        "tt": 1511
+      },
+      "duplicate_record_id_count": 0,
+      "h_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 26,
+        "null_record_count": 13533,
+        "shift_max": 16.95,
+        "shift_min": -2.92,
+        "total_peak_count": 791850
+      },
+      "path": "datasets/nmrexp/test.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 0
+      },
+      "proton_j_values": {
+        "empty_count": 444209,
+        "nonempty_count": 347641,
+        "null_count": 0
+      },
+      "row_groups": 3,
+      "rows": 107696,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "converter": "convert_nmrexp.py",
+        "source_dataset": "NMRPeak-NMRexp"
+      },
+      "source_values": {
+        "NMRPeak-NMRexp": 107696
+      }
+    },
+    {
+      "both_modality_usable_count": 784251,
+      "bytes": 843228948,
+      "c_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 55,
+        "null_record_count": 157502,
+        "shift_max": 297.45,
+        "shift_min": -35.54,
+        "total_peak_count": 13892997
+      },
+      "canonical_multiplicity_counts": {
+        "<unk>": 106372,
+        "bd": 3076,
+        "br": 23928,
+        "d": 1708097,
+        "dd": 567224,
+        "ddd": 93777,
+        "dddd": 7263,
+        "ddp": 114,
+        "ddq": 1209,
+        "ddt": 16251,
+        "dq": 17826,
+        "dqd": 971,
+        "dt": 81246,
+        "m": 2643805,
+        "q": 119517,
+        "qd": 8453,
+        "quint": 18577,
+        "s": 1698442,
+        "sept": 11922,
+        "t": 697095,
+        "td": 76548,
+        "tt": 15537
+      },
+      "duplicate_record_id_count": 0,
+      "h_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 28,
+        "null_record_count": 135202,
+        "shift_max": 16.99,
+        "shift_min": -2.94,
+        "total_peak_count": 7917250
+      },
+      "path": "datasets/nmrexp/all.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 0
+      },
+      "proton_j_values": {
+        "empty_count": 4439417,
+        "nonempty_count": 3477833,
+        "null_count": 0
+      },
+      "row_groups": 22,
+      "rows": 1076955,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "converter": "convert_nmrexp.py",
+        "source_dataset": "NMRPeak-NMRexp"
+      },
+      "source_values": {
+        "NMRPeak-NMRexp": 1076955
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "split_counts": {
+    "train": 920796,
+    "val": 48463,
+    "test": 107696
+  },
+  "all_count": 1076955,
+  "split_overlap_count": 0,
+  "all_equals_split_union": true,
+  "missing_from_all_count": 0,
+  "extra_in_all_count": 0
+}

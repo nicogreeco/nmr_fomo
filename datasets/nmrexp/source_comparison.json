@@ -1,0 +1,77 @@
+{
+  "all_source_statistics_match": true,
+  "canonical_all_totals": {
+    "both_modality_usable_records": 784251,
+    "c_max_peaks": 55,
+    "c_null_records": 157502,
+    "c_total_peaks": 13892997,
+    "h_max_peaks": 28,
+    "h_null_records": 135202,
+    "h_total_peaks": 7917250,
+    "rows": 1076955,
+    "zero_integration_peaks": 0
+  },
+  "canonical_duplicate_record_ids": 0,
+  "canonical_schema_matches": true,
+  "dataset": "nmrexp",
+  "source_format": "LMDB containing pickled processed NMRPeak records",
+  "source_observations": {
+    "all_lmdb_matches_split_raw_value_multiset": true,
+    "all_lmdb_rows": 1076955,
+    "auxiliary_sample_lmdb_files_excluded": true,
+    "multiset_check": "BLAKE2b-128 digest count, modular sum, and XOR all matched",
+    "records_missing_one_or_both_embedding_modalities": 292704
+  },
+  "source_split_bytes_total": 3359444992,
+  "source_splits": {
+    "test": {
+      "bytes": 336056320,
+      "path": "models/NMRPeak/data/NMRexp/lmdb_dataset/test.lmdb",
+      "rows": 107696
+    },
+    "train": {
+      "bytes": 2873065472,
+      "path": "models/NMRPeak/data/NMRexp/lmdb_dataset/train.lmdb",
+      "rows": 920796
+    },
+    "val": {
+      "bytes": 150323200,
+      "path": "models/NMRPeak/data/NMRexp/lmdb_dataset/valid.lmdb",
+      "rows": 48463
+    }
+  },
+  "source_to_canonical_matches": {
+    "both_modality_usable_records": true,
+    "c_max_peaks": true,
+    "c_null_records": true,
+    "c_total_peaks": true,
+    "h_max_peaks": true,
+    "h_null_records": true,
+    "h_total_peaks": true,
+    "rows": true,
+    "zero_integration_peaks": true
+  },
+  "source_totals": {
+    "both_modality_usable_records": 784251,
+    "c_max_peaks": 55,
+    "c_null_records": 157502,
+    "c_total_peaks": 13892997,
+    "h_max_peaks": 28,
+    "h_null_records": 135202,
+    "h_total_peaks": 7917250,
+    "rows": 1076955,
+    "zero_integration_peaks": 0
+  },
+  "split_consistency": {
+    "all_count": 1076955,
+    "all_equals_split_union": true,
+    "extra_in_all_count": 0,
+    "missing_from_all_count": 0,
+    "split_counts": {
+      "test": 107696,
+      "train": 920796,
+      "val": 48463
+    },
+    "split_overlap_count": 0
+  }
+}

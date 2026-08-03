@@ -1,0 +1,43 @@
+{
+  "dataset": "nmrtrans",
+  "input": "datasets/nmrtrans/all.parquet",
+  "mode": "canonical",
+  "models": {
+    "nmrpeak": {
+      "accepted_records": 212439,
+      "issue_occurrence_counts": {
+        "invalid_integration": 1
+      },
+      "record_issue_code_counts": {
+        "invalid_integration": 1
+      },
+      "rejected_records": 1
+    },
+    "nmrsolver": {
+      "accepted_records": 212440,
+      "issue_occurrence_counts": {},
+      "record_issue_code_counts": {},
+      "rejected_records": 0
+    },
+    "nmrtrans": {
+      "accepted_records": 212405,
+      "issue_occurrence_counts": {
+        "too_many_c_peaks": 33,
+        "too_many_j_values": 2
+      },
+      "record_issue_code_counts": {
+        "too_many_c_peaks": 33,
+        "too_many_j_values": 2
+      },
+      "rejected_records": 35
+    },
+    "ultranmr": {
+      "accepted_records": 212440,
+      "issue_occurrence_counts": {},
+      "record_issue_code_counts": {},
+      "rejected_records": 0
+    }
+  },
+  "rows": 212440,
+  "scope": "processor field validation; NMRPeak sequence length is checked later during collation"
+}

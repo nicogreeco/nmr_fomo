@@ -1,0 +1,3 @@
+# NMRPeak pins apex==0.9.10.dev0, but that PyPI distribution is an unrelated
+# Pyramid web toolkit, not NVIDIA Apex. NMRPeak itself has no direct apex import.
+apex

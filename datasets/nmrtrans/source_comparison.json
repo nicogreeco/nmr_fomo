@@ -1,0 +1,116 @@
+{
+  "all_source_statistics_match": true,
+  "canonical_all_totals": {
+    "both_modality_usable_records": 212440,
+    "c_max_peaks": 263,
+    "c_null_records": 0,
+    "c_total_peaks": 3287622,
+    "h_max_peaks": 34,
+    "h_null_records": 0,
+    "h_total_peaks": 1898067,
+    "rows": 212440,
+    "zero_integration_peaks": 0
+  },
+  "canonical_duplicate_record_ids": 0,
+  "canonical_schema_matches": true,
+  "dataset": "nmrtrans",
+  "source_format": "LZ4-compressed pickle containing NMRTrans/NMRSpec rows",
+  "source_observations": {
+    "c_shift_outlier_peaks": {
+      "all": 444,
+      "test": 39,
+      "train": 359,
+      "val": 46
+    },
+    "c_shift_outlier_records": {
+      "all": 372,
+      "test": 37,
+      "train": 297,
+      "val": 38
+    },
+    "h_shift_outlier_peaks": {
+      "all": 1332,
+      "test": 136,
+      "train": 1086,
+      "val": 110
+    },
+    "h_shift_outlier_records": {
+      "all": 1182,
+      "test": 126,
+      "train": 950,
+      "val": 106
+    },
+    "nmrtrans_encoder_records_over_60_c_peaks": {
+      "all": 33,
+      "test": 5,
+      "train": 25,
+      "val": 3
+    },
+    "nmrtrans_encoder_records_over_60_h_peaks": 0,
+    "policy": "Extreme source values were preserved without clipping.",
+    "raw_c_shift_range_ppm": [
+      0.005,
+      640221.0
+    ],
+    "raw_h_shift_range_ppm": [
+      -15.0,
+      20130.26
+    ],
+    "shift_outlier_thresholds_ppm": {
+      "c": "outside [-20, 300]",
+      "h": "outside [-5, 20]"
+    }
+  },
+  "source_split_bytes_total": 44247243,
+  "source_splits": {
+    "test": {
+      "bytes": 4430229,
+      "path": "models/NMRTrans/data/test.pkl.lz4",
+      "rows": 21298
+    },
+    "train": {
+      "bytes": 35400465,
+      "path": "models/NMRTrans/data/train.pkl.lz4",
+      "rows": 169863
+    },
+    "val": {
+      "bytes": 4416549,
+      "path": "models/NMRTrans/data/val.pkl.lz4",
+      "rows": 21279
+    }
+  },
+  "source_to_canonical_matches": {
+    "both_modality_usable_records": true,
+    "c_max_peaks": true,
+    "c_null_records": true,
+    "c_total_peaks": true,
+    "h_max_peaks": true,
+    "h_null_records": true,
+    "h_total_peaks": true,
+    "rows": true,
+    "zero_integration_peaks": true
+  },
+  "source_totals": {
+    "both_modality_usable_records": 212440,
+    "c_max_peaks": 263,
+    "c_null_records": 0,
+    "c_total_peaks": 3287622,
+    "h_max_peaks": 34,
+    "h_null_records": 0,
+    "h_total_peaks": 1898067,
+    "rows": 212440,
+    "zero_integration_peaks": 0
+  },
+  "split_consistency": {
+    "all_count": 212440,
+    "all_equals_split_union": true,
+    "extra_in_all_count": 0,
+    "missing_from_all_count": 0,
+    "split_counts": {
+      "test": 21298,
+      "train": 169863,
+      "val": 21279
+    },
+    "split_overlap_count": 0
+  }
+}

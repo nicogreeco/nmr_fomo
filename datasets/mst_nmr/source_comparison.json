@@ -1,0 +1,84 @@
+{
+  "all_source_statistics_match": true,
+  "canonical_all_totals": {
+    "both_modality_usable_records": 794370,
+    "c_max_peaks": 74,
+    "c_null_records": 0,
+    "c_total_peaks": 13936707,
+    "h_max_peaks": 28,
+    "h_null_records": 0,
+    "h_total_peaks": 7329649,
+    "rows": 794370,
+    "zero_integration_peaks": 9085
+  },
+  "canonical_duplicate_record_ids": 0,
+  "canonical_schema_matches": true,
+  "dataset": "mst_nmr",
+  "source_format": "LMDB containing pickled processed NMRPeak records",
+  "source_observations": {
+    "policy": "Preserved as 0 canonically; current model processors reject non-positive integration.",
+    "records_with_zero_integration": 7093,
+    "zero_integration_peaks_by_split": {
+      "test": 959,
+      "train": 7718,
+      "val": 408
+    },
+    "zero_integration_records_by_split": {
+      "test": 726,
+      "train": 6056,
+      "val": 311
+    }
+  },
+  "source_split_bytes_total": 3019923456,
+  "source_splits": {
+    "test": {
+      "bytes": 301727744,
+      "path": "models/NMRPeak/data/MST_NMR/lmdb_dataset/test.lmdb",
+      "rows": 79437
+    },
+    "train": {
+      "bytes": 2582532096,
+      "path": "models/NMRPeak/data/MST_NMR/lmdb_dataset/train.lmdb",
+      "rows": 679186
+    },
+    "val": {
+      "bytes": 135663616,
+      "path": "models/NMRPeak/data/MST_NMR/lmdb_dataset/valid.lmdb",
+      "rows": 35747
+    }
+  },
+  "source_to_canonical_matches": {
+    "both_modality_usable_records": true,
+    "c_max_peaks": true,
+    "c_null_records": true,
+    "c_total_peaks": true,
+    "h_max_peaks": true,
+    "h_null_records": true,
+    "h_total_peaks": true,
+    "rows": true,
+    "zero_integration_peaks": true
+  },
+  "source_totals": {
+    "both_modality_usable_records": 794370,
+    "c_max_peaks": 74,
+    "c_null_records": 0,
+    "c_total_peaks": 13936707,
+    "h_max_peaks": 28,
+    "h_null_records": 0,
+    "h_total_peaks": 7329649,
+    "rows": 794370,
+    "zero_integration_peaks": 9085
+  },
+  "split_consistency": {
+    "all_count": 794370,
+    "all_equals_split_union": true,
+    "extra_in_all_count": 0,
+    "missing_from_all_count": 0,
+    "split_counts": {
+      "test": 79437,
+      "train": 679186,
+      "val": 35747
+    },
+    "split_overlap_count": 0
+  }
+}
