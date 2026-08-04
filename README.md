@@ -18,8 +18,6 @@ with the project:
 ```bash
 git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
 cd nmr_fomo
-git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
-cd nmr_fomo
 ```
 
 If you already cloned the repository, initialise them with:
@@ -65,9 +63,6 @@ disk, while keeping code and large assets on the shared filesystem:
 After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`, or
 `nmr-env ultranmr`. See [scripts/envs_scr/README.md](scripts/envs_scr/README.md)
 for the exact environment setup and repair commands.
-
-Datasets, downloaded checkpoints, embedding outputs, local virtual
-environments, credentials, and restricted material must not be committed.
 
 ## Repository map
 
