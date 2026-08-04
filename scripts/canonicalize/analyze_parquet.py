@@ -69,6 +69,7 @@ def checked_record(value: object, path: Path, row_number: int):
 def analyze_parquet_file(
     path: str | Path,
     arrow_batch_size: int = 2048,
+    show_progress: bool = False,
 ) -> dict[str, object]:
     """Stream one canonical Parquet file and return aggregate statistics."""
 
@@ -89,6 +90,22 @@ def analyze_parquet_file(
 
     parquet_file = parquet.ParquetFile(parquet_path)
     file_metadata = parquet_file.metadata
+
+    progress_bar = None
+    if show_progress:
+        try:
+            from tqdm import tqdm
+        except ModuleNotFoundError as error:
+            raise ModuleNotFoundError(
+                "showing analysis progress requires tqdm; install it in the "
+                "environment used for analysis"
+            ) from error
+
+        progress_bar = tqdm(
+            total=file_metadata.num_rows,
+            desc=f"Analyzing {parquet_path.name}",
+            unit="records",
+        )
 
     rows = 0
     seen_record_ids: set[str] = set()
@@ -183,6 +200,12 @@ def analyze_parquet_file(
                     c_shift_min = update_minimum(c_shift_min, peak.shift)
                     c_shift_max = update_maximum(c_shift_max, peak.shift)
 
+        if progress_bar is not None:
+            progress_bar.update(arrow_batch.num_rows)
+
+    if progress_bar is not None:
+        progress_bar.close()
+
     expected_rows = file_metadata.num_rows
     if rows != expected_rows:
         raise RuntimeError(
@@ -270,7 +293,11 @@ def main() -> None:
 
     report = {
         "files": [
-            analyze_parquet_file(path, args.arrow_batch_size)
+            analyze_parquet_file(
+                path,
+                args.arrow_batch_size,
+                show_progress=True,
+            )
             for path in input_paths
         ]
     }
