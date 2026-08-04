@@ -18,6 +18,8 @@ with the project:
 ```bash
 git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
 cd nmr_fomo
+git clone --recurse-submodules git@github.com:nicogreeco/nmr_fomo.git
+cd nmr_fomo
 ```
 
 If you already cloned the repository, initialise them with:
