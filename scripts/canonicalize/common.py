@@ -150,16 +150,15 @@ def coordinate_list(value: object, location: str) -> list[list[float]] | None:
     return coordinates
 
 
-def parse_nmrpeak_j_values(value: object, location: str) -> list[float] | None:
+def parse_nmrpeak_j_values(value: object, location: str) -> list[float]:
     """Parse NMRPeak's underscore/comma-delimited J-value field.
 
-    An absent field remains ``None``. The release's ``_`` marker means the
-    field was present but contained no numerical coupling values, so it becomes
-    an empty list.
+    NMRPeak treats an absent field and its ``_`` marker as no numerical
+    coupling values, so both become an empty list.
     """
 
     if value is None:
-        return None
+        return []
     values = _to_python_value(value)
     if isinstance(values, (list, tuple)):
         return [
@@ -180,11 +179,11 @@ def parse_nmrpeak_j_values(value: object, location: str) -> list[float] | None:
     return [finite_float(values, location)]
 
 
-def parse_nmrtrans_j_values(value: object, location: str) -> list[float] | None:
-    """Read NMRTrans's already-list-valued J couplings without inventing data."""
+def parse_nmrtrans_j_values(value: object, location: str) -> list[float]:
+    """Read NMRTrans J couplings, treating a missing value as an empty list."""
 
     if value is None:
-        return None
+        return []
     values = _to_python_value(value)
     if not isinstance(values, (list, tuple)):
         raise ConversionError(f"{location} must be an array or None")

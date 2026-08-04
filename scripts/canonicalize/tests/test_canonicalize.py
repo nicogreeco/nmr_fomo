@@ -70,12 +70,22 @@ class ConverterMappingTests(unittest.TestCase):
         self.assertEqual(record.source, "NMRPeak-MST-NMR")
         self.assertEqual(peak.integration, 0)
         self.assertEqual(peak.multiplicity, "quint")
-        self.assertIsNone(peak.j_values)
+        self.assertEqual(peak.j_values, ())
         self.assertEqual(peak.range_min, 3.2)
         self.assertEqual(peak.range_max, 3.2)
         self.assertEqual(carbon.integral, 1.5)
         self.assertEqual(carbon.intensity, 22.0)
         self.assertEqual(carbon.width, 0.4)
+
+    def test_nmrexp_missing_j_values_become_empty_list(self):
+        raw_record = {
+            "h_nmr_peaks": [{"centroid": 1.2, "j_values": None}],
+            "c_nmr_peaks": [],
+        }
+
+        record = convert_nmrexp_record(raw_record, "nmrexp-1", "fixture")
+
+        self.assertEqual(record.h_nmr_peaks[0].j_values, ())
 
     def test_nmrtrans_mapping_uses_half_span_and_empty_j_list(self):
         raw_record = {
@@ -100,6 +110,19 @@ class ConverterMappingTests(unittest.TestCase):
         self.assertEqual(peak.j_values, ())
         self.assertAlmostEqual(peak.range_min, 1.20)
         self.assertAlmostEqual(peak.range_max, 1.30)
+
+    def test_nmrtrans_missing_j_values_become_empty_list(self):
+        raw_record = {
+            "id": 8,
+            "smiles": "CCO",
+            "tokenized_input": json.dumps(
+                {"1HNMR": [[1.25, 0.05, "s", "3H", None]], "13CNMR": []}
+            ),
+        }
+
+        record = convert_nmrtrans_record(raw_record, "nmrtrans-2", "fixture")
+
+        self.assertEqual(record.h_nmr_peaks[0].j_values, ())
 
     def test_nmrsolver_mapping_groups_exact_equivalence_classes(self):
         raw_record = {
