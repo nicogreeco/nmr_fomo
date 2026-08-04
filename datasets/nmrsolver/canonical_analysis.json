@@ -1,0 +1,51 @@
+{
+  "files": [
+    {
+      "both_modality_usable_count": 105731382,
+      "bytes": 16388469730,
+      "c_nmr_peaks": {
+        "empty_record_count": 6801,
+        "maximum_peaks_per_record": 272,
+        "null_record_count": 0,
+        "shift_max": 284.5,
+        "shift_min": -229.125,
+        "total_peak_count": 1820293381
+      },
+      "canonical_multiplicity_counts": {
+        "<null>": 1332279525
+      },
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
+      "h_nmr_peaks": {
+        "empty_record_count": 26692,
+        "maximum_peaks_per_record": 201,
+        "null_record_count": 0,
+        "shift_max": 216.0,
+        "shift_min": -200.25,
+        "total_peak_count": 1332279525
+      },
+      "path": "datasets/nmrsolver/all.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 0
+      },
+      "proton_j_values": {
+        "empty_count": 0,
+        "nonempty_count": 0,
+        "null_count": 1332279525
+      },
+      "records_fully_validated": false,
+      "row_groups": 2116,
+      "rows": 105764875,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "converter": "convert_nmrsolver.py",
+        "source_dataset": "SimNMR-PubChem"
+      },
+      "source_values": {
+        "SimNMR-PubChem": 105764875
+      }
+    }
+  ]
+}

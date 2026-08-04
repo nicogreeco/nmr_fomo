@@ -59,7 +59,12 @@ class AnalyzeParquetTest(unittest.TestCase):
                 converter_name="test-analyzer",
                 row_group_size=2,
             )
-            report = analyze_parquet_file(parquet_path, arrow_batch_size=1)
+            report = analyze_parquet_file(
+                parquet_path,
+                arrow_batch_size=1,
+                check_duplicate_record_ids=True,
+                validate_records=True,
+            )
 
         self.assertEqual(report["rows"], 3)
         self.assertEqual(report["row_groups"], 2)
