@@ -1,0 +1,67 @@
+{
+  "dataset": "merged_benchmark_test_disjoint",
+  "input": "datasets/merged/merged_benchmark_test_disjoint.parquet",
+  "mode": "canonical",
+  "models": {
+    "nmrpeak": {
+      "accepted_records": 154625,
+      "issue_occurrence_counts": {
+        "invalid_integration": 874,
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017
+      },
+      "record_issue_code_counts": {
+        "invalid_integration": 665,
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017
+      },
+      "rejected_records": 26876
+    },
+    "nmrsolver": {
+      "accepted_records": 154625,
+      "issue_occurrence_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_proton_expansion": 874
+      },
+      "record_issue_code_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_proton_expansion": 665
+      },
+      "rejected_records": 26876
+    },
+    "nmrtrans": {
+      "accepted_records": 154418,
+      "issue_occurrence_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_integration": 874,
+        "too_many_c_peaks": 215
+      },
+      "record_issue_code_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_integration": 665,
+        "too_many_c_peaks": 215
+      },
+      "rejected_records": 27083
+    },
+    "ultranmr": {
+      "accepted_records": 154625,
+      "issue_occurrence_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_proton_expansion": 874
+      },
+      "record_issue_code_counts": {
+        "missing_c_nmr": 14194,
+        "missing_h_nmr": 12017,
+        "missing_proton_expansion": 665
+      },
+      "rejected_records": 26876
+    }
+  },
+  "rows": 181501,
+  "scope": "processor field validation; NMRPeak sequence length is checked later during collation"
+}

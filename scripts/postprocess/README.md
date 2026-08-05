@@ -40,6 +40,44 @@ annotated outputs and a merged dataset with those matched record IDs removed.
 This is the property-benchmark path; it is distinct from the connectivity-based
 benchmark disjoining helper above.
 
+## `calculate_mol_properties.py`
+
+Streams one canonical Parquet file and writes a same-directory CSV containing
+one RDKit molecular-property row per canonical `record_id`. It reads only
+`record_id` and `smiles_canonical`, processes bounded Arrow batches, and can
+split each batch across several RDKit worker processes. The default output for
+`datasets/merged/merged_train_val_all.parquet` is
+`datasets/merged/merged_train_val_all_mol_properties.csv`.
+
+```bash
+PYTHONPATH=scripts python scripts/postprocess/calculate_mol_properties.py \
+  datasets/merged/merged_train_val_all.parquet \
+  --workers 8
+```
+
+The CSV contains the following columns in addition to `record_id` and
+`smiles_canonical`:
+
+- `exact_molecular_weight`, `calculated_logp`, `tpsa`, `hba`, `hbd`,
+  `rotatable_bonds`, `fraction_csp3`, and `aromatic_atom_fraction`;
+- one multi-label `has_*` column for each SMARTS-defined group: amine, amide,
+  alcohol/phenol, ester, carboxylic acid, aldehyde/ketone, nitrile,
+  carbon-halogen bond, and heteroaromatic ring;
+- `morgan_ecfp4_2048_hex`: radius-2, 2,048-bit Morgan/ECFP4 fingerprint,
+  encoded as reversible hexadecimal RDKit binary bytes (512 characters);
+- `maccs_keys_166_bits`: the 166 usable RDKit MACCS keys. RDKit internally
+  exposes 167 positions; the unused position 0 is omitted here.
+
+Rows with missing or invalid SMILES are retained and marked through
+`rdkit_status` and `rdkit_error`, instead of being silently dropped. Output is
+written to `.<name>.partial` and promoted only on success; an existing CSV is
+protected unless `--overwrite` is passed.
+
+For larger machines, increase `--workers`; `--batch-size` bounds the rows held
+by the parent at once, while `--records-per-task` bounds each serialized worker
+task. The defaults are deliberately conservative (`4096`, `512`, and up to
+four workers).
+
 ## `admet_overlap_audit.ipynb`
 
 Downloads or reuses the configured property releases, audits their overlap with

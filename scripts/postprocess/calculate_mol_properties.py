@@ -181,6 +181,8 @@ def calculate_row(record_id: str, smiles: object) -> dict[str, object]:
             "rotatable_bonds": rdMolDescriptors.CalcNumRotatableBonds(molecule),
             "fraction_csp3": rdMolDescriptors.CalcFractionCSP3(molecule),
             "aromatic_atom_fraction": aromatic_atom_fraction,
+            # Recover the original 2,048-bit RDKit vector with:
+            # DataStructs.CreateFromBinaryText(bytes.fromhex(morgan_hex)).
             "morgan_ecfp4_2048_hex": DataStructs.BitVectToBinaryText(
                 MORGAN_GENERATOR.GetFingerprint(molecule)
             ).hex(),
@@ -380,14 +382,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=4096,
-        help="Parquet rows read per bounded batch (default: 4096)",
+        default=50000,
+        help="Parquet rows read per bounded batch (default: 50000)",
     )
     parser.add_argument(
         "--records-per-task",
         type=int,
-        default=512,
-        help="records sent to one worker task at once (default: 512)",
+        default=5000,
+        help="records sent to one worker task at once (default: 5000)",
     )
     parser.add_argument(
         "--workers",
