@@ -273,16 +273,25 @@ def validate_canonical_record(
                 )
             )
 
-    for field_name in ("atoms", "coordinates"):
-        field_value = getattr(record, field_name)
-        if field_value is not None and not isinstance(field_value, tuple):
+    if record.atoms is not None:
+        if not isinstance(record.atoms, tuple):
             issues.append(
                 ValidationIssue(
                     code="invalid_type",
-                    path=field_name,
+                    path="atoms",
                     message="must be an array or None",
                 )
             )
+        else:
+            for index, atom in enumerate(record.atoms):
+                if not isinstance(atom, str):
+                    issues.append(
+                        ValidationIssue(
+                            code="invalid_type",
+                            path=f"atoms[{index}]",
+                            message="must be a string",
+                        )
+                    )
 
     if record.h_nmr_peaks is not None:
         if not isinstance(record.h_nmr_peaks, tuple):

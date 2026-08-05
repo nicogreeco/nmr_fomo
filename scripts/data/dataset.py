@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import fields
 from pathlib import Path
 
 from .schema import CanonicalRecord, ensure_record
@@ -123,8 +124,18 @@ class CanonicalParquetDataset(IterableDataset):
 
         for path in worker_paths:
             parquet_file = parquet.ParquetFile(path)
+            stored_columns = parquet_file.schema_arrow.names
+            if "record_id" not in stored_columns:
+                raise ValueError(f"{path} is missing required field: record_id")
+
+            columns_to_read = [
+                field.name
+                for field in fields(CanonicalRecord)
+                if field.name in stored_columns
+            ]
             for arrow_batch in parquet_file.iter_batches(
-                batch_size=self.arrow_batch_size
+                batch_size=self.arrow_batch_size,
+                columns=columns_to_read,
             ):
                 for value in arrow_batch.to_pylist():
                     yield _checked_record(value)

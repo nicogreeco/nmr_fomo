@@ -8,6 +8,9 @@
     "h_max_peaks": 28,
     "h_null_records": 0,
     "h_total_peaks": 7329649,
+    "j_empty_peaks": 3114029,
+    "j_nonempty_peaks": 4215620,
+    "j_null_peaks": 0,
     "rows": 794370,
     "zero_integration_peaks": 9085
   },
@@ -16,13 +19,26 @@
   "dataset": "mst_nmr",
   "source_format": "LMDB containing pickled processed NMRPeak records",
   "source_observations": {
-    "policy": "Preserved as 0 canonically; current model processors reject non-positive integration.",
-    "records_with_zero_integration": 7093,
-    "zero_integration_peaks_by_split": {
-      "test": 959,
-      "train": 7718,
-      "val": 408
+    "missing_j_policy": "Raw missing J values become empty canonical lists for this dataset.",
+    "raw_missing_j_peaks": 3114029,
+    "raw_missing_j_peaks_by_split": {
+      "test": 311268,
+      "train": 2662955,
+      "val": 139806
     },
+    "records_over_60_c_peaks": 2203,
+    "records_over_60_c_peaks_by_split": {
+      "test": 216,
+      "train": 1894,
+      "val": 93
+    },
+    "records_over_60_h_peaks": 0,
+    "records_over_60_h_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
+    "zero_integration_records": 7093,
     "zero_integration_records_by_split": {
       "test": 726,
       "train": 6056,
@@ -55,6 +71,9 @@
     "h_max_peaks": true,
     "h_null_records": true,
     "h_total_peaks": true,
+    "j_empty_peaks": true,
+    "j_nonempty_peaks": true,
+    "j_null_peaks": true,
     "rows": true,
     "zero_integration_peaks": true
   },
@@ -66,6 +85,9 @@
     "h_max_peaks": 28,
     "h_null_records": 0,
     "h_total_peaks": 7329649,
+    "j_empty_peaks": 3114029,
+    "j_nonempty_peaks": 4215620,
+    "j_null_peaks": 0,
     "rows": 794370,
     "zero_integration_peaks": 9085
   },

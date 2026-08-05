@@ -1,15 +1,26 @@
 """Small mapping and Parquet-reader tests; no source dataset is converted."""
 
 import importlib.util
+import io
 import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from canonicalize.common import resolve_lmdb_inputs, write_canonical_parquet
+from canonicalize.common import (
+    ConversionError,
+    resolve_lmdb_inputs,
+    write_canonical_parquet,
+)
 from canonicalize.convert_mst_nmr import convert_record as convert_mst_record
 from canonicalize.convert_nmrexp import convert_record as convert_nmrexp_record
-from canonicalize.convert_nmrsolver import convert_record as convert_nmrsolver_record
+from canonicalize.convert_nmrsolver import (
+    ChemicalMetadataConversionError,
+    ChemicalMetadataRejectionReport,
+    convert_record as convert_nmrsolver_record,
+    iter_converted_records as iter_nmrsolver_records,
+)
 from canonicalize.convert_nmrtrans import convert_record as convert_nmrtrans_record
 from data import CanonicalParquetDataset, CanonicalRecord, CarbonPeak, ProtonPeak
 from model_benchmarks.extract_embeddings import build_dataset
@@ -18,8 +29,11 @@ from model_benchmarks.extract_embeddings import build_dataset
 class ConverterMappingTests(unittest.TestCase):
     def test_nmrexp_mapping_preserves_peak_fields(self):
         raw_record = {
-            "smiles": "CCO",
-            "smiles_canonical": "CCO",
+            "smiles": "OCC",
+            "smiles_canonical": "source-value-is-overwritten",
+            "molecular_formula": "source-value-is-overwritten",
+            "atoms": ["source-value-is-overwritten"],
+            "coordinates": [[0.0, 0.0, 0.0]],
             "nmr_frequency": "400 MHz",
             "nmr_solvent": "CDCl3",
             "h_nmr_peaks": [
@@ -38,6 +52,11 @@ class ConverterMappingTests(unittest.TestCase):
         record = convert_nmrexp_record(raw_record, "nmrexp-1", "fixture")
         peak = record.h_nmr_peaks[0]
         self.assertEqual(record.source, "NMRPeak-NMRexp")
+        self.assertEqual(record.smiles, "OCC")
+        self.assertEqual(record.smiles_canonical, "CCO")
+        self.assertEqual(record.molecular_formula, "C2H6O")
+        self.assertEqual(record.atoms, ("C", "C", "O"))
+        self.assertFalse(hasattr(record, "coordinates"))
         self.assertEqual(peak.multiplicity_raw, "hept")
         self.assertEqual(peak.multiplicity, "sept")
         self.assertEqual(peak.j_values, (7.2, 2.1))
@@ -46,6 +65,7 @@ class ConverterMappingTests(unittest.TestCase):
 
     def test_mst_mapping_preserves_carbon_properties(self):
         raw_record = {
+            "smiles": "C(C)O",
             "h_nmr_peaks": [
                 {
                     "centroid": 3.2,
@@ -79,6 +99,7 @@ class ConverterMappingTests(unittest.TestCase):
 
     def test_nmrexp_missing_j_values_become_empty_list(self):
         raw_record = {
+            "smiles": "CCO",
             "h_nmr_peaks": [{"centroid": 1.2, "j_values": None}],
             "c_nmr_peaks": [],
         }
@@ -90,9 +111,8 @@ class ConverterMappingTests(unittest.TestCase):
     def test_nmrtrans_mapping_uses_half_span_and_empty_j_list(self):
         raw_record = {
             "id": 7,
-            "original_smiles": "CCO",
-            "smiles": "CCO",
-            "molecular_formula": "C2H6O",
+            "smiles": "OCC",
+            "molecular_formula": "source-value-is-overwritten",
             "tokenized_input": json.dumps(
                 {
                     "1HNMR": [[1.25, 0.05, "brd", "3H", []]],
@@ -104,6 +124,10 @@ class ConverterMappingTests(unittest.TestCase):
         record = convert_nmrtrans_record(raw_record, "nmrtrans-1", "fixture")
         peak = record.h_nmr_peaks[0]
         self.assertEqual(record.source, "NMRTrans-NMRSpec")
+        self.assertEqual(record.smiles, "OCC")
+        self.assertEqual(record.smiles_canonical, "CCO")
+        self.assertEqual(record.molecular_formula, "C2H6O")
+        self.assertEqual(record.atoms, ("C", "C", "O"))
         self.assertEqual(peak.multiplicity_raw, "brd")
         self.assertEqual(peak.multiplicity, "bd")
         self.assertEqual(peak.integration, 3)
@@ -124,10 +148,26 @@ class ConverterMappingTests(unittest.TestCase):
 
         self.assertEqual(record.h_nmr_peaks[0].j_values, ())
 
+
+    def test_nmrtrans_older_original_smiles_field_is_supported(self):
+        raw_record = {
+            "id": 9,
+            "original_smiles": "OCC",
+            "smiles": [1, 2, 3],
+            "tokenized_input": json.dumps({"1HNMR": [], "13CNMR": []}),
+        }
+
+        record = convert_nmrtrans_record(raw_record, "nmrtrans-3", "fixture")
+
+        self.assertEqual(record.smiles, "OCC")
+        self.assertEqual(record.smiles_canonical, "CCO")
+        self.assertEqual(record.molecular_formula, "C2H6O")
+        self.assertEqual(record.atoms, ("C", "C", "O"))
+
     def test_nmrsolver_mapping_groups_exact_equivalence_classes(self):
         raw_record = {
-            "smiles": "CCO",
-            "canonical_smiles": "CCO",
+            "smiles": "OCC",
+            "canonical_smiles": "source-value-is-overwritten",
             "nmr_predict": [18.0, 20.0, 1.0, 1.2, 1.1],
             "atom_index": [6, 6, 1, 1, 1],
             "equi_class": [4, 4, 7, 7, 9],
@@ -136,6 +176,10 @@ class ConverterMappingTests(unittest.TestCase):
         record = convert_nmrsolver_record(raw_record, "solver-1", "fixture")
 
         self.assertEqual(record.source, "SimNMR-PubChem")
+        self.assertEqual(record.smiles, "OCC")
+        self.assertEqual(record.smiles_canonical, "CCO")
+        self.assertEqual(record.molecular_formula, "C2H6O")
+        self.assertEqual(record.atoms, ("C", "C", "O"))
         self.assertEqual(len(record.h_nmr_peaks), 2)
         self.assertAlmostEqual(record.h_nmr_peaks[0].shift, 1.1)
         self.assertEqual(record.h_nmr_peaks[0].integration, 2)
@@ -147,6 +191,79 @@ class ConverterMappingTests(unittest.TestCase):
         self.assertEqual(record.h_nmr_peaks[1].equivalence_class, 9)
         self.assertAlmostEqual(record.c_nmr_peaks[0].shift, 19.0)
         self.assertIsNone(record.c_nmr_peaks[0].integral)
+
+    def test_nmrsolver_marks_unprocessable_chemical_metadata(self):
+        raw_record = {
+            "smiles": (
+                "C=CC1CN2CC[C@H]1C[C@H]2[C@@H](C3=CC=[Al]C4=CC=CC=C34)O"
+            ),
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+
+        with self.assertRaisesRegex(
+            ChemicalMetadataConversionError,
+            "canonical SMILES that RDKit could not parse",
+        ):
+            convert_nmrsolver_record(raw_record, "solver-invalid", "fixture")
+
+    def test_nmrsolver_skips_and_reports_unprocessable_metadata(self):
+        invalid_record = {
+            "smiles": (
+                "C=CC1CN2CC[C@H]1C[C@H]2[C@@H](C3=CC=[Al]C4=CC=CC=C34)O"
+            ),
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+        valid_record = {
+            "smiles": "CCO",
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+        report_buffer = io.StringIO()
+        rejection_report = ChemicalMetadataRejectionReport(report_buffer)
+
+        with patch(
+            "canonicalize.convert_nmrsolver.resolve_input",
+            return_value=Path("fixture.lmdb"),
+        ), patch(
+            "canonicalize.convert_nmrsolver.iter_lmdb_records",
+            return_value=[(b"invalid", invalid_record), (b"valid", valid_record)],
+        ):
+            records = list(
+                iter_nmrsolver_records("fixture.lmdb", rejection_report)
+            )
+
+        self.assertEqual([record.record_id for record in records], [
+            "nmrsolver-simnmr-pubchem:valid"
+        ])
+        self.assertEqual(rejection_report.count, 1)
+        report_row = json.loads(report_buffer.getvalue())
+        self.assertEqual(report_row["record_id"], "nmrsolver-simnmr-pubchem:invalid")
+        self.assertEqual(report_row["source_smiles"], invalid_record["smiles"])
+        self.assertIn("canonical SMILES", report_row["reason"])
+
+    def test_missing_or_invalid_smiles_fails_conversion(self):
+        with self.assertRaisesRegex(ConversionError, "non-empty SMILES"):
+            convert_mst_record(
+                {"h_nmr_peaks": [], "c_nmr_peaks": []},
+                "mst-missing-smiles",
+                "missing fixture",
+            )
+
+        with self.assertRaisesRegex(ConversionError, "could not be parsed"):
+            convert_nmrexp_record(
+                {
+                    "smiles": "not a valid smiles",
+                    "h_nmr_peaks": [],
+                    "c_nmr_peaks": [],
+                },
+                "nmrexp-invalid-smiles",
+                "invalid fixture",
+            )
 
     def test_nmrexp_directory_uses_splits_for_stable_combined_ids(self):
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -202,10 +319,19 @@ class ParquetDatasetTests(unittest.TestCase):
                 converter_name="test",
                 row_group_size=1,
             )
+
+            import pyarrow.parquet as parquet
+            import rdkit
+
+            stored_schema = parquet.ParquetFile(output).schema_arrow
             read_records = list(CanonicalParquetDataset(output, arrow_batch_size=1))
 
             limited_records = list(build_dataset(output, max_records=1))
         self.assertEqual(count, 2)
+        self.assertNotIn("coordinates", stored_schema.names)
+        self.assertEqual(
+            stored_schema.metadata[b"rdkit_version"].decode(), rdkit.__version__
+        )
         self.assertEqual(
             [record.record_id for record in read_records],
             ["parquet-1", "parquet-2"],

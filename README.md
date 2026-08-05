@@ -85,6 +85,12 @@ The reusable data layer remains independent of the published models:
 CanonicalParquetDataset -> processor/collator -> model batch -> embedder -> embeddings
 ```
 
+Canonical Parquet schema version 2 stores source SMILES plus RDKit-derived
+canonical SMILES, molecular formula, and atom symbols. It deliberately omits
+3D coordinates; no current spectral benchmark consumes them. Conversion and
+schema details are in `scripts/canonicalize/README.md` and the canonicalization
+implementation note linked below.
+
 ## How to navigate the project
 
 Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:

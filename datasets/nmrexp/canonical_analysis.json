@@ -35,7 +35,8 @@
         "td": 65456,
         "tt": 13310
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 28,
@@ -54,6 +55,7 @@
         "nonempty_count": 2973336,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 19,
       "rows": 920796,
       "schema_matches_canonical": true,
@@ -101,7 +103,8 @@
         "td": 3482,
         "tt": 716
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 24,
@@ -120,6 +123,7 @@
         "nonempty_count": 156856,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 1,
       "rows": 48463,
       "schema_matches_canonical": true,
@@ -167,7 +171,8 @@
         "td": 7610,
         "tt": 1511
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 26,
@@ -186,6 +191,7 @@
         "nonempty_count": 347641,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 3,
       "rows": 107696,
       "schema_matches_canonical": true,
@@ -233,7 +239,8 @@
         "td": 76548,
         "tt": 15537
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 28,
@@ -252,6 +259,7 @@
         "nonempty_count": 3477833,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 22,
       "rows": 1076955,
       "schema_matches_canonical": true,

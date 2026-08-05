@@ -8,6 +8,9 @@
     "h_max_peaks": 34,
     "h_null_records": 0,
     "h_total_peaks": 1898067,
+    "j_empty_peaks": 1053267,
+    "j_nonempty_peaks": 844800,
+    "j_null_peaks": 0,
     "rows": 212440,
     "zero_integration_peaks": 0
   },
@@ -16,49 +19,58 @@
   "dataset": "nmrtrans",
   "source_format": "LZ4-compressed pickle containing NMRTrans/NMRSpec rows",
   "source_observations": {
-    "c_shift_outlier_peaks": {
-      "all": 444,
+    "c_shift_outlier_peaks": 444,
+    "c_shift_outlier_peaks_by_split": {
       "test": 39,
       "train": 359,
       "val": 46
     },
-    "c_shift_outlier_records": {
-      "all": 372,
+    "c_shift_outlier_records": 372,
+    "c_shift_outlier_records_by_split": {
       "test": 37,
       "train": 297,
       "val": 38
     },
-    "h_shift_outlier_peaks": {
-      "all": 1332,
+    "h_shift_outlier_peaks": 1332,
+    "h_shift_outlier_peaks_by_split": {
       "test": 136,
       "train": 1086,
       "val": 110
     },
-    "h_shift_outlier_records": {
-      "all": 1182,
+    "h_shift_outlier_records": 1182,
+    "h_shift_outlier_records_by_split": {
       "test": 126,
       "train": 950,
       "val": 106
     },
-    "nmrtrans_encoder_records_over_60_c_peaks": {
-      "all": 33,
+    "missing_j_policy": "Raw missing J values become empty canonical lists for this dataset.",
+    "raw_missing_j_peaks": 0,
+    "raw_missing_j_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
+    "records_over_60_c_peaks": 33,
+    "records_over_60_c_peaks_by_split": {
       "test": 5,
       "train": 25,
       "val": 3
     },
-    "nmrtrans_encoder_records_over_60_h_peaks": 0,
-    "policy": "Extreme source values were preserved without clipping.",
-    "raw_c_shift_range_ppm": [
-      0.005,
-      640221.0
-    ],
-    "raw_h_shift_range_ppm": [
-      -15.0,
-      20130.26
-    ],
+    "records_over_60_h_peaks": 0,
+    "records_over_60_h_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
     "shift_outlier_thresholds_ppm": {
       "c": "outside [-20, 300]",
       "h": "outside [-5, 20]"
+    },
+    "zero_integration_records": 0,
+    "zero_integration_records_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
     }
   },
   "source_split_bytes_total": 44247243,
@@ -87,6 +99,9 @@
     "h_max_peaks": true,
     "h_null_records": true,
     "h_total_peaks": true,
+    "j_empty_peaks": true,
+    "j_nonempty_peaks": true,
+    "j_null_peaks": true,
     "rows": true,
     "zero_integration_peaks": true
   },
@@ -98,6 +113,9 @@
     "h_max_peaks": 34,
     "h_null_records": 0,
     "h_total_peaks": 1898067,
+    "j_empty_peaks": 1053267,
+    "j_nonempty_peaks": 844800,
+    "j_null_peaks": 0,
     "rows": 212440,
     "zero_integration_peaks": 0
   },

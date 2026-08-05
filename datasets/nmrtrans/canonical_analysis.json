@@ -35,7 +35,8 @@
         "td": 15288,
         "tt": 3030
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 29,
@@ -54,6 +55,7 @@
         "nonempty_count": 675841,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 4,
       "rows": 169863,
       "schema_matches_canonical": true,
@@ -101,7 +103,8 @@
         "td": 1847,
         "tt": 395
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 26,
@@ -120,6 +123,7 @@
         "nonempty_count": 84613,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 1,
       "rows": 21279,
       "schema_matches_canonical": true,
@@ -167,7 +171,8 @@
         "td": 1914,
         "tt": 374
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 34,
@@ -186,6 +191,7 @@
         "nonempty_count": 84346,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 1,
       "rows": 21298,
       "schema_matches_canonical": true,
@@ -233,7 +239,8 @@
         "td": 19049,
         "tt": 3799
       },
-      "duplicate_record_id_count": 0,
+      "duplicate_record_id_count": null,
+      "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
         "empty_record_count": 0,
         "maximum_peaks_per_record": 34,
@@ -252,6 +259,7 @@
         "nonempty_count": 844800,
         "null_count": 0
       },
+      "records_fully_validated": true,
       "row_groups": 5,
       "rows": 212440,
       "schema_matches_canonical": true,

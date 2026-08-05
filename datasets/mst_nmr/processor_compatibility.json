@@ -4,16 +4,14 @@
   "mode": "canonical",
   "models": {
     "nmrpeak": {
-      "accepted_records": 26429,
+      "accepted_records": 787277,
       "issue_occurrence_counts": {
-        "invalid_integration": 9085,
-        "missing_j_values": 3114029
+        "invalid_integration": 9085
       },
       "record_issue_code_counts": {
-        "invalid_integration": 7093,
-        "missing_j_values": 767854
+        "invalid_integration": 7093
       },
-      "rejected_records": 767941
+      "rejected_records": 7093
     },
     "nmrsolver": {
       "accepted_records": 787277,
@@ -26,18 +24,16 @@
       "rejected_records": 7093
     },
     "nmrtrans": {
-      "accepted_records": 26278,
+      "accepted_records": 785138,
       "issue_occurrence_counts": {
         "missing_integration": 9085,
-        "missing_j_values": 3114029,
         "too_many_c_peaks": 2203
       },
       "record_issue_code_counts": {
         "missing_integration": 7093,
-        "missing_j_values": 767854,
         "too_many_c_peaks": 2203
       },
-      "rejected_records": 768092
+      "rejected_records": 9232
     },
     "ultranmr": {
       "accepted_records": 787277,

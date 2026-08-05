@@ -15,17 +15,18 @@ Example:
 """
 
 import argparse
+import json
 from collections.abc import Iterator, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from canonicalize.common import (
     ConversionError,
+    chemical_metadata_from_smiles,
     checked_canonical_record,
     finite_float,
     iter_lmdb_records,
     lmdb_key_text,
-    optional_text,
     require_mapping,
     write_canonical_parquet,
 )
@@ -35,6 +36,42 @@ from data.schema import CanonicalRecord
 SOURCE_NAME = "SimNMR-PubChem"
 HYDROGEN_ATOMIC_NUMBER = 1
 CARBON_ATOMIC_NUMBER = 6
+
+
+class ChemicalMetadataConversionError(ConversionError):
+    """A source structure cannot produce coherent RDKit-derived metadata."""
+
+
+class ChemicalMetadataRejectionReport:
+    """Write an auditable record for each skipped source structure."""
+
+    def __init__(self, output_file: TextIO) -> None:
+        self.output_file = output_file
+        self.count = 0
+
+    def write(
+        self,
+        record_id: str,
+        raw_record: Mapping[str, Any],
+        reason: str,
+    ) -> None:
+        source_smiles = raw_record.get("smiles") or raw_record.get(
+            "canonical_smiles"
+        )
+        if not isinstance(source_smiles, str):
+            source_smiles = repr(source_smiles)
+
+        json.dump(
+            {
+                "record_id": record_id,
+                "source_smiles": source_smiles,
+                "reason": reason,
+            },
+            self.output_file,
+            sort_keys=True,
+        )
+        self.output_file.write("\n")
+        self.count += 1
 
 
 def _source_array(
@@ -166,18 +203,20 @@ def convert_record(
         for _, member_shifts in carbon_groups
     ]
 
+    try:
+        chemical_metadata = chemical_metadata_from_smiles(
+            record.get("smiles") or record.get("canonical_smiles"),
+            f"{location}.smiles",
+        )
+    except ConversionError as error:
+        raise ChemicalMetadataConversionError(str(error)) from error
+
     canonical_data: dict[str, object] = {
         "record_id": record_id,
         "source": SOURCE_NAME,
-        "smiles": optional_text(record.get("smiles"), f"{location}.smiles"),
-        "smiles_canonical": optional_text(
-            record.get("canonical_smiles"), f"{location}.canonical_smiles"
-        ),
-        "molecular_formula": None,
+        **chemical_metadata,
         "nmr_frequency": None,
         "nmr_solvent": None,
-        "atoms": None,
-        "coordinates": None,
         "h_nmr_peaks": h_peaks,
         "c_nmr_peaks": c_peaks,
     }
@@ -206,15 +245,23 @@ def resolve_input(input_path: str | Path) -> Path:
     )
 
 
-def iter_converted_records(input_path: str | Path) -> Iterator[CanonicalRecord]:
-    """Yield every LMDB entry exactly once in the stored key order."""
+def iter_converted_records(
+    input_path: str | Path,
+    rejection_report: ChemicalMetadataRejectionReport | None = None,
+) -> Iterator[CanonicalRecord]:
+    """Yield valid records and report source structures RDKit cannot process."""
 
     lmdb_path = resolve_input(input_path)
     for key, raw_record in iter_lmdb_records(lmdb_path, readahead=True):
         key_name = lmdb_key_text(key)
         record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
         location = f"{lmdb_path} key {key_name}"
-        yield convert_record(raw_record, record_id, location)
+        try:
+            yield convert_record(raw_record, record_id, location)
+        except ChemicalMetadataConversionError as error:
+            if rejection_report is None:
+                raise
+            rejection_report.write(record_id, raw_record, str(error))
 
 
 def _records_with_progress(
@@ -253,7 +300,23 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="allow replacement of an existing output file",
     )
+    parser.add_argument(
+        "--rejection-report",
+        type=Path,
+        help=(
+            "JSONL file for skipped RDKit chemical-metadata failures "
+            "(default: beside the output)"
+        ),
+    )
     return parser.parse_args()
+
+
+def default_rejection_report_path(output_path: Path) -> Path:
+    """Place the chemical-metadata audit beside the canonical Parquet."""
+
+    return output_path.with_name(
+        f"{output_path.stem}_chemical_metadata_rejections.jsonl"
+    )
 
 
 def main() -> None:
@@ -264,19 +327,47 @@ def main() -> None:
     if args.progress_every < 0:
         raise ValueError("--progress-every must be zero or greater")
 
-    records = iter_converted_records(lmdb_path)
-    if args.progress_every:
-        records = _records_with_progress(records, args.progress_every)
-
-    record_count = write_canonical_parquet(
-        records,
-        args.output,
-        source_name=SOURCE_NAME,
-        converter_name="convert_nmrsolver.py",
-        row_group_size=args.row_group_size,
-        overwrite=args.overwrite,
+    rejection_report_path = (
+        args.rejection_report or default_rejection_report_path(args.output)
     )
+    if rejection_report_path.resolve() == args.output.resolve():
+        raise ValueError("rejection report must not replace the Parquet output")
+    if rejection_report_path.exists() and not args.overwrite:
+        raise FileExistsError(
+            f"refusing to overwrite {rejection_report_path}; pass --overwrite "
+            "to replace it"
+        )
+    rejection_report_path.parent.mkdir(parents=True, exist_ok=True)
+    partial_report_path = rejection_report_path.with_name(
+        f".{rejection_report_path.name}.partial"
+    )
+    if partial_report_path.exists():
+        raise FileExistsError(
+            f"temporary rejection report already exists: {partial_report_path}; "
+            "remove it after checking the interrupted conversion"
+        )
+
+    with partial_report_path.open("x", encoding="utf-8") as report_file:
+        rejection_report = ChemicalMetadataRejectionReport(report_file)
+        records = iter_converted_records(lmdb_path, rejection_report)
+        if args.progress_every:
+            records = _records_with_progress(records, args.progress_every)
+
+        record_count = write_canonical_parquet(
+            records,
+            args.output,
+            source_name=SOURCE_NAME,
+            converter_name="convert_nmrsolver.py",
+            row_group_size=args.row_group_size,
+            overwrite=args.overwrite,
+        )
+
+    partial_report_path.replace(rejection_report_path)
     print(f"wrote {record_count} SimNMR-PubChem records to {args.output}")
+    print(
+        f"skipped {rejection_report.count} records with unprocessable RDKit "
+        f"chemical metadata; details: {rejection_report_path}"
+    )
 
 
 if __name__ == "__main__":

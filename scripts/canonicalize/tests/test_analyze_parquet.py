@@ -5,8 +5,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from canonicalize.analyze_parquet import analyze_parquet_file
-from canonicalize.common import write_canonical_parquet
+from canonicalize.analysis.analyze_parquet import analyze_parquet_file
+from canonicalize.common import (
+    CANONICAL_PARQUET_SCHEMA_VERSION,
+    write_canonical_parquet,
+)
 from data import CanonicalRecord, CarbonPeak, ProtonPeak
 
 
@@ -88,7 +91,8 @@ class AnalyzeParquetTest(unittest.TestCase):
             report["canonical_multiplicity_counts"], {"<null>": 1, "s": 1}
         )
         self.assertEqual(
-            report["schema_metadata"]["canonical_schema_version"], "1"
+            report["schema_metadata"]["canonical_schema_version"],
+            CANONICAL_PARQUET_SCHEMA_VERSION,
         )
         self.assertTrue(report["schema_matches_canonical"])
 

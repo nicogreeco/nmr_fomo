@@ -11,7 +11,7 @@ from data.schema import CanonicalRecord, ensure_record, normalize_multiplicity
 from data.validation import validate_canonical_record
 
 
-CANONICAL_PARQUET_SCHEMA_VERSION = "1"
+CANONICAL_PARQUET_SCHEMA_VERSION = "2"
 
 
 class ConversionError(ValueError):
@@ -112,42 +112,57 @@ def metadata_text(value: object, location: str) -> str | None:
     raise ConversionError(f"{location} must be text or None")
 
 
-def atom_list(value: object, location: str) -> list[str] | None:
-    """Store source atom labels in Arrow's simple list-of-text representation."""
+def chemical_metadata_from_smiles(
+    value: object,
+    location: str,
+) -> dict[str, object]:
+    """Derive canonical structure metadata from one source SMILES string.
 
-    if value is None:
-        return None
-    values = _to_python_value(value)
-    if not isinstance(values, (list, tuple)):
-        raise ConversionError(f"{location} must be an array or None")
+    The canonical SMILES is parsed again before atom symbols are collected.
+    This makes atom ordering follow our canonical string instead of the source
+    SMILES traversal order. Implicit hydrogens contribute to the molecular
+    formula but are not separate entries in ``atoms``.
+    """
 
-    atoms: list[str] = []
-    for index, atom in enumerate(values):
-        if atom is None:
-            raise ConversionError(f"{location}[{index}] must not be None")
-        atoms.append(str(atom))
-    return atoms
-
-
-def coordinate_list(value: object, location: str) -> list[list[float]] | None:
-    if value is None:
-        return None
-    values = _to_python_value(value)
-    if not isinstance(values, (list, tuple)):
-        raise ConversionError(f"{location} must be an array or None")
-
-    coordinates: list[list[float]] = []
-    for atom_index, atom_coordinates in enumerate(values):
-        atom_coordinates = _to_python_value(atom_coordinates)
-        if not isinstance(atom_coordinates, (list, tuple)):
-            raise ConversionError(f"{location}[{atom_index}] must be an array")
-        coordinates.append(
-            [
-                finite_float(component, f"{location}[{atom_index}][{axis_index}]")
-                for axis_index, component in enumerate(atom_coordinates)
-            ]
+    source_smiles = optional_text(value, location)
+    if source_smiles is None:
+        raise ConversionError(
+            f"{location} must contain a non-empty SMILES string"
         )
-    return coordinates
+
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import rdMolDescriptors
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "canonicalizing chemical metadata requires RDKit; install it in "
+            "the conversion environment"
+        ) from error
+
+    try:
+        source_molecule = Chem.MolFromSmiles(source_smiles)
+    except Exception as error:
+        raise ConversionError(f"{location} could not be parsed by RDKit") from error
+    if source_molecule is None:
+        raise ConversionError(f"{location} could not be parsed by RDKit")
+
+    canonical_smiles = Chem.MolToSmiles(
+        source_molecule,
+        canonical=True,
+        isomericSmiles=True,
+    )
+    canonical_molecule = Chem.MolFromSmiles(canonical_smiles)
+    if canonical_molecule is None:
+        raise ConversionError(
+            f"{location} produced a canonical SMILES that RDKit could not parse"
+        )
+
+    return {
+        "smiles": source_smiles,
+        "smiles_canonical": canonical_smiles,
+        "molecular_formula": rdMolDescriptors.CalcMolFormula(canonical_molecule),
+        "atoms": [atom.GetSymbol() for atom in canonical_molecule.GetAtoms()],
+    }
 
 
 def parse_nmrpeak_j_values(value: object, location: str) -> list[float]:
@@ -279,26 +294,24 @@ def nmrpeak_carbon_peak(
 
 
 def nmrpeak_metadata(raw_record: object, location: str) -> dict[str, object]:
-    """Copy the common NMRPeak structure and acquisition metadata."""
+    """Derive structure fields and copy NMRPeak acquisition metadata."""
 
     record = require_mapping(raw_record, location)
-    return {
-        "smiles": optional_text(record.get("smiles"), f"{location}.smiles"),
-        "smiles_canonical": optional_text(
+    source_smiles = optional_text(record.get("smiles"), f"{location}.smiles")
+    if source_smiles is not None:
+        smiles_location = f"{location}.smiles"
+    else:
+        source_smiles = optional_text(
             record.get("smiles_canonical"), f"{location}.smiles_canonical"
-        ),
-        "molecular_formula": optional_text(
-            record.get("molecular_formula"), f"{location}.molecular_formula"
-        ),
+        )
+        smiles_location = f"{location}.smiles_canonical"
+    return {
+        **chemical_metadata_from_smiles(source_smiles, smiles_location),
         "nmr_frequency": metadata_text(
             record.get("nmr_frequency"), f"{location}.nmr_frequency"
         ),
         "nmr_solvent": metadata_text(
             record.get("nmr_solvent"), f"{location}.nmr_solvent"
-        ),
-        "atoms": atom_list(record.get("atoms"), f"{location}.atoms"),
-        "coordinates": coordinate_list(
-            record.get("coordinates"), f"{location}.coordinates"
         ),
     }
 
@@ -335,11 +348,6 @@ def canonical_record_to_row(record: CanonicalRecord) -> dict[str, object]:
         "nmr_frequency": record.nmr_frequency,
         "nmr_solvent": record.nmr_solvent,
         "atoms": list(record.atoms) if record.atoms is not None else None,
-        "coordinates": (
-            [list(coordinates) for coordinates in record.coordinates]
-            if record.coordinates is not None
-            else None
-        ),
         "h_nmr_peaks": (
             [
                 {
@@ -422,7 +430,6 @@ def canonical_parquet_schema():
             pa.field("nmr_frequency", pa.string()),
             pa.field("nmr_solvent", pa.string()),
             pa.field("atoms", pa.list_(pa.string())),
-            pa.field("coordinates", pa.list_(pa.list_(pa.float64()))),
             pa.field("h_nmr_peaks", pa.list_(proton_peak)),
             pa.field("c_nmr_peaks", pa.list_(carbon_peak)),
         ]
@@ -471,11 +478,20 @@ def write_canonical_parquet(
             "after checking the interrupted conversion"
         )
 
+    try:
+        import rdkit
+    except ModuleNotFoundError:
+        rdkit_version = None
+    else:
+        rdkit_version = rdkit.__version__
+
     metadata = {
         b"canonical_schema_version": CANONICAL_PARQUET_SCHEMA_VERSION.encode(),
         b"source_dataset": source_name.encode(),
         b"converter": converter_name.encode(),
     }
+    if rdkit_version is not None:
+        metadata[b"rdkit_version"] = rdkit_version.encode()
     schema = canonical_parquet_schema().with_metadata(metadata)
     writer = parquet.ParquetWriter(temporary_output, schema, compression="zstd")
 

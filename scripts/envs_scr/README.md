@@ -8,7 +8,7 @@ They create four independent environments:
 
 | Directory | Python | Purpose |
 | --- | --- | --- |
-| `nmr_venv` | 3.11 | New project, analysis, and benchmark notebooks |
+| `nmr_venv` | 3.11 | Canonical conversion, project analysis, and benchmark notebooks |
 | `ultranmr_venv` | 3.11 | UltraNMR |
 | `nmrtrans_venv` | 3.10 | NMRTrans |
 | `nmrpeak_venv` | 3.10 | NMRPeak and pinned Uni-Core |
@@ -16,6 +16,9 @@ They create four independent environments:
 PyArrow is installed in every environment. It streams canonical Parquet input
 and writes embedding batches incrementally, including when a benchmark runs
 outside the main project environment.
+
+RDKit is installed in the main `nmr_venv`; use that environment for schema-v2
+canonicalization because its structure fields are derived from SMILES.
 
 ## CPU VM
 

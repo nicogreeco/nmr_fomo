@@ -86,8 +86,7 @@ class CanonicalRecord:
     molecular_formula: str | None = None
     nmr_frequency: str | None = None
     nmr_solvent: str | None = None
-    atoms: tuple[Any, ...] | None = None
-    coordinates: tuple[Any, ...] | None = None
+    atoms: tuple[str, ...] | None = None
     h_nmr_peaks: tuple[ProtonPeak, ...] | None = None
     c_nmr_peaks: tuple[CarbonPeak, ...] | None = None
 
@@ -148,7 +147,7 @@ def ensure_record(value: CanonicalRecord | Mapping[str, Any]) -> CanonicalRecord
         if peaks is not None:
             record_data["c_nmr_peaks"] = tuple(_carbon_peak(peak) for peak in peaks)
 
-    for field_name in ("atoms", "coordinates"):
+    for field_name in ("atoms",):
         if field_name in record_data:
             record_data[field_name] = _optional_tuple(
                 record_data[field_name], field_name

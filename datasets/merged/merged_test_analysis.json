@@ -1,0 +1,74 @@
+{
+  "files": [
+    {
+      "both_modality_usable_count": 179032,
+      "bytes": 202945586,
+      "c_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 74,
+        "null_record_count": 15866,
+        "shift_max": 39353.0,
+        "shift_min": -15.53,
+        "total_peak_count": 3106648
+      },
+      "canonical_multiplicity_counts": {
+        "<unk>": 41376,
+        "bd": 352,
+        "br": 3570,
+        "d": 317629,
+        "dd": 146890,
+        "ddd": 50552,
+        "dddd": 13180,
+        "ddp": 323,
+        "ddq": 2200,
+        "ddt": 17986,
+        "dq": 12184,
+        "dqd": 1529,
+        "dt": 35794,
+        "m": 523549,
+        "q": 28930,
+        "qd": 3027,
+        "quint": 10975,
+        "s": 322949,
+        "sept": 2947,
+        "t": 143908,
+        "td": 23205,
+        "tt": 11446
+      },
+      "duplicate_record_id_count": 0,
+      "duplicate_record_ids_checked": true,
+      "h_nmr_peaks": {
+        "empty_record_count": 0,
+        "maximum_peaks_per_record": 34,
+        "null_record_count": 13533,
+        "shift_max": 3437.0,
+        "shift_min": -8.42,
+        "total_peak_count": 1714501
+      },
+      "path": "datasets/merged/merged_test.parquet",
+      "proton_integration": {
+        "null_count": 0,
+        "zero_count": 959
+      },
+      "proton_j_values": {
+        "empty_count": 861336,
+        "nonempty_count": 853165,
+        "null_count": 0
+      },
+      "records_fully_validated": true,
+      "row_groups": 6,
+      "rows": 208431,
+      "schema_matches_canonical": true,
+      "schema_metadata": {
+        "canonical_schema_version": "1",
+        "merger_script": "/mnt/filesystem-test/nmr/scripts/postprocess/merge_datasets.py",
+        "source_datasets": "[\"mst_nmr/test.parquet\", \"nmrexp/test.parquet\", \"nmrtrans/test.parquet\"]"
+      },
+      "source_values": {
+        "NMRPeak-MST-NMR": 79437,
+        "NMRPeak-NMRexp": 107696,
+        "NMRTrans-NMRSpec": 21298
+      }
+    }
+  ]
+}

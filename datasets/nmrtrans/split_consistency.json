@@ -1,12 +1,12 @@
 {
-  "split_counts": {
-    "train": 169863,
-    "val": 21279,
-    "test": 21298
-  },
   "all_count": 212440,
-  "split_overlap_count": 0,
   "all_equals_split_union": true,
+  "extra_in_all_count": 0,
   "missing_from_all_count": 0,
-  "extra_in_all_count": 0
+  "split_counts": {
+    "test": 21298,
+    "train": 169863,
+    "val": 21279
+  },
+  "split_overlap_count": 0
 }

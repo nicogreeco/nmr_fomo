@@ -28,6 +28,11 @@ embedder loads that model and returns a fixed-size representation.
 dataset, processor, embedder, or extraction command converts or rewrites the
 input dataset.
 
+The current canonical storage format is schema version 2. Raw-data converters
+derive canonical SMILES, formula, and atom symbols with RDKit and do not store
+molecular coordinates. See `canonicalize/README.md` for the exact policy and
+conversion commands.
+
 ## Embedding flow
 
 ```text

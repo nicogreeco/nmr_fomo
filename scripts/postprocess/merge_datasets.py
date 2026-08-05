@@ -5,7 +5,10 @@ import argparse
 import json
 from pathlib import Path
 
-from canonicalize.common import CANONICAL_PARQUET_SCHEMA_VERSION
+from canonicalize.common import (
+    CANONICAL_PARQUET_SCHEMA_VERSION,
+    canonical_parquet_schema,
+)
 
 
 def merge_datasets(
@@ -48,13 +51,35 @@ def merge_datasets(
 
     parquet_files = [parquet.ParquetFile(path) for path in input_paths]
     reference_schema = parquet_files[0].schema_arrow
+    expected_schema = canonical_parquet_schema()
+    rdkit_versions: set[str] = set()
 
     for path, parquet_file in zip(input_paths, parquet_files):
         input_schema = parquet_file.schema_arrow
-        if not input_schema.remove_metadata().equals(
-            reference_schema.remove_metadata()
-        ):
-            raise ValueError(f"schema differs from the first input: {path}")
+        if not input_schema.remove_metadata().equals(expected_schema):
+            raise ValueError(
+                f"input does not use the current canonical schema: {path}"
+            )
+
+        input_metadata = input_schema.metadata or {}
+        schema_version = input_metadata.get(b"canonical_schema_version", b"").decode(
+            "utf-8"
+        )
+        if schema_version != CANONICAL_PARQUET_SCHEMA_VERSION:
+            raise ValueError(
+                f"{path} uses canonical schema version {schema_version!r}; "
+                f"expected {CANONICAL_PARQUET_SCHEMA_VERSION!r}"
+            )
+
+        rdkit_version = input_metadata.get(b"rdkit_version", b"").decode("utf-8")
+        if not rdkit_version:
+            raise ValueError(f"{path} has no rdkit_version metadata")
+        rdkit_versions.add(rdkit_version)
+
+    if len(rdkit_versions) != 1:
+        versions_text = ", ".join(sorted(rdkit_versions))
+        raise ValueError(f"input RDKit versions differ: {versions_text}")
+    rdkit_version = next(iter(rdkit_versions))
 
     source_datasets = [
         f"{path.parent.name}/{path.name}" for path in input_paths
@@ -65,6 +90,7 @@ def merge_datasets(
         ),
         b"source_datasets": json.dumps(source_datasets).encode("utf-8"),
         b"merger_script": str(Path(__file__).resolve()).encode("utf-8"),
+        b"rdkit_version": rdkit_version.encode("utf-8"),
     }
     output_schema = reference_schema.with_metadata(metadata)
 

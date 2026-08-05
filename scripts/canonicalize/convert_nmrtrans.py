@@ -19,6 +19,7 @@ from typing import Any
 
 from canonicalize.common import (
     ConversionError,
+    chemical_metadata_from_smiles,
     checked_canonical_record,
     finite_float,
     iter_lz4_pickle_records,
@@ -114,19 +115,19 @@ def convert_record(
     original_smiles = optional_text(
         record.get("original_smiles"), f"{location}.original_smiles"
     )
-    canonical_smiles = optional_text(record.get("smiles"), f"{location}.smiles")
+    if original_smiles is not None:
+        source_smiles = original_smiles
+        smiles_location = f"{location}.original_smiles"
+    else:
+        source_smiles = optional_text(record.get("smiles"), f"{location}.smiles")
+        smiles_location = f"{location}.smiles"
+
     canonical_data: dict[str, object] = {
         "record_id": record_id,
         "source": SOURCE_NAME,
-        "smiles": original_smiles or canonical_smiles,
-        "smiles_canonical": canonical_smiles,
-        "molecular_formula": optional_text(
-            record.get("molecular_formula"), f"{location}.molecular_formula"
-        ),
+        **chemical_metadata_from_smiles(source_smiles, smiles_location),
         "nmr_frequency": None,
         "nmr_solvent": None,
-        "atoms": None,
-        "coordinates": None,
         "h_nmr_peaks": (
             [
                 nmrtrans_proton_peak(

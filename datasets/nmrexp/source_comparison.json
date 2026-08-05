@@ -8,6 +8,9 @@
     "h_max_peaks": 28,
     "h_null_records": 135202,
     "h_total_peaks": 7917250,
+    "j_empty_peaks": 4439417,
+    "j_nonempty_peaks": 3477833,
+    "j_null_peaks": 0,
     "rows": 1076955,
     "zero_integration_peaks": 0
   },
@@ -16,11 +19,31 @@
   "dataset": "nmrexp",
   "source_format": "LMDB containing pickled processed NMRPeak records",
   "source_observations": {
-    "all_lmdb_matches_split_raw_value_multiset": true,
-    "all_lmdb_rows": 1076955,
-    "auxiliary_sample_lmdb_files_excluded": true,
-    "multiset_check": "BLAKE2b-128 digest count, modular sum, and XOR all matched",
-    "records_missing_one_or_both_embedding_modalities": 292704
+    "missing_j_policy": "Raw missing J values become empty canonical lists for this dataset.",
+    "raw_missing_j_peaks": 0,
+    "raw_missing_j_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
+    "records_over_60_c_peaks": 0,
+    "records_over_60_c_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
+    "records_over_60_h_peaks": 0,
+    "records_over_60_h_peaks_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    },
+    "zero_integration_records": 0,
+    "zero_integration_records_by_split": {
+      "test": 0,
+      "train": 0,
+      "val": 0
+    }
   },
   "source_split_bytes_total": 3359444992,
   "source_splits": {
@@ -48,6 +71,9 @@
     "h_max_peaks": true,
     "h_null_records": true,
     "h_total_peaks": true,
+    "j_empty_peaks": true,
+    "j_nonempty_peaks": true,
+    "j_null_peaks": true,
     "rows": true,
     "zero_integration_peaks": true
   },
@@ -59,6 +85,9 @@
     "h_max_peaks": 28,
     "h_null_records": 135202,
     "h_total_peaks": 7917250,
+    "j_empty_peaks": 4439417,
+    "j_nonempty_peaks": 3477833,
+    "j_null_peaks": 0,
     "rows": 1076955,
     "zero_integration_peaks": 0
   },
