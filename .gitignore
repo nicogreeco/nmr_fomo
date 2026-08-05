@@ -21,3 +21,4 @@ __pycache__
 *.csv
 *.csv.gz
 *.zip
+*.parquet.partial
