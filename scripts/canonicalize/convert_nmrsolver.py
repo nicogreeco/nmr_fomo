@@ -17,6 +17,8 @@ Example:
 import argparse
 import json
 from collections.abc import Iterator, Mapping
+from concurrent.futures import Future, ProcessPoolExecutor
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -36,6 +38,13 @@ from data.schema import CanonicalRecord
 SOURCE_NAME = "SimNMR-PubChem"
 HYDROGEN_ATOMIC_NUMBER = 1
 CARBON_ATOMIC_NUMBER = 6
+_WORKER_RECORD_FIELDS = (
+    "smiles",
+    "canonical_smiles",
+    "nmr_predict",
+    "atom_index",
+    "equi_class",
+)
 
 
 class ChemicalMetadataConversionError(ConversionError):
@@ -245,14 +254,123 @@ def resolve_input(input_path: str | Path) -> Path:
     )
 
 
+def _record_for_worker(raw_record: Mapping[str, Any]) -> dict[str, object]:
+    """Keep only source fields needed to convert one record in a worker."""
+
+    return {
+        field_name: raw_record[field_name]
+        for field_name in _WORKER_RECORD_FIELDS
+        if field_name in raw_record
+    }
+
+
+def _record_for_rejection_report(
+    raw_record: Mapping[str, Any],
+) -> dict[str, object]:
+    """Keep only the source SMILES fields needed by the parent-side report."""
+
+    return {
+        field_name: raw_record[field_name]
+        for field_name in ("smiles", "canonical_smiles")
+        if field_name in raw_record
+    }
+
+
+def _convert_record_in_worker(
+    raw_record: Mapping[str, Any],
+    record_id: str,
+    location: str,
+) -> CanonicalRecord:
+    """Run one independent record conversion in a spawned worker process."""
+
+    return convert_record(raw_record, record_id, location)
+
+
+def _iter_parallel_converted_records(
+    source_records: Iterator[tuple[bytes, Mapping[str, Any]]],
+    lmdb_path: Path,
+    rejection_report: ChemicalMetadataRejectionReport | None,
+    workers: int,
+    max_in_flight: int,
+) -> Iterator[CanonicalRecord]:
+    """Convert records concurrently while yielding source-key order.
+
+    LMDB reading, Parquet writing, and rejection-report writing stay in the
+    parent process. Only independent record conversion, including RDKit work,
+    runs in child processes. Results are retired in submission order so the
+    generated Parquet and JSONL files remain deterministic.
+    """
+
+    pending: list[
+        tuple[Future[CanonicalRecord], str, Mapping[str, Any]]
+    ] = []
+    source_exhausted = False
+
+    # Spawn prevents child processes from inheriting the parent's LMDB state.
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=get_context("spawn"),
+    ) as executor:
+        while pending or not source_exhausted:
+            while not source_exhausted and len(pending) < max_in_flight:
+                try:
+                    key, raw_record = next(source_records)
+                except StopIteration:
+                    source_exhausted = True
+                    break
+
+                key_name = lmdb_key_text(key)
+                record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
+                location = f"{lmdb_path} key {key_name}"
+                future = executor.submit(
+                    _convert_record_in_worker,
+                    _record_for_worker(raw_record),
+                    record_id,
+                    location,
+                )
+                pending.append(
+                    (future, record_id, _record_for_rejection_report(raw_record))
+                )
+
+            if not pending:
+                continue
+
+            future, record_id, report_record = pending.pop(0)
+            try:
+                yield future.result()
+            except ChemicalMetadataConversionError as error:
+                if rejection_report is None:
+                    raise
+                rejection_report.write(record_id, report_record, str(error))
+
+
 def iter_converted_records(
     input_path: str | Path,
     rejection_report: ChemicalMetadataRejectionReport | None = None,
+    *,
+    workers: int = 1,
+    max_in_flight: int | None = None,
 ) -> Iterator[CanonicalRecord]:
     """Yield valid records and report source structures RDKit cannot process."""
 
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
+    if max_in_flight is not None and max_in_flight < workers:
+        raise ValueError("max_in_flight must be at least workers")
+
     lmdb_path = resolve_input(input_path)
-    for key, raw_record in iter_lmdb_records(lmdb_path, readahead=True):
+    source_records = iter(iter_lmdb_records(lmdb_path, readahead=True))
+    if workers > 1:
+        yield from _iter_parallel_converted_records(
+            source_records,
+            lmdb_path,
+            rejection_report,
+            workers,
+            max_in_flight or workers * 4,
+        )
+        return
+
+    for key, raw_record in source_records:
         key_name = lmdb_key_text(key)
         record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
         location = f"{lmdb_path} key {key_name}"
@@ -296,6 +414,23 @@ def parse_args() -> argparse.Namespace:
         help="print progress every N records; use 0 to disable (default: 1000000)",
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=1,
+        help=(
+            "record-conversion worker processes; 1 keeps sequential "
+            "conversion (default: 1)"
+        ),
+    )
+    parser.add_argument(
+        "--max-in-flight",
+        type=int,
+        help=(
+            "maximum records submitted to workers before ordered writing "
+            "(default: 4 per worker)"
+        ),
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="allow replacement of an existing output file",
@@ -326,6 +461,10 @@ def main() -> None:
         raise ValueError("output must not overwrite the source dataset")
     if args.progress_every < 0:
         raise ValueError("--progress-every must be zero or greater")
+    if args.workers < 1:
+        raise ValueError("--workers must be at least 1")
+    if args.max_in_flight is not None and args.max_in_flight < args.workers:
+        raise ValueError("--max-in-flight must be at least --workers")
 
     rejection_report_path = (
         args.rejection_report or default_rejection_report_path(args.output)
@@ -349,7 +488,12 @@ def main() -> None:
 
     with partial_report_path.open("x", encoding="utf-8") as report_file:
         rejection_report = ChemicalMetadataRejectionReport(report_file)
-        records = iter_converted_records(lmdb_path, rejection_report)
+        records = iter_converted_records(
+            lmdb_path,
+            rejection_report,
+            workers=args.workers,
+            max_in_flight=args.max_in_flight,
+        )
         if args.progress_every:
             records = _records_with_progress(records, args.progress_every)
 

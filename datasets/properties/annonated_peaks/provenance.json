@@ -1,0 +1,132 @@
+{
+  "match_policy": "exact RDKit full InChIKey equality only",
+  "merged_input": "datasets/merged/merged_train_val_all.parquet",
+  "audit_matches": "datasets/properties/admet_overlap/exact_matches.csv",
+  "tdc_root": "datasets/properties/tdc_admet/admet_group",
+  "output_root": "datasets/properties/annonated_peaks",
+  "disjoint_output": "datasets/merged/merged_train_val_all_disjoint.parquet",
+  "merged_summary": {
+    "merged_records": 1875334,
+    "merged_invalid_or_unkeyed_rows": 0,
+    "merged_unique_full_inchikeys": 1787572
+  },
+  "endpoint_stats": [
+    {
+      "dataset": "solubility_aqsoldb",
+      "split": "train_val",
+      "property_rows": 7985,
+      "audit_property_unique_molecules": "7985",
+      "audit_exact_overlap_unique_molecules": "2506",
+      "matched_property_rows": 2506,
+      "matched_unique_molecules": 2506,
+      "matched_merged_records": 3451,
+      "expanded_csv_rows": 3451,
+      "canonical_parquet_rows": 3451
+    },
+    {
+      "dataset": "solubility_aqsoldb",
+      "split": "test",
+      "property_rows": 1997,
+      "audit_property_unique_molecules": "1995",
+      "audit_exact_overlap_unique_molecules": "526",
+      "matched_property_rows": 526,
+      "matched_unique_molecules": 526,
+      "matched_merged_records": 692,
+      "expanded_csv_rows": 692,
+      "canonical_parquet_rows": 692
+    },
+    {
+      "dataset": "ld50_zhu",
+      "split": "train_val",
+      "property_rows": 5907,
+      "audit_property_unique_molecules": "5876",
+      "audit_exact_overlap_unique_molecules": "1861",
+      "matched_property_rows": 1871,
+      "matched_unique_molecules": 1861,
+      "matched_merged_records": 2528,
+      "expanded_csv_rows": 2543,
+      "canonical_parquet_rows": 2528
+    },
+    {
+      "dataset": "ld50_zhu",
+      "split": "test",
+      "property_rows": 1478,
+      "audit_property_unique_molecules": "1466",
+      "audit_exact_overlap_unique_molecules": "400",
+      "matched_property_rows": 404,
+      "matched_unique_molecules": 400,
+      "matched_merged_records": 526,
+      "expanded_csv_rows": 531,
+      "canonical_parquet_rows": 526
+    },
+    {
+      "dataset": "ames",
+      "split": "train_val",
+      "property_rows": 5821,
+      "audit_property_unique_molecules": "5798",
+      "audit_exact_overlap_unique_molecules": "1642",
+      "matched_property_rows": 1644,
+      "matched_unique_molecules": 1642,
+      "matched_merged_records": 2324,
+      "expanded_csv_rows": 2327,
+      "canonical_parquet_rows": 2324
+    },
+    {
+      "dataset": "ames",
+      "split": "test",
+      "property_rows": 1457,
+      "audit_property_unique_molecules": "1451",
+      "audit_exact_overlap_unique_molecules": "312",
+      "matched_property_rows": 313,
+      "matched_unique_molecules": 312,
+      "matched_merged_records": 413,
+      "expanded_csv_rows": 414,
+      "canonical_parquet_rows": 413
+    }
+  ],
+  "intersections": [
+    {
+      "intersection_type": "individual",
+      "datasets": "solubility_aqsoldb",
+      "unique_molecules": 3032
+    },
+    {
+      "intersection_type": "individual",
+      "datasets": "ld50_zhu",
+      "unique_molecules": 2261
+    },
+    {
+      "intersection_type": "individual",
+      "datasets": "ames",
+      "unique_molecules": 1954
+    },
+    {
+      "intersection_type": "pairwise",
+      "datasets": "solubility_aqsoldb|ld50_zhu",
+      "unique_molecules": 1095
+    },
+    {
+      "intersection_type": "pairwise",
+      "datasets": "solubility_aqsoldb|ames",
+      "unique_molecules": 911
+    },
+    {
+      "intersection_type": "pairwise",
+      "datasets": "ld50_zhu|ames",
+      "unique_molecules": 773
+    },
+    {
+      "intersection_type": "triple",
+      "datasets": "solubility_aqsoldb|ld50_zhu|ames",
+      "unique_molecules": 585
+    },
+    {
+      "intersection_type": "union",
+      "datasets": "solubility_aqsoldb|ld50_zhu|ames",
+      "unique_molecules": 5053
+    }
+  ],
+  "removed_record_ids": 6858,
+  "disjoint_output_rows": 1868476,
+  "removed_record_check": true
+}

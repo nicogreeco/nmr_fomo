@@ -75,6 +75,21 @@ Run `scripts/postprocess/merge_datasets.py` only after every input has been
 regenerated. The merger rejects legacy or structurally different schemas and
 inputs produced by different RDKit versions instead of labeling them as v2.
 
+For the 106-million-row SimNMR-PubChem conversion, `convert_nmrsolver.py`
+can run RDKit record conversion in separate processes while one parent process
+keeps LMDB reading and Parquet/JSONL writing ordered and bounded in memory:
+
+```bash
+PYTHONPATH=scripts python scripts/canonicalize/convert_nmrsolver.py \
+  models/NMR-Solver/database/metadata/PubChem_merged_id.lmdb \
+  datasets/nmrsolver/all.parquet --overwrite --workers 4
+```
+
+Start with four workers and increase only after confirming available CPU, RAM,
+and storage throughput. `--max-in-flight` limits queued records (default: four
+per worker); the generated record and rejection-report order remains source-key
+order.
+
 The canonical fields and the rules to preserve during future conversions are
 in [Canonicalization Implementation Notes](../../contex/Canonicalization_Implementation_Notes.md).
 For the reason different source releases need different treatment, see

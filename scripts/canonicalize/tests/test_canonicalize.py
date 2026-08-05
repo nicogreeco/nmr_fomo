@@ -246,6 +246,64 @@ class ConverterMappingTests(unittest.TestCase):
         self.assertEqual(report_row["source_smiles"], invalid_record["smiles"])
         self.assertIn("canonical SMILES", report_row["reason"])
 
+    def test_nmrsolver_parallel_conversion_preserves_order_and_rejections(self):
+        invalid_record = {
+            "smiles": (
+                "C=CC1CN2CC[C@H]1C[C@H]2[C@@H](C3=CC=[Al]C4=CC=CC=C34)O"
+            ),
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+        first_record = {
+            "smiles": "CCO",
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+        last_record = {
+            "smiles": "CC",
+            "nmr_predict": [20.0, 1.2],
+            "atom_index": [6, 1],
+            "equi_class": [3, 4],
+        }
+        report_buffer = io.StringIO()
+        rejection_report = ChemicalMetadataRejectionReport(report_buffer)
+
+        with patch(
+            "canonicalize.convert_nmrsolver.resolve_input",
+            return_value=Path("fixture.lmdb"),
+        ), patch(
+            "canonicalize.convert_nmrsolver.iter_lmdb_records",
+            return_value=[
+                (b"first", first_record),
+                (b"invalid", invalid_record),
+                (b"last", last_record),
+            ],
+        ):
+            records = list(
+                iter_nmrsolver_records(
+                    "fixture.lmdb",
+                    rejection_report,
+                    workers=2,
+                    max_in_flight=2,
+                )
+            )
+
+        self.assertEqual(
+            [record.record_id for record in records],
+            [
+                "nmrsolver-simnmr-pubchem:first",
+                "nmrsolver-simnmr-pubchem:last",
+            ],
+        )
+        self.assertEqual(rejection_report.count, 1)
+        report_row = json.loads(report_buffer.getvalue())
+        self.assertEqual(
+            report_row["record_id"], "nmrsolver-simnmr-pubchem:invalid"
+        )
+        self.assertEqual(report_row["source_smiles"], invalid_record["smiles"])
+
     def test_missing_or_invalid_smiles_fails_conversion(self):
         with self.assertRaisesRegex(ConversionError, "non-empty SMILES"):
             convert_mst_record(
