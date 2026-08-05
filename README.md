@@ -55,9 +55,9 @@ uses one Python environment per model family. Set them up on the VM's local
 disk, while keeping code and large assets on the shared filesystem:
 
 ```bash
-./scripts/setup_cpu_envs.sh /path/on/local/disk/nmr
+./scripts/envs_scr/setup_cpu_envs.sh /path/on/local/disk/nmr
 # or, on a prepared GPU VM:
-./scripts/setup_gpu_envs.sh /path/on/local/disk/nmr
+./scripts/envs_scr/setup_gpu_envs.sh /path/on/local/disk/nmr
 ```
 
 After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`, or
@@ -68,7 +68,7 @@ for the exact environment setup and repair commands.
 
 ```text
 contex/                     project diary, literature notes, decisions, and analyses
-  DL Methods/               notes on the relevant papers and repositories
+  NMR/DL Methods/           notes on the relevant papers and repositories
 datasets/                   local raw/canonical data and generated reports (ignored)
 models/                     pinned upstream repositories (Git submodules)
 scripts/
@@ -76,7 +76,8 @@ scripts/
   canonicalize/             source-specific conversion and dataset-analysis tools
   model_benchmarks/         processors and embedders for published-model comparison
   envs_scr/                 model-specific environment setup material
-  notebooks/                exploratory work
+  postprocess/              derived-data and benchmark-preparation utilities
+  test_notebook.ipynb       exploratory work
 ```
 
 The reusable data layer remains independent of the published models:
@@ -96,7 +97,7 @@ implementation note linked below.
 Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:
 
 - [NMR foundations and AI](<contex/NMR%20foundations%20and%20AI.md>) and
-  [DL Methods](<contex/DL%20Methods/>) collect the literature context.
+  [DL Methods](<contex/NMR/DL%20Methods/>) collect the literature context.
 - [Datasets](<contex/Datasets.md>), [Dataset Analysis](<contex/Dataset%20Analysis.md>),
   and [Dataset Filtering and Processing](<contex/Dataset_Filtering_and_Processing.md>) explain the data choices and observed distributions.
 - [Embedding Pipeline Architecture](<contex/Embedding_Pipeline_Architecture.md>) and

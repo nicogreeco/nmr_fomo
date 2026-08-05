@@ -4,6 +4,8 @@ These scripts keep Python environments on each VM's local disk while leaving
 code, datasets, checkpoints, and benchmark outputs on the shared project
 filesystem.
 
+Run the setup commands below from the repository root.
+
 They create four independent environments:
 
 | Directory | Python | Purpose |
@@ -25,7 +27,7 @@ canonicalization because its structure fields are derived from SMILES.
 Choose a path that is physically stored on the VM's local disk:
 
 ```bash
-./scripts/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr
+./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr
 ```
 
 ## GPU VM
@@ -34,13 +36,13 @@ The NVIDIA driver and a working `nvidia-smi` must already be present in the VM
 image. The script lets `uv` choose a compatible PyTorch CUDA backend:
 
 ```bash
-./scripts/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr
+./scripts/envs_scr/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr
 ```
 
 To force a backend:
 
 ```bash
-./scripts/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr \
+./scripts/envs_scr/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr \
   --torch-backend cu121
 ```
 
@@ -51,7 +53,7 @@ NMRPeak, and NMRTrans use different PyTorch releases.
 ## Install or repair one environment
 
 ```bash
-./scripts/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr \
+./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr \
   --only ultranmr
 ```
 
@@ -87,14 +89,14 @@ own local environment root.
 To leave `~/.bashrc` unchanged:
 
 ```bash
-./scripts/setup_cpu_envs.sh /path/to/local/venvs --no-shell-helper
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/local/venvs --no-shell-helper
 ```
 
 If the environments already exist and you only want to install or update the
 helper:
 
 ```bash
-./scripts/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr --only shell
+./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr --only shell
 ```
 
 ## Notes

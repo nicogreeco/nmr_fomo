@@ -11,8 +11,9 @@ scripts/
 ├── data/                 canonical schema, validation, and dataset readers
 ├── model_benchmarks/     processors and embedders for existing NMR models
 ├── canonicalize/         source-specific conversion programs
+├── postprocess/           derived merges, audits, and benchmark preparation
 ├── envs_scr/             environment setup notes and requirement lists
-├── notebooks/            small exploratory notebooks
+├── test_notebook.ipynb    small exploratory notebook
 └── extract_embeddings.py thin command-line entry point
 ```
 
@@ -66,7 +67,8 @@ loading `data` or `model_benchmarks` does not import all four model repositories
 - Change checkpoint loading, encoder execution, or pooling in
   `model_benchmarks/embedders/<model>.py`.
 - Change model selection in `model_benchmarks/factory.py`.
-- Keep exploratory code in `notebooks/`, not in the reusable packages.
+- Keep exploratory code in `test_notebook.ipynb` and derived-data utilities in
+  `postprocess/`, not in the reusable packages.
 
 The concise architecture and canonical field conventions are documented in
 `contex/Embedding_Pipeline_Architecture.md` and
