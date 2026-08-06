@@ -6,7 +6,7 @@ train, valid, and test in that order into one physical Parquet file. It does
 not retain split labels, filter records, or deduplicate molecules.
 
 Example:
-    PYTHONPATH=scripts python scripts/canonicalize/convert_mst_nmr.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py \
         models/NMRPeak/data/MST_NMR \
         datasets/canonical/nmrpeak_mst_nmr.parquet
 """
@@ -16,7 +16,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     checked_canonical_record,
     iter_lmdb_records,
     lmdb_key_text,

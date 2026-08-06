@@ -8,31 +8,33 @@ code is deliberately separate from model-specific benchmarking code.
 
 ```text
 scripts/
-├── data/                 canonical schema, validation, and dataset readers
+├── data/                 canonical data code and preparation utilities
+│   ├── canonicalize/    source-specific conversion programs
+│   └── postprocess/     derived merges, audits, and benchmark preparation
 ├── model_benchmarks/     processors and embedders for existing NMR models
-├── canonicalize/         source-specific conversion programs
-├── postprocess/           derived merges, audits, and benchmark preparation
 ├── envs_scr/             environment setup notes and requirement lists
 ├── test_notebook.ipynb    small exploratory notebook
 └── extract_embeddings.py thin command-line entry point
 ```
 
-`data` is the reusable core. It knows what a canonical record looks like and
-how to read an already-canonical Parquet file, but it has no knowledge of
-NMRPeak, NMRTrans, UltraNMR, or NMR-Solver.
+The modules directly under `data` form the reusable core. They define canonical
+records and read already-canonical Parquet files without depending on published
+model families. The `canonicalize` and `postprocess` subpackages group the
+one-time and derived-data tools alongside that core without making those tools
+part of its public API.
 
 `model_benchmarks` contains the bridge to those existing repositories. A
 processor converts canonical records into one model's batch format. An
 embedder loads that model and returns a fixed-size representation.
 
-`canonicalize` is a separate, one-time data-preparation area. Nothing in the
-dataset, processor, embedder, or extraction command converts or rewrites the
-input dataset.
+`data/canonicalize` is a separate, one-time data-preparation area. Nothing in
+the dataset, processor, embedder, or extraction command converts or rewrites
+the input dataset.
 
 The current canonical storage format is schema version 2. Raw-data converters
 derive canonical SMILES, formula, and atom symbols with RDKit and do not store
-molecular coordinates. See `canonicalize/README.md` for the exact policy and
-conversion commands.
+molecular coordinates. See `data/canonicalize/README.md` for the exact policy
+and conversion commands.
 
 ## Embedding flow
 
@@ -68,7 +70,7 @@ loading `data` or `model_benchmarks` does not import all four model repositories
   `model_benchmarks/embedders/<model>.py`.
 - Change model selection in `model_benchmarks/factory.py`.
 - Keep exploratory code in `test_notebook.ipynb` and derived-data utilities in
-  `postprocess/`, not in the reusable packages.
+  `data/postprocess/`, not in the reusable core modules.
 
 The concise architecture and canonical field conventions are documented in
 `contex/Embedding_Pipeline_Architecture.md` and

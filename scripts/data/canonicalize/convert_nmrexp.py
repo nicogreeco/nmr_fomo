@@ -7,7 +7,7 @@ splits. Pass ``all.lmdb`` directly only when that source file is specifically
 needed. No records are filtered, deduplicated, or split by this script.
 
 Example:
-    PYTHONPATH=scripts python scripts/canonicalize/convert_nmrexp.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py \
         models/NMRPeak/data/NMRexp/lmdb_dataset \
         datasets/canonical/nmrpeak_nmrexp.parquet
 """
@@ -17,7 +17,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     checked_canonical_record,
     iter_lmdb_records,
     lmdb_key_text,

@@ -8,20 +8,20 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     ConversionError,
     resolve_lmdb_inputs,
     write_canonical_parquet,
 )
-from canonicalize.convert_mst_nmr import convert_record as convert_mst_record
-from canonicalize.convert_nmrexp import convert_record as convert_nmrexp_record
-from canonicalize.convert_nmrsolver import (
+from data.canonicalize.convert_mst_nmr import convert_record as convert_mst_record
+from data.canonicalize.convert_nmrexp import convert_record as convert_nmrexp_record
+from data.canonicalize.convert_nmrsolver import (
     ChemicalMetadataConversionError,
     ChemicalMetadataRejectionReport,
     convert_record as convert_nmrsolver_record,
     iter_converted_records as iter_nmrsolver_records,
 )
-from canonicalize.convert_nmrtrans import convert_record as convert_nmrtrans_record
+from data.canonicalize.convert_nmrtrans import convert_record as convert_nmrtrans_record
 from data import CanonicalParquetDataset, CanonicalRecord, CarbonPeak, ProtonPeak
 from model_benchmarks.extract_embeddings import build_dataset
 
@@ -227,10 +227,10 @@ class ConverterMappingTests(unittest.TestCase):
         rejection_report = ChemicalMetadataRejectionReport(report_buffer)
 
         with patch(
-            "canonicalize.convert_nmrsolver.resolve_input",
+            "data.canonicalize.convert_nmrsolver.resolve_input",
             return_value=Path("fixture.lmdb"),
         ), patch(
-            "canonicalize.convert_nmrsolver.iter_lmdb_records",
+            "data.canonicalize.convert_nmrsolver.iter_lmdb_records",
             return_value=[(b"invalid", invalid_record), (b"valid", valid_record)],
         ):
             records = list(
@@ -271,10 +271,10 @@ class ConverterMappingTests(unittest.TestCase):
         rejection_report = ChemicalMetadataRejectionReport(report_buffer)
 
         with patch(
-            "canonicalize.convert_nmrsolver.resolve_input",
+            "data.canonicalize.convert_nmrsolver.resolve_input",
             return_value=Path("fixture.lmdb"),
         ), patch(
-            "canonicalize.convert_nmrsolver.iter_lmdb_records",
+            "data.canonicalize.convert_nmrsolver.iter_lmdb_records",
             return_value=[
                 (b"first", first_record),
                 (b"invalid", invalid_record),

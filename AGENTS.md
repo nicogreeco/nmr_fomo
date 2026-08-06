@@ -35,14 +35,16 @@
   `contex/Multiplicity analysis.md`.
 - Before converting a dataset, also read
   `contex/Dataset_Filtering_and_Processing.md`, `contex/Dataset Analysis.md`, and
-  `scripts/canonicalize/README.md`.
+  `scripts/data/canonicalize/README.md`.
 - Before changing model benchmarks, read `contex/Embedding_Pipeline_Architecture.md`,
   `contex/Baseline NMR Encoders.md`, and the relevant note under
   `contex/NMR/DL Methods/`.
 - Before changing embedding extraction, also read the selected model's upstream
   README under `models/`.
-- Put reusable schema, validation, and dataset code in `scripts/data/`.
-- Put source-specific conversion code in `scripts/canonicalize/`.
+- Put reusable schema, validation, and dataset code directly in `scripts/data/`.
+- Put source-specific conversion code in `scripts/data/canonicalize/`.
+- Put derived-data and benchmark-preparation utilities in
+  `scripts/data/postprocess/`.
 - Put published-model processors and embedding wrappers in `scripts/model_benchmarks/`.
 
 ## Architecture and Boundaries
@@ -82,10 +84,13 @@
 ## Tests
 
 - Run tests from the repository root with `scripts` on `PYTHONPATH` and use the
-  environment appropriate to the model family.
+  environment appropriate to the model family. Use `nmr-env main` for tests and scripts. Use model-specific environments
+  (see `scripts/envs_scr/README.md`) only for tasks that require the model
+  submodules.
 
 ```bash
-PYTHONPATH=scripts python -m unittest discover -s scripts/canonicalize/tests -v
+PYTHONPATH=scripts python -m unittest discover -s scripts/data/canonicalize/tests -v
+PYTHONPATH=scripts python -m unittest discover -s scripts/data/postprocess/tests -v
 PYTHONPATH=scripts python -m unittest discover -s scripts/model_benchmarks/tests -v
 PYTHONPATH=scripts python -m unittest scripts.model_benchmarks.tests.test_nmrtrans_mask -v
 ```

@@ -22,7 +22,7 @@ import pyarrow as pa
 from pyarrow import compute, parquet
 from rdkit import Chem, RDLogger
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     canonical_parquet_schema,
 )

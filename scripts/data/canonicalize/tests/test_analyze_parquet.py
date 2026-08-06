@@ -5,8 +5,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from canonicalize.analysis.analyze_parquet import analyze_parquet_file
-from canonicalize.common import (
+from data.canonicalize.analysis.analyze_parquet import analyze_parquet_file
+from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     write_canonical_parquet,
 )

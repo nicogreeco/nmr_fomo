@@ -6,7 +6,7 @@ from collections import Counter
 import json
 from pathlib import Path
 
-from canonicalize.common import canonical_parquet_schema
+from data.canonicalize.common import canonical_parquet_schema
 
 
 def decode_schema_metadata(metadata: dict | None) -> dict[str, str]:

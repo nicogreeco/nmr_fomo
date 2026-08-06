@@ -9,7 +9,7 @@ try:
     import pyarrow as pa
     import pyarrow.parquet as parquet
     from rdkit import Chem
-    from postprocess.calculate_mol_properties import (
+    from data.postprocess.calculate_mol_properties import (
         CSV_FIELDS,
         MACCS_OUTPUT_BITS,
         MORGAN_FP_SIZE,

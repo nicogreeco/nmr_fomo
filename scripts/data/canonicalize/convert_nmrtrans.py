@@ -6,7 +6,7 @@ physical Parquet file. No source records are filtered, deduplicated, or kept
 as train/validation/test labels.
 
 Example:
-    PYTHONPATH=scripts python scripts/canonicalize/convert_nmrtrans.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrtrans.py \
         models/NMRTrans/data \
         datasets/canonical/nmrtrans_nmrspec.parquet
 """
@@ -17,7 +17,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     ConversionError,
     chemical_metadata_from_smiles,
     checked_canonical_record,

@@ -17,7 +17,7 @@ RDKit's MACCS vector has 167 positions because bit 0 is unused; the output
 contains positions 1--166 as ``maccs_keys_166_bits``.
 
 Example:
-    PYTHONPATH=scripts python scripts/postprocess/calculate_mol_properties.py \\
+    PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \\
         datasets/merged/merged_train_val_all.parquet --workers 8
 """
 

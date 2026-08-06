@@ -5,8 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
-from canonicalize.analysis.analyze_parquet import analyze_parquet_file
-from canonicalize.common import (
+from data.canonicalize.analysis.analyze_parquet import analyze_parquet_file
+from data.canonicalize.common import (
     finite_float,
     iter_lmdb_records,
     iter_lz4_pickle_records,

@@ -50,7 +50,7 @@ split each batch across several RDKit worker processes. The default output for
 `datasets/merged/merged_train_val_all_mol_properties.csv`.
 
 ```bash
-PYTHONPATH=scripts python scripts/postprocess/calculate_mol_properties.py \
+PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
   datasets/merged/merged_train_val_all.parquet \
   --workers 8
 ```

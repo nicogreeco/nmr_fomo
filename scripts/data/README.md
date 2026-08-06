@@ -9,6 +9,8 @@ model.
   requirements.
 - `dataset.py` provides an in-memory dataset, a small JSONL reader, and a
   streaming Parquet dataset.
+- `canonicalize/` contains source-specific conversion and dataset-analysis tools.
+- `postprocess/` contains derived-data and benchmark-preparation utilities.
 
 Canonical schema version 2 stores the record identifier and provenance,
 source and canonical SMILES, molecular formula, acquisition metadata, an

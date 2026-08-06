@@ -9,7 +9,7 @@ The database has no published train, validation, or test split, so one input
 produces one physical Parquet file without inventing split labels.
 
 Example:
-    PYTHONPATH=scripts python scripts/canonicalize/convert_nmrsolver.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
         models/NMR-Solver/database/metadata/PubChem_merged_id.lmdb \
         datasets/nmrsolver/all.parquet
 """
@@ -22,7 +22,7 @@ from multiprocessing import get_context
 from pathlib import Path
 from typing import Any, TextIO
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     ConversionError,
     chemical_metadata_from_smiles,
     checked_canonical_record,

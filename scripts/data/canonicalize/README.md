@@ -42,7 +42,7 @@ The NMR-Solver converter code follows the same v2 rules, but its existing
 a legacy schema-v1 artifact until that separate run is performed.
 
 ```bash
-PYTHONPATH=scripts python scripts/canonicalize/analysis/analyze_parquet.py \
+PYTHONPATH=scripts python scripts/data/canonicalize/analysis/analyze_parquet.py \
   datasets/<source>/all.parquet \
   --output datasets/<source>/canonical_analysis.json
 ```
@@ -57,11 +57,11 @@ slow and use substantially more memory on a very large file.
 For reproducible source/split and processor-compatibility audits, run:
 
 ```bash
-PYTHONPATH=scripts python scripts/canonicalize/analysis/compare_source_and_splits.py \
+PYTHONPATH=scripts python scripts/data/canonicalize/analysis/compare_source_and_splits.py \
   mst_nmr
 
 PYTHONPATH=scripts python \
-  scripts/canonicalize/analysis/analyze_processor_compatibility.py \
+  scripts/data/canonicalize/analysis/analyze_processor_compatibility.py \
   datasets/mst_nmr/all.parquet \
   --dataset-name mst_nmr \
   --output datasets/mst_nmr/processor_compatibility.json
@@ -71,7 +71,7 @@ The same commands accept `nmrexp` or `nmrtrans`. The source/split command
 writes `source_comparison.json` and `split_consistency.json` beside the
 dataset.
 
-Run `scripts/postprocess/merge_datasets.py` only after every input has been
+Run `scripts/data/postprocess/merge_datasets.py` only after every input has been
 regenerated. The merger rejects legacy or structurally different schemas and
 inputs produced by different RDKit versions instead of labeling them as v2.
 
@@ -80,7 +80,7 @@ can run RDKit record conversion in separate processes while one parent process
 keeps LMDB reading and Parquet/JSONL writing ordered and bounded in memory:
 
 ```bash
-PYTHONPATH=scripts python scripts/canonicalize/convert_nmrsolver.py \
+PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
   models/NMR-Solver/database/metadata/PubChem_merged_id.lmdb \
   datasets/nmrsolver/all.parquet --overwrite --workers 4
 ```

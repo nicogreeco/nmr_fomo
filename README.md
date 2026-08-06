@@ -72,11 +72,11 @@ contex/                     project diary, literature notes, decisions, and anal
 datasets/                   local raw/canonical data and generated reports (ignored)
 models/                     pinned upstream repositories (Git submodules)
 scripts/
-  data/                     reusable canonical schema, validation, and Parquet readers
-  canonicalize/             source-specific conversion and dataset-analysis tools
+  data/                     canonical data code and data-preparation utilities
+    canonicalize/           source-specific conversion and dataset-analysis tools
+    postprocess/            derived-data and benchmark-preparation utilities
   model_benchmarks/         processors and embedders for published-model comparison
   envs_scr/                 model-specific environment setup material
-  postprocess/              derived-data and benchmark-preparation utilities
   test_notebook.ipynb       exploratory work
 ```
 
@@ -88,8 +88,8 @@ CanonicalParquetDataset -> processor/collator -> model batch -> embedder -> embe
 
 Canonical Parquet schema version 2 stores source SMILES plus RDKit-derived
 canonical SMILES, molecular formula, and atom symbols. It deliberately omits
-3D coordinates; no current spectral benchmark consumes them. Conversion and
-schema details are in `scripts/canonicalize/README.md` and the canonicalization
+3D coordinates; no current spectral benchmark consumes them. Conversion and schema details are in
+`scripts/data/canonicalize/README.md` and the canonicalization
 implementation note linked below.
 
 ## How to navigate the project
@@ -105,7 +105,7 @@ Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%
 
 Each `scripts/` subfolder has a short README with the practical details for
 that part of the code. In particular, start from `scripts/README.md` for the
-Python layout, and from `scripts/canonicalize/README.md` for conversion or
+Python layout, and from `scripts/data/canonicalize/README.md` for conversion or
 canonical-dataset analysis.
 
 Before a push, check `git status`, `git diff --cached`, and

@@ -10,11 +10,11 @@ Pass one NMRGym split pickle to make its matching Parquet, or pass the
 directory containing train/val/test pickles to make their ordered union.
 
 Examples:
-    PYTHONPATH=scripts python dataset_overlap_audit/convert_nmrgym.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
         dataset_overlap_audit/NMRGym_train_balanced_dedup.pkl \
         datasets/nmrgym/train.parquet
 
-    PYTHONPATH=scripts python dataset_overlap_audit/convert_nmrgym.py \
+    PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
         dataset_overlap_audit datasets/nmrgym/all.parquet
 """
 
@@ -24,7 +24,7 @@ from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     ConversionError,
     chemical_metadata_from_smiles,
     checked_canonical_record,
@@ -208,7 +208,7 @@ def main() -> None:
         iter_converted_records(args.input),
         args.output,
         source_name=SOURCE_NAME,
-        converter_name="dataset_overlap_audit/convert_nmrgym.py",
+        converter_name="scripts/data/canonicalize/convert_nmrgym.py",
         row_group_size=args.row_group_size,
         overwrite=args.overwrite,
     )

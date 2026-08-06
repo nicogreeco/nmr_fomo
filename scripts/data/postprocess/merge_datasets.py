@@ -5,7 +5,7 @@ import argparse
 import json
 from pathlib import Path
 
-from canonicalize.common import (
+from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     canonical_parquet_schema,
 )
