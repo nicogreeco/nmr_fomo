@@ -286,7 +286,8 @@ class ConverterMappingTests(unittest.TestCase):
                     "fixture.lmdb",
                     rejection_report,
                     workers=2,
-                    max_in_flight=2,
+                    max_in_flight=4,
+                    records_per_task=2,
                 )
             )
 

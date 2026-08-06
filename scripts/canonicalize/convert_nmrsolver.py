@@ -286,24 +286,53 @@ def _convert_record_in_worker(
     return convert_record(raw_record, record_id, location)
 
 
+def _convert_record_batch_in_worker(
+    records: list[tuple[Mapping[str, Any], str, str]],
+) -> list[tuple[CanonicalRecord | None, str | None]]:
+    """Convert one bounded batch and keep metadata failures in-band.
+
+    A metadata failure is an expected NMR-Solver exception: the parent needs
+    to write it to the ordered rejection report while allowing the other rows
+    in the same task to reach Parquet. Any other conversion error still fails
+    the task and stops the run with its source location.
+    """
+
+    results: list[tuple[CanonicalRecord | None, str | None]] = []
+    for raw_record, record_id, location in records:
+        try:
+            results.append((
+                _convert_record_in_worker(raw_record, record_id, location),
+                None,
+            ))
+        except ChemicalMetadataConversionError as error:
+            results.append((None, str(error)))
+    return results
+
+
 def _iter_parallel_converted_records(
     source_records: Iterator[tuple[bytes, Mapping[str, Any]]],
     lmdb_path: Path,
     rejection_report: ChemicalMetadataRejectionReport | None,
     workers: int,
     max_in_flight: int,
+    records_per_task: int,
 ) -> Iterator[CanonicalRecord]:
     """Convert records concurrently while yielding source-key order.
 
     LMDB reading, Parquet writing, and rejection-report writing stay in the
-    parent process. Only independent record conversion, including RDKit work,
-    runs in child processes. Results are retired in submission order so the
-    generated Parquet and JSONL files remain deterministic.
+    parent process. Independent record conversion, including RDKit work, runs
+    in child processes in bounded batches to avoid one process-pool task per
+    record. Results are retired in submission order so the generated Parquet
+    and JSONL files remain deterministic.
     """
 
     pending: list[
-        tuple[Future[CanonicalRecord], str, Mapping[str, Any]]
+        tuple[
+            Future[list[tuple[CanonicalRecord | None, str | None]]],
+            list[tuple[str, Mapping[str, Any]]],
+        ]
     ] = []
+    pending_record_count = 0
     source_exhausted = False
 
     # Spawn prevents child processes from inheriting the parent's LMDB state.
@@ -312,36 +341,69 @@ def _iter_parallel_converted_records(
         mp_context=get_context("spawn"),
     ) as executor:
         while pending or not source_exhausted:
-            while not source_exhausted and len(pending) < max_in_flight:
-                try:
-                    key, raw_record = next(source_records)
-                except StopIteration:
-                    source_exhausted = True
-                    break
+            while (
+                not source_exhausted
+                and pending_record_count < max_in_flight
+            ):
+                available_slots = max_in_flight - pending_record_count
+                task_size = min(records_per_task, available_slots)
+                worker_records: list[tuple[Mapping[str, Any], str, str]] = []
+                report_records: list[tuple[str, Mapping[str, Any]]] = []
+                while len(worker_records) < task_size:
+                    try:
+                        key, raw_record = next(source_records)
+                    except StopIteration:
+                        source_exhausted = True
+                        break
 
-                key_name = lmdb_key_text(key)
-                record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
-                location = f"{lmdb_path} key {key_name}"
+                    key_name = lmdb_key_text(key)
+                    record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
+                    location = f"{lmdb_path} key {key_name}"
+                    worker_records.append(
+                        (_record_for_worker(raw_record), record_id, location)
+                    )
+                    report_records.append(
+                        (record_id, _record_for_rejection_report(raw_record))
+                    )
+
+                if not worker_records:
+                    continue
                 future = executor.submit(
-                    _convert_record_in_worker,
-                    _record_for_worker(raw_record),
-                    record_id,
-                    location,
+                    _convert_record_batch_in_worker,
+                    worker_records,
                 )
-                pending.append(
-                    (future, record_id, _record_for_rejection_report(raw_record))
-                )
+                pending.append((future, report_records))
+                pending_record_count += len(worker_records)
 
             if not pending:
                 continue
 
-            future, record_id, report_record = pending.pop(0)
-            try:
-                yield future.result()
-            except ChemicalMetadataConversionError as error:
-                if rejection_report is None:
-                    raise
-                rejection_report.write(record_id, report_record, str(error))
+            future, report_records = pending.pop(0)
+            results = future.result()
+            pending_record_count -= len(report_records)
+            if len(results) != len(report_records):
+                raise RuntimeError(
+                    "NMR-Solver worker returned a different number of results "
+                    "than submitted records"
+                )
+            for (record, rejection_reason), (record_id, report_record) in zip(
+                results, report_records
+            ):
+                if rejection_reason is not None:
+                    if rejection_report is None:
+                        raise ChemicalMetadataConversionError(rejection_reason)
+                    rejection_report.write(
+                        record_id,
+                        report_record,
+                        rejection_reason,
+                    )
+                    continue
+                if record is None:
+                    raise RuntimeError(
+                        "NMR-Solver worker returned neither a record nor a "
+                        "rejection reason"
+                    )
+                yield record
 
 
 def iter_converted_records(
@@ -350,11 +412,14 @@ def iter_converted_records(
     *,
     workers: int = 1,
     max_in_flight: int | None = None,
+    records_per_task: int = 1,
 ) -> Iterator[CanonicalRecord]:
     """Yield valid records and report source structures RDKit cannot process."""
 
     if workers < 1:
         raise ValueError("workers must be at least 1")
+    if records_per_task < 1:
+        raise ValueError("records_per_task must be at least 1")
     if max_in_flight is not None and max_in_flight < workers:
         raise ValueError("max_in_flight must be at least workers")
 
@@ -366,7 +431,8 @@ def iter_converted_records(
             lmdb_path,
             rejection_report,
             workers,
-            max_in_flight or workers * 4,
+            max_in_flight or workers * records_per_task * 2,
+            records_per_task,
         )
         return
 
@@ -427,7 +493,16 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help=(
             "maximum records submitted to workers before ordered writing "
-            "(default: 4 per worker)"
+            "(default: two worker tasks per worker)"
+        ),
+    )
+    parser.add_argument(
+        "--records-per-task",
+        type=int,
+        default=256,
+        help=(
+            "records converted by one process-pool task (default: 256); "
+            "larger values reduce multiprocessing overhead"
         ),
     )
     parser.add_argument(
@@ -463,6 +538,8 @@ def main() -> None:
         raise ValueError("--progress-every must be zero or greater")
     if args.workers < 1:
         raise ValueError("--workers must be at least 1")
+    if args.records_per_task < 1:
+        raise ValueError("--records-per-task must be at least 1")
     if args.max_in_flight is not None and args.max_in_flight < args.workers:
         raise ValueError("--max-in-flight must be at least --workers")
 
@@ -493,6 +570,7 @@ def main() -> None:
             rejection_report,
             workers=args.workers,
             max_in_flight=args.max_in_flight,
+            records_per_task=args.records_per_task,
         )
         if args.progress_every:
             records = _records_with_progress(records, args.progress_every)

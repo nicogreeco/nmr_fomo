@@ -86,9 +86,11 @@ PYTHONPATH=scripts python scripts/canonicalize/convert_nmrsolver.py \
 ```
 
 Start with four workers and increase only after confirming available CPU, RAM,
-and storage throughput. `--max-in-flight` limits queued records (default: four
-per worker); the generated record and rejection-report order remains source-key
-order.
+and storage throughput. Each worker task converts 256 records by default,
+which reduces process-pool scheduling overhead; adjust `--records-per-task`
+only after measuring the machine. `--max-in-flight` bounds queued source
+records (default: two tasks per worker). The generated record and
+rejection-report order remains source-key order.
 
 The canonical fields and the rules to preserve during future conversions are
 in [Canonicalization Implementation Notes](../../contex/Canonicalization_Implementation_Notes.md).

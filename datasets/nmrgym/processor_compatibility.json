@@ -1,0 +1,65 @@
+{
+  "dataset": "nmrgym",
+  "input": "/mnt/filesystem-test/nmr/datasets/nmrgym/all.parquet",
+  "mode": "canonical",
+  "models": {
+    "nmrpeak": {
+      "accepted_records": 0,
+      "issue_occurrence_counts": {
+        "invalid_integration": 4350707,
+        "missing_j_values": 4350707,
+        "missing_multiplicity": 4350707,
+        "missing_shift_range": 4350707
+      },
+      "record_issue_code_counts": {
+        "invalid_integration": 269999,
+        "missing_j_values": 269999,
+        "missing_multiplicity": 269999,
+        "missing_shift_range": 269999
+      },
+      "rejected_records": 269999
+    },
+    "nmrsolver": {
+      "accepted_records": 0,
+      "issue_occurrence_counts": {
+        "missing_proton_expansion": 4350707
+      },
+      "record_issue_code_counts": {
+        "missing_proton_expansion": 269999
+      },
+      "rejected_records": 269999
+    },
+    "nmrtrans": {
+      "accepted_records": 0,
+      "issue_occurrence_counts": {
+        "missing_integration": 4350707,
+        "missing_j_values": 4350707,
+        "missing_multiplicity": 4350707,
+        "missing_peak_width": 4350707,
+        "too_many_c_peaks": 294,
+        "too_many_h_peaks": 1167
+      },
+      "record_issue_code_counts": {
+        "missing_integration": 269999,
+        "missing_j_values": 269999,
+        "missing_multiplicity": 269999,
+        "missing_peak_width": 269999,
+        "too_many_c_peaks": 294,
+        "too_many_h_peaks": 1167
+      },
+      "rejected_records": 269999
+    },
+    "ultranmr": {
+      "accepted_records": 0,
+      "issue_occurrence_counts": {
+        "missing_proton_expansion": 4350707
+      },
+      "record_issue_code_counts": {
+        "missing_proton_expansion": 269999
+      },
+      "rejected_records": 269999
+    }
+  },
+  "rows": 269999,
+  "scope": "processor field validation; NMRPeak sequence length is checked later during collation"
+}
