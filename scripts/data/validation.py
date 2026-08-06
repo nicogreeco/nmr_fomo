@@ -299,7 +299,7 @@ def validate_canonical_record(
                 ValidationIssue(
                     code="invalid_type",
                     path="h_nmr_peaks",
-                    message="must be an array or None",
+                    message="must be an array",
                 )
             )
         else:
@@ -321,7 +321,7 @@ def validate_canonical_record(
                 ValidationIssue(
                     code="invalid_type",
                     path="c_nmr_peaks",
-                    message="must be an array or None",
+                    message="must be an array",
                 )
             )
         else:

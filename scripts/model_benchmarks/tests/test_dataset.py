@@ -27,6 +27,14 @@ class DatasetSmokeTests(unittest.TestCase):
         self.assertIsNone(dataset[0].h_nmr_peaks[0].j_values)
         self.assertEqual(dataset[0].c_nmr_peaks, ())
 
+    def test_null_modalities_are_normalized_to_empty_lists(self):
+        dataset = CanonicalNMRDataset(
+            [{"record_id": "missing-modalities", "h_nmr_peaks": None}]
+        )
+
+        self.assertEqual(dataset[0].h_nmr_peaks, ())
+        self.assertEqual(dataset[0].c_nmr_peaks, ())
+
     @unittest.skipUnless(
         importlib.util.find_spec("pyarrow") is not None,
         "pyarrow is not installed in this environment",

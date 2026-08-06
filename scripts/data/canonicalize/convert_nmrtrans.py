@@ -54,12 +54,12 @@ def _tokenized_spectra(raw_record: Mapping[str, Any], location: str) -> Mapping[
 
 def _peak_list(
     spectra: Mapping[str, Any], field_name: str, location: str
-) -> list[object] | None:
+) -> list[object]:
     if field_name not in spectra:
-        return None
+        return []
     value = spectra[field_name]
     if value is None:
-        return None
+        return []
     if not isinstance(value, (list, tuple)):
         raise ConversionError(f"{location}.{field_name} must be an array or None")
     return list(value)
@@ -128,31 +128,23 @@ def convert_record(
         **chemical_metadata_from_smiles(source_smiles, smiles_location),
         "nmr_frequency": None,
         "nmr_solvent": None,
-        "h_nmr_peaks": (
-            [
-                nmrtrans_proton_peak(
-                    peak, f"{location}.tokenized_input.1HNMR[{index}]"
-                )
-                for index, peak in enumerate(h_peaks)
-            ]
-            if h_peaks is not None
-            else None
-        ),
-        "c_nmr_peaks": (
-            [
-                {
-                    "shift": finite_float(
-                        peak, f"{location}.tokenized_input.13CNMR[{index}]"
-                    ),
-                    "integral": None,
-                    "intensity": None,
-                    "width": None,
-                }
-                for index, peak in enumerate(c_peaks)
-            ]
-            if c_peaks is not None
-            else None
-        ),
+        "h_nmr_peaks": [
+            nmrtrans_proton_peak(
+                peak, f"{location}.tokenized_input.1HNMR[{index}]"
+            )
+            for index, peak in enumerate(h_peaks)
+        ],
+        "c_nmr_peaks": [
+            {
+                "shift": finite_float(
+                    peak, f"{location}.tokenized_input.13CNMR[{index}]"
+                ),
+                "integral": None,
+                "intensity": None,
+                "width": None,
+            }
+            for index, peak in enumerate(c_peaks)
+        ],
     }
     return checked_canonical_record(canonical_data, location)
 

@@ -8,6 +8,7 @@ from pathlib import Path
 from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     canonical_parquet_schema,
+    normalize_modality_lists,
 )
 
 
@@ -116,6 +117,7 @@ def merge_datasets(
                 use_threads=True,
             ):
                 table = pa.Table.from_batches([batch], schema=output_schema)
+                table = normalize_modality_lists(table)
                 writer.write_table(table, row_group_size=batch.num_rows)
                 total_rows += batch.num_rows
                 total_row_groups += 1

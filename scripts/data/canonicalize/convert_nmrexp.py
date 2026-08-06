@@ -36,10 +36,10 @@ SOURCE_NAME = "NMRPeak-NMRexp"
 
 def _peak_list(
     raw_record: Mapping[str, Any], field_name: str, location: str
-) -> list[object] | None:
+) -> list[object]:
     value = raw_record.get(field_name)
     if value is None:
-        return None
+        return []
     if hasattr(value, "tolist"):
         value = value.tolist()
     if not isinstance(value, (list, tuple)):
@@ -62,26 +62,18 @@ def convert_record(
         "record_id": record_id,
         "source": SOURCE_NAME,
         **nmrpeak_metadata(record, location),
-        "h_nmr_peaks": (
-            [
-                nmrpeak_proton_peak(peak, f"{location}.h_nmr_peaks[{index}]")
-                for index, peak in enumerate(h_peaks)
-            ]
-            if h_peaks is not None
-            else None
-        ),
-        "c_nmr_peaks": (
-            [
-                nmrpeak_carbon_peak(
-                    peak,
-                    f"{location}.c_nmr_peaks[{index}]",
-                    keep_properties=False,
-                )
-                for index, peak in enumerate(c_peaks)
-            ]
-            if c_peaks is not None
-            else None
-        ),
+        "h_nmr_peaks": [
+            nmrpeak_proton_peak(peak, f"{location}.h_nmr_peaks[{index}]")
+            for index, peak in enumerate(h_peaks)
+        ],
+        "c_nmr_peaks": [
+            nmrpeak_carbon_peak(
+                peak,
+                f"{location}.c_nmr_peaks[{index}]",
+                keep_properties=False,
+            )
+            for index, peak in enumerate(c_peaks)
+        ],
     }
     return checked_canonical_record(canonical_data, location)
 

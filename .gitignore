@@ -9,8 +9,11 @@ __pycache__
 /models/NMR-Solver/data/
 /models/NMR-Solver/database/
 /datasets/properties/tdc_admet/admet_group/
+/tmp/
+/dataset_overlap_audit/
 
 
+*.png
 *.parquet
 *.lmdb
 *.pt
@@ -22,3 +25,4 @@ __pycache__
 *.csv.gz
 *.zip
 *.parquet.partial
+*.log

@@ -15,6 +15,7 @@ from data.canonicalize.common import (
 )
 from data.canonicalize.convert_mst_nmr import convert_record as convert_mst_record
 from data.canonicalize.convert_nmrexp import convert_record as convert_nmrexp_record
+from data.canonicalize.convert_nmrgym import convert_record as convert_nmrgym_record
 from data.canonicalize.convert_nmrsolver import (
     ChemicalMetadataConversionError,
     ChemicalMetadataRejectionReport,
@@ -107,6 +108,30 @@ class ConverterMappingTests(unittest.TestCase):
         record = convert_nmrexp_record(raw_record, "nmrexp-1", "fixture")
 
         self.assertEqual(record.h_nmr_peaks[0].j_values, ())
+
+    def test_null_modalities_become_empty_lists(self):
+        nmrexp_record = convert_nmrexp_record(
+            {"smiles": "CCO", "h_nmr_peaks": None, "c_nmr_peaks": None},
+            "nmrexp-null-modalities",
+            "fixture",
+        )
+        nmrtrans_record = convert_nmrtrans_record(
+            {
+                "smiles": "CCO",
+                "tokenized_input": json.dumps({"1HNMR": None}),
+            },
+            "nmrtrans-null-modalities",
+            "fixture",
+        )
+        nmrgym_record = convert_nmrgym_record(
+            {"smiles": "CCO", "h_shift": None, "c_shift": None},
+            "nmrgym-null-modalities",
+            "fixture",
+        )
+
+        for record in (nmrexp_record, nmrtrans_record, nmrgym_record):
+            self.assertEqual(record.h_nmr_peaks, ())
+            self.assertEqual(record.c_nmr_peaks, ())
 
     def test_nmrtrans_mapping_uses_half_span_and_empty_j_list(self):
         raw_record = {
@@ -396,7 +421,8 @@ class ParquetDatasetTests(unittest.TestCase):
             ["parquet-1", "parquet-2"],
         )
         self.assertEqual(read_records[0].h_nmr_peaks[0].j_values, ())
-        self.assertIsNone(read_records[1].c_nmr_peaks)
+        self.assertEqual(read_records[1].h_nmr_peaks, ())
+        self.assertEqual(read_records[1].c_nmr_peaks, ())
         self.assertEqual(
             [record.record_id for record in limited_records],
             ["parquet-1"],

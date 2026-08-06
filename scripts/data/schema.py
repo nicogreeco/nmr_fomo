@@ -1,7 +1,7 @@
 """Model-independent Python representation of one canonical NMR record."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 
@@ -87,8 +87,8 @@ class CanonicalRecord:
     nmr_frequency: str | None = None
     nmr_solvent: str | None = None
     atoms: tuple[str, ...] | None = None
-    h_nmr_peaks: tuple[ProtonPeak, ...] | None = None
-    c_nmr_peaks: tuple[CarbonPeak, ...] | None = None
+    h_nmr_peaks: tuple[ProtonPeak, ...] = ()
+    c_nmr_peaks: tuple[CarbonPeak, ...] = ()
 
 
 def _optional_tuple(value: Any, field_name: str) -> tuple[Any, ...] | None:
@@ -131,21 +131,23 @@ def ensure_record(value: CanonicalRecord | Mapping[str, Any]) -> CanonicalRecord
     """
 
     if isinstance(value, CanonicalRecord):
+        if value.h_nmr_peaks is None or value.c_nmr_peaks is None:
+            return replace(
+                value,
+                h_nmr_peaks=value.h_nmr_peaks or (),
+                c_nmr_peaks=value.c_nmr_peaks or (),
+            )
         return value
     if not isinstance(value, Mapping):
         raise TypeError("canonical record must be a CanonicalRecord or mapping")
 
     record_data = dict(value)
 
-    if "h_nmr_peaks" in record_data:
-        peaks = _optional_tuple(record_data["h_nmr_peaks"], "h_nmr_peaks")
-        if peaks is not None:
-            record_data["h_nmr_peaks"] = tuple(_proton_peak(peak) for peak in peaks)
+    h_peaks = _optional_tuple(record_data.get("h_nmr_peaks"), "h_nmr_peaks") or ()
+    record_data["h_nmr_peaks"] = tuple(_proton_peak(peak) for peak in h_peaks)
 
-    if "c_nmr_peaks" in record_data:
-        peaks = _optional_tuple(record_data["c_nmr_peaks"], "c_nmr_peaks")
-        if peaks is not None:
-            record_data["c_nmr_peaks"] = tuple(_carbon_peak(peak) for peak in peaks)
+    c_peaks = _optional_tuple(record_data.get("c_nmr_peaks"), "c_nmr_peaks") or ()
+    record_data["c_nmr_peaks"] = tuple(_carbon_peak(peak) for peak in c_peaks)
 
     for field_name in ("atoms",):
         if field_name in record_data:

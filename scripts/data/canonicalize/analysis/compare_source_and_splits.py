@@ -100,8 +100,8 @@ def raw_spectra(record, source_format: str, location: str):
 def empty_totals() -> dict[str, int]:
     return {
         "rows": 0,
-        "h_null_records": 0,
-        "c_null_records": 0,
+        "h_no_peak_records": 0,
+        "c_no_peak_records": 0,
         "both_modality_usable_records": 0,
         "h_total_peaks": 0,
         "c_total_peaks": 0,
@@ -136,13 +136,13 @@ def analyze_raw_split(path: Path, source_format: str) -> tuple[dict, dict]:
         h_peaks, c_peaks = raw_spectra(record, source_format, location)
         totals["rows"] += 1
 
-        if h_peaks is None:
-            totals["h_null_records"] += 1
+        if not h_peaks:
+            totals["h_no_peak_records"] += 1
         else:
             totals["h_total_peaks"] += len(h_peaks)
             totals["h_max_peaks"] = max(totals["h_max_peaks"], len(h_peaks))
-        if c_peaks is None:
-            totals["c_null_records"] += 1
+        if not c_peaks:
+            totals["c_no_peak_records"] += 1
         else:
             totals["c_total_peaks"] += len(c_peaks)
             totals["c_max_peaks"] = max(totals["c_max_peaks"], len(c_peaks))
@@ -222,8 +222,14 @@ def add_totals(combined: dict, split: dict) -> None:
 def canonical_totals(analysis: dict) -> dict[str, int]:
     return {
         "rows": analysis["rows"],
-        "h_null_records": analysis["h_nmr_peaks"]["null_record_count"],
-        "c_null_records": analysis["c_nmr_peaks"]["null_record_count"],
+        "h_no_peak_records": (
+            analysis["h_nmr_peaks"]["null_record_count"]
+            + analysis["h_nmr_peaks"]["empty_record_count"]
+        ),
+        "c_no_peak_records": (
+            analysis["c_nmr_peaks"]["null_record_count"]
+            + analysis["c_nmr_peaks"]["empty_record_count"]
+        ),
         "both_modality_usable_records": analysis["both_modality_usable_count"],
         "h_total_peaks": analysis["h_nmr_peaks"]["total_peak_count"],
         "c_total_peaks": analysis["c_nmr_peaks"]["total_peak_count"],

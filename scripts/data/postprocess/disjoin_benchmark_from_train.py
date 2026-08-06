@@ -1,4 +1,5 @@
 import argparse
+import json
 from pathlib import Path
 import pyarrow as pa
 from pyarrow import parquet, compute
@@ -7,6 +8,7 @@ from rdkit import Chem
 from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     canonical_parquet_schema,
+    normalize_modality_lists,
 )
 
 def structure_identifiers(smiles: object) -> dict[str, str | None]:
@@ -189,38 +191,67 @@ def disjoint_datasets(
         for entry in to_disjoint_index[key]
     }
 
+    input_metadata = dict(to_disjoint.schema_arrow.metadata or {})
+    input_metadata.update(
+        {
+            b"disjointed_from": str(parquet_file_to_disjoint[0]).encode("utf-8"),
+            b"disjointed_against": json.dumps(
+                [str(path) for path in parquet_file_to_disjoint[1:]]
+            ).encode("utf-8"),
+            b"disjoin_identity": b"RDKit connectivity InChIKey",
+            b"disjoin_removed_record_count": str(len(record_ids_to_remove)).encode(
+                "utf-8"
+            ),
+            b"disjoin_script": str(Path(__file__).resolve()).encode("utf-8"),
+        }
+    )
+    output_schema = to_disjoint.schema_arrow.with_metadata(input_metadata)
+
+    temporary_output = output.with_name(f".{output.name}.partial")
+    if temporary_output.exists():
+        raise FileExistsError(
+            f"temporary output already exists: {temporary_output}; inspect or "
+            "remove it before starting another run"
+        )
+
+    value_set = pa.array(
+        sorted(record_ids_to_remove),
+        type=output_schema.field("record_id").type,
+    )
     writer = parquet.ParquetWriter(
-        output,
-        expected_schema,
+        temporary_output,
+        output_schema,
+        compression="zstd",
     )
 
     final_rows = 0
     total_rows = 0
-    for batch in to_disjoint.iter_batches(
-        batch_size=arrow_batch_size,
-    ):
-        table = pa.Table.from_batches([batch])
+    try:
+        for batch in to_disjoint.iter_batches(
+            batch_size=arrow_batch_size,
+        ):
+            table = pa.Table.from_batches([batch], schema=output_schema)
+            remove_mask = compute.is_in(table["record_id"], value_set=value_set)
+            filtered_table = table.filter(compute.invert(remove_mask))
+            filtered_table = normalize_modality_lists(filtered_table)
 
-        remove_mask = compute.is_in(
-            table["record_id"],
-            value_set=pa.array(
-                list(record_ids_to_remove),
-                type=table["record_id"].type,
-            ),
-        )
+            final_rows += filtered_table.num_rows
+            total_rows += table.num_rows
 
-        keep_mask = compute.invert(remove_mask)
-        filtered_table = table.filter(keep_mask)
+            if filtered_table.num_rows == 0:
+                continue
 
-        final_rows += filtered_table.num_rows
-        total_rows += table.num_rows
-
-        if filtered_table.num_rows == 0:
-            continue
-
-        writer.write_table(filtered_table)
+            writer.write_table(
+                filtered_table,
+                row_group_size=filtered_table.num_rows,
+            )
+    except Exception:
+        writer.close()
+        temporary_output.unlink(missing_ok=True)
+        raise
 
     writer.close()
+    temporary_output.replace(output)
 
     return {
         "output": str(output),
@@ -236,13 +267,18 @@ def disjoint_datasets(
 
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Merge compatible canonical Parquet files."
+        description=(
+            "Remove connectivity overlap from the first canonical Parquet input."
+        )
     )
     parser.add_argument(
         "parquet_file_to_disjoint",
         nargs="+",
         type=Path,
-        help="input canonical Parquet file, from which intesection of molecules will be removed to make the datasets disjoint. The order of the files matters, as the first file will be used as the base dataset from which the intersection will be removed. The others will remain unchanged. ",
+        help=(
+            "canonical Parquet inputs; rows are removed only from the first "
+            "file when their connectivity occurs in a later input"
+        ),
     )
     parser.add_argument(
         "--output",
@@ -273,7 +309,8 @@ def main() -> None:
         overwrite=args.overwrite,
     )
     print(
-        f"Disjoint datasets written to {args.output} with {result['intersection_rows']} intersection rows removed"
+        f"Disjoint dataset written to {args.output} with "
+        f"{result['intersection_rows']:,} overlapping rows removed"
     )
 
 

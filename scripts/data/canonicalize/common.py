@@ -339,6 +339,8 @@ def checked_canonical_record(
 def canonical_record_to_row(record: CanonicalRecord) -> dict[str, object]:
     """Convert one validated data class to the Arrow nested-row representation."""
 
+    record = ensure_record(record)
+
     return {
         "record_id": record.record_id,
         "source": record.source,
@@ -348,43 +350,57 @@ def canonical_record_to_row(record: CanonicalRecord) -> dict[str, object]:
         "nmr_frequency": record.nmr_frequency,
         "nmr_solvent": record.nmr_solvent,
         "atoms": list(record.atoms) if record.atoms is not None else None,
-        "h_nmr_peaks": (
-            [
-                {
-                    "shift": peak.shift,
-                    "integration": peak.integration,
-                    "multiplicity_raw": peak.multiplicity_raw,
-                    "multiplicity": peak.multiplicity,
-                    "j_values": list(peak.j_values)
-                    if peak.j_values is not None
-                    else None,
-                    "range_min": peak.range_min,
-                    "range_max": peak.range_max,
-                    "range_half_span": peak.range_half_span,
-                    "equivalence_class": peak.equivalence_class,
-                    "member_shifts": list(peak.member_shifts)
-                    if peak.member_shifts is not None
-                    else None,
-                }
-                for peak in record.h_nmr_peaks
-            ]
-            if record.h_nmr_peaks is not None
-            else None
-        ),
-        "c_nmr_peaks": (
-            [
-                {
-                    "shift": peak.shift,
-                    "integral": peak.integral,
-                    "intensity": peak.intensity,
-                    "width": peak.width,
-                }
-                for peak in record.c_nmr_peaks
-            ]
-            if record.c_nmr_peaks is not None
-            else None
-        ),
+        "h_nmr_peaks": [
+            {
+                "shift": peak.shift,
+                "integration": peak.integration,
+                "multiplicity_raw": peak.multiplicity_raw,
+                "multiplicity": peak.multiplicity,
+                "j_values": list(peak.j_values)
+                if peak.j_values is not None
+                else None,
+                "range_min": peak.range_min,
+                "range_max": peak.range_max,
+                "range_half_span": peak.range_half_span,
+                "equivalence_class": peak.equivalence_class,
+                "member_shifts": list(peak.member_shifts)
+                if peak.member_shifts is not None
+                else None,
+            }
+            for peak in record.h_nmr_peaks
+        ],
+        "c_nmr_peaks": [
+            {
+                "shift": peak.shift,
+                "integral": peak.integral,
+                "intensity": peak.intensity,
+                "width": peak.width,
+            }
+            for peak in record.c_nmr_peaks
+        ],
     }
+
+
+def normalize_modality_lists(table):
+    """Replace null top-level spectrum lists with canonical empty lists."""
+
+    try:
+        import pyarrow as pa
+        from pyarrow import compute
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "normalizing canonical Parquet requires pyarrow"
+        ) from error
+
+    for field_name in ("h_nmr_peaks", "c_nmr_peaks"):
+        column_index = table.schema.get_field_index(field_name)
+        column = table.column(column_index)
+        if column.null_count == 0:
+            continue
+        empty_list = pa.scalar([], type=column.type)
+        normalized = compute.fill_null(column, empty_list)
+        table = table.set_column(column_index, field_name, normalized)
+    return table
 
 
 def canonical_parquet_schema():

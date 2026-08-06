@@ -15,13 +15,23 @@ molecules, assign splits, or remove benchmark overlap.
 
 ## `disjoin_benchmark_from_train.py`
 
-This is a deliberately narrow, ad hoc benchmark-preparation helper. Its
-intended use is:
+This is a deliberately narrow, ad hoc benchmark-preparation helper. The first
+Parquet is always the dataset being filtered; every later Parquet is only a
+comparison dataset and remains unchanged. Input order therefore determines the
+direction of removal. The current benchmark-test preparation command is:
 
-1. pass `merged_train_val_all.parquet` as the first input;
-2. pass one or more benchmark/test Parquet files after it;
-3. write a derived train/validation file with records overlapping the benchmark
-   removed from the first input.
+```bash
+PYTHONPATH=scripts python \
+  scripts/data/postprocess/disjoin_benchmark_from_train.py \
+  datasets/merged/merged_benchmark_test.parquet \
+  datasets/merged/merged_train_val_all.parquet \
+  --output datasets/merged/merged_benchmark_test_disjoint.parquet \
+  --overwrite
+```
+
+This removes benchmark-test records whose molecular connectivity is present in
+the train/validation collection. Reversing the first two inputs would instead
+remove overlapping train/validation records.
 
 The script compares connectivity InChIKeys and removes every record in the
 first input whose connectivity key appears in a later input. This conservative
@@ -31,7 +41,10 @@ general dataset deduplication, or canonical source conversion. Those workflows
 use their own identity and provenance policies.
 
 The output is a derived benchmark artifact, not a newly canonicalized source
-dataset. The script does not modify any input file.
+dataset. The script does not modify any input file. It preserves all Parquet
+footer metadata from the first input and adds the comparison inputs, identity
+rule, script path, and removed-record count. Output is written to a hidden
+`.partial` file and promoted only after a successful close.
 
 ## `extract_annotated_peaks.py`
 
@@ -39,6 +52,35 @@ Uses the ADMET audit's exact full-InChIKey matches to create endpoint-specific
 annotated outputs and a merged dataset with those matched record IDs removed.
 This is the property-benchmark path; it is distinct from the connectivity-based
 benchmark disjoining helper above.
+
+## `filter_dataset.py`
+
+Creates a cleaned derived copy of one canonical schema-v2 Parquet file. The
+input is not modified. Output names are automatic: `records.parquet` produces
+`records_cleaned.parquet` and the minimal audit `records_removed.parquet`.
+
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py \
+  datasets/merged/merged_train_val_all_disjoint.parquet
+```
+
+The filter keeps one or both spectral modalities, requires finite shifts in
+-5..20 ppm for H and -50..300 ppm for C, limits each modality to 60 peaks,
+limits each proton peak to six J values, rejects non-finite or negative J
+values and non-positive supplied proton integrations, and removes
+multi-fragment structures. `J=0` and missing integration are retained.
+Molecular-property and drug-likeness thresholds are not used.
+
+Exact duplicates use canonical SMILES plus sorted exact H and C shift lists;
+a modality without usable peaks contributes its canonical empty list. Hash
+matches are verified with the actual key values. The best-annotated row is retained,
+with `record_id` used as a deterministic final tie-breaker. Same-molecule rows
+with different shift lists remain separate records, and output records retain
+the canonical schema without extra columns.
+
+Existing outputs are protected unless `--overwrite` is passed. Both files are
+first written to hidden `.partial` paths and promoted only after successful
+completion.
 
 ## `calculate_mol_properties.py`
 

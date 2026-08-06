@@ -86,14 +86,14 @@ def load_split_records(path: Path) -> list[object]:
 
 def shift_list(
     raw_record: Mapping[str, Any], field_name: str, location: str
-) -> list[object] | None:
-    """Preserve an available shift list, an empty list, or a missing value."""
+) -> list[object]:
+    """Return one canonical shift list, using empty for a null modality."""
 
     if field_name not in raw_record:
         raise ConversionError(f"{location} is missing {field_name}")
     value = raw_record[field_name]
     if value is None:
-        return None
+        return []
     if hasattr(value, "tolist"):
         value = value.tolist()
     if not isinstance(value, (list, tuple)):
@@ -143,22 +143,14 @@ def convert_record(
         **chemical_metadata_from_smiles(record.get("smiles"), f"{location}.smiles"),
         "nmr_frequency": None,
         "nmr_solvent": None,
-        "h_nmr_peaks": (
-            [
-                proton_peak(shift, f"{location}.h_shift[{index}]")
-                for index, shift in enumerate(h_shifts)
-            ]
-            if h_shifts is not None
-            else None
-        ),
-        "c_nmr_peaks": (
-            [
-                carbon_peak(shift, f"{location}.c_shift[{index}]")
-                for index, shift in enumerate(c_shifts)
-            ]
-            if c_shifts is not None
-            else None
-        ),
+        "h_nmr_peaks": [
+            proton_peak(shift, f"{location}.h_shift[{index}]")
+            for index, shift in enumerate(h_shifts)
+        ],
+        "c_nmr_peaks": [
+            carbon_peak(shift, f"{location}.c_shift[{index}]")
+            for index, shift in enumerate(c_shifts)
+        ],
     }
     return checked_canonical_record(canonical_data, location)
 

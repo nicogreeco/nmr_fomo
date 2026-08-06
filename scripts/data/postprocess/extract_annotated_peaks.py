@@ -25,6 +25,7 @@ from rdkit import Chem, RDLogger
 from data.canonicalize.common import (
     CANONICAL_PARQUET_SCHEMA_VERSION,
     canonical_parquet_schema,
+    normalize_modality_lists,
 )
 
 
@@ -355,6 +356,7 @@ def write_filtered_canonical(
             if filtered_table.num_rows == 0:
                 continue
 
+            filtered_table = normalize_modality_lists(filtered_table)
             writer.write_table(
                 filtered_table,
                 row_group_size=filtered_table.num_rows,

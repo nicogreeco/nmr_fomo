@@ -26,9 +26,13 @@ metadata nullable so it can represent small spectrum-only fixtures and future
 sources; the implemented raw-data converters enforce non-empty, RDKit-valid
 SMILES and populate all four structure fields.
 
+The two modality fields are never nullable in the Python representation. A
+missing or null source modality is normalized to an empty tuple, and canonical
+Parquet writers serialize it as `[]`. Optional peak annotations remain nullable.
+
 The Parquet reader requires `record_id` and projects the current dataclass
-fields that are present; omitted optional fields receive their normal `None`
-defaults. Extra columns in a legacy file are ignored in memory, which keeps the
+fields that are present; omitted optional fields receive their normal defaults.
+Extra columns in a legacy file are ignored in memory, which keeps the
 deferred schema-v1 NMR-Solver file readable. The analysis tool still reports
 that its physical Arrow schema and footer are not schema v2.
 

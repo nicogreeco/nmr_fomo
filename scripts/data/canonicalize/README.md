@@ -37,6 +37,12 @@ source SMILES, and reasons to a JSONL rejection report beside the output. Each
 Parquet footer records both `canonical_schema_version=2` and the installed
 RDKit version.
 
+The top-level `h_nmr_peaks` and `c_nmr_peaks` fields are always lists; a
+modality with no usable peaks is written as `[]`. In rich peak-table sources,
+every proton peak also has a J list, with `[]` representing no retained or
+reported numerical coupling. Shift-only sources use `j_values = null` because
+J is structurally unavailable.
+
 The NMR-Solver converter code follows the same v2 rules, but its existing
 105-million-row Parquet has intentionally not been regenerated yet and remains
 a legacy schema-v1 artifact until that separate run is performed.

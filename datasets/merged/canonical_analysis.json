@@ -2,11 +2,11 @@
   "files": [
     {
       "both_modality_usable_count": 179032,
-      "bytes": 81917879,
+      "bytes": 82614791,
       "c_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 15866,
         "maximum_peaks_per_record": 74,
-        "null_record_count": 15866,
+        "null_record_count": 0,
         "shift_max": 39353.0,
         "shift_min": -15.53,
         "total_peak_count": 3106648
@@ -38,9 +38,9 @@
       "duplicate_record_id_count": null,
       "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 13533,
         "maximum_peaks_per_record": 34,
-        "null_record_count": 13533,
+        "null_record_count": 0,
         "shift_max": 3437.0,
         "shift_min": -8.42,
         "total_peak_count": 1714501
@@ -55,8 +55,8 @@
         "nonempty_count": 853165,
         "null_count": 0
       },
-      "records_fully_validated": true,
-      "row_groups": 6,
+      "records_fully_validated": false,
+      "row_groups": 5,
       "rows": 208431,
       "schema_matches_canonical": true,
       "schema_metadata": {
@@ -73,11 +73,11 @@
     },
     {
       "both_modality_usable_count": 155290,
-      "bytes": 87456626,
+      "bytes": 76134747,
       "c_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 14194,
         "maximum_peaks_per_record": 74,
-        "null_record_count": 14194,
+        "null_record_count": 0,
         "shift_max": 39353.0,
         "shift_min": -15.53,
         "total_peak_count": 2758059
@@ -109,9 +109,9 @@
       "duplicate_record_id_count": null,
       "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 12017,
         "maximum_peaks_per_record": 34,
-        "null_record_count": 12017,
+        "null_record_count": 0,
         "shift_max": 3437.0,
         "shift_min": -8.42,
         "total_peak_count": 1509221
@@ -126,11 +126,21 @@
         "nonempty_count": 755917,
         "null_count": 0
       },
-      "records_fully_validated": true,
-      "row_groups": 5,
+      "records_fully_validated": false,
+      "row_groups": 4,
       "rows": 181501,
       "schema_matches_canonical": true,
-      "schema_metadata": {},
+      "schema_metadata": {
+        "canonical_schema_version": "2",
+        "disjoin_identity": "RDKit connectivity InChIKey",
+        "disjoin_removed_record_count": "26930",
+        "disjoin_script": "/mnt/filesystem-test/nmr/scripts/data/postprocess/disjoin_benchmark_from_train.py",
+        "disjointed_against": "[\"datasets/merged/merged_train_val_all.parquet\"]",
+        "disjointed_from": "datasets/merged/merged_benchmark_test.parquet",
+        "merger_script": "/mnt/filesystem-test/nmr/scripts/postprocess/merge_datasets.py",
+        "rdkit_version": "2026.03.4",
+        "source_datasets": "[\"mst_nmr/test.parquet\", \"nmrexp/test.parquet\", \"nmrtrans/test.parquet\"]"
+      },
       "source_values": {
         "NMRPeak-MST-NMR": 73346,
         "NMRPeak-NMRexp": 95317,
@@ -139,11 +149,11 @@
     },
     {
       "both_modality_usable_count": 1612029,
-      "bytes": 732225584,
+      "bytes": 732474740,
       "c_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 141636,
         "maximum_peaks_per_record": 263,
-        "null_record_count": 141636,
+        "null_record_count": 0,
         "shift_max": 640221.0,
         "shift_min": -35.54,
         "total_peak_count": 28010678
@@ -175,9 +185,9 @@
       "duplicate_record_id_count": null,
       "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 121669,
         "maximum_peaks_per_record": 29,
-        "null_record_count": 121669,
+        "null_record_count": 0,
         "shift_max": 20130.26,
         "shift_min": -15.0,
         "total_peak_count": 15430465
@@ -192,8 +202,8 @@
         "nonempty_count": 7685088,
         "null_count": 0
       },
-      "records_fully_validated": true,
-      "row_groups": 40,
+      "records_fully_validated": false,
+      "row_groups": 38,
       "rows": 1875334,
       "schema_matches_canonical": true,
       "schema_metadata": {
@@ -210,11 +220,11 @@
     },
     {
       "both_modality_usable_count": 1605797,
-      "bytes": 730687095,
+      "bytes": 730349575,
       "c_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 141290,
         "maximum_peaks_per_record": 263,
-        "null_record_count": 141290,
+        "null_record_count": 0,
         "shift_max": 640221.0,
         "shift_min": -35.54,
         "total_peak_count": 27953332
@@ -246,9 +256,9 @@
       "duplicate_record_id_count": null,
       "duplicate_record_ids_checked": false,
       "h_nmr_peaks": {
-        "empty_record_count": 0,
+        "empty_record_count": 121389,
         "maximum_peaks_per_record": 29,
-        "null_record_count": 121389,
+        "null_record_count": 0,
         "shift_max": 20130.26,
         "shift_min": -15.0,
         "total_peak_count": 15393448
@@ -263,7 +273,7 @@
         "nonempty_count": 7666218,
         "null_count": 0
       },
-      "records_fully_validated": true,
+      "records_fully_validated": false,
       "row_groups": 38,
       "rows": 1868476,
       "schema_matches_canonical": true,
