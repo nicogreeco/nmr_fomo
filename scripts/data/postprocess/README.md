@@ -120,6 +120,26 @@ by the parent at once, while `--records-per-task` bounds each serialized worker
 task. The defaults are deliberately conservative (`4096`, `512`, and up to
 four workers).
 
+## `analyze_cleaned_datasets.py`
+
+Generates the final data-card analytics for `train_val`,
+`test_benchmark`, and the three ADMET cohorts under `datasets/cleaned`.
+It writes source inventories, molecular-property summaries,
+functional-group prevalence, peak and multiplicity statistics, proton
+annotation completeness, ADMET target summaries, and six distribution plots.
+
+Summary tables use every eligible record. Plots use a deterministic sample of
+at most 20,000 records per source or endpoint and limit only the displayed
+violin values to `Q1 - 2.5*IQR` through `Q3 + 2.5*IQR`.
+
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py
+```
+
+The default output directory is `datasets/cleaned/analytics`. Use
+`--cleaned-root` for another final collection and `--sample-per-group` to
+change the plotting sample size.
+
 ## `admet_overlap_audit.ipynb`
 
 Downloads or reuses the configured property releases, audits their overlap with

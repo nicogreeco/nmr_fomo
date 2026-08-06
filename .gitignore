@@ -11,7 +11,7 @@ __pycache__
 /datasets/properties/tdc_admet/admet_group/
 /tmp/
 /dataset_overlap_audit/
-
+/datasets/cleaned/
 
 *.png
 *.parquet
@@ -26,3 +26,8 @@ __pycache__
 *.zip
 *.parquet.partial
 *.log
+
+# Versioned summary tables and plots used by the cleaned-dataset data card.
+!datasets/cleaned/analytics/
+!datasets/cleaned/analytics/*.csv
+!datasets/cleaned/analytics/*.png
