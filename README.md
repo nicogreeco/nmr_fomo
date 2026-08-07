@@ -92,6 +92,12 @@ canonical SMILES, molecular formula, and atom symbols. It deliberately omits
 `scripts/data/canonicalize/README.md` and the canonicalization
 implementation note linked below.
 
+The curated local release is under `datasets/cleaned/` and is intentionally
+ignored by Git because it is distributed separately. Its accompanying
+`datasets/cleaned/README.md` is the collection data card; it describes the
+rich train/validation pool, the connectivity-disjoint benchmark, the ADMET
+subsets, and the separate SimNMR-PubChem shift-only corpus.
+
 ## How to navigate the project
 
 Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:

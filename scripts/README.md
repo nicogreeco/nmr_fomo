@@ -13,7 +13,7 @@ scripts/
 │   └── postprocess/     derived merges, audits, and benchmark preparation
 ├── model_benchmarks/     processors and embedders for existing NMR models
 ├── envs_scr/             environment setup notes and requirement lists
-├── test_notebook.ipynb    small exploratory notebook
+├── test_notebook.ipynb    exploratory notebook
 └── extract_embeddings.py thin command-line entry point
 ```
 
@@ -30,6 +30,9 @@ embedder loads that model and returns a fixed-size representation.
 `data/canonicalize` is a separate, one-time data-preparation area. Nothing in
 the dataset, processor, embedder, or extraction command converts or rewrites
 the input dataset.
+
+The notebook remains useful for interactive inspection. The reproducible final
+collection analysis lives in `data/postprocess/analyze_cleaned_datasets.py`.
 
 The current canonical storage format is schema version 2. Raw-data converters
 derive canonical SMILES, formula, and atom symbols with RDKit and do not store

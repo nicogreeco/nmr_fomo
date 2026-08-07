@@ -43,9 +43,11 @@ every proton peak also has a J list, with `[]` representing no retained or
 reported numerical coupling. Shift-only sources use `j_values = null` because
 J is structurally unavailable.
 
-The NMR-Solver converter code follows the same v2 rules, but its existing
-105-million-row Parquet has intentionally not been regenerated yet and remains
-a legacy schema-v1 artifact until that separate run is performed.
+The completed SimNMR-PubChem conversion follows the same v2 rules.
+`datasets/nmrsolver/all.parquet` contains 105,764,812 records. The source scan
+contained 105,764,875 candidate rows; 63 rows for which RDKit could not derive
+coherent chemical metadata are recorded in the adjacent JSONL rejection report
+rather than being serialized with incomplete structure fields.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/analysis/analyze_parquet.py \
@@ -73,9 +75,10 @@ PYTHONPATH=scripts python \
   --output datasets/mst_nmr/processor_compatibility.json
 ```
 
-The same commands accept `nmrexp` or `nmrtrans`. The source/split command
-writes `source_comparison.json` and `split_consistency.json` beside the
-dataset.
+The source/split command supports the published split sources `mst_nmr`,
+`nmrexp`, and `nmrtrans`; it writes `source_comparison.json` and
+`split_consistency.json` beside the dataset. `analyze_parquet.py` can inspect
+every canonical source, including the unsplit NMRGym and SimNMR-PubChem files.
 
 Run `scripts/data/postprocess/merge_datasets.py` only after every input has been
 regenerated. The merger rejects legacy or structurally different schemas and
@@ -98,10 +101,19 @@ only after measuring the machine. `--max-in-flight` bounds queued source
 records (default: two tasks per worker). The generated record and
 rejection-report order remains source-key order.
 
+NMRGym is a separate shift-only source. It reads its released pickle split
+files, writes a schema-v2 combined file, and represents unavailable proton
+annotations with null fields while keeping modalities themselves as lists:
+
+```bash
+PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
+  <nmrgym-pickle-directory> datasets/nmrgym/all.parquet --overwrite
+```
+
 The canonical fields and the rules to preserve during future conversions are
-in [Canonicalization Implementation Notes](../../contex/Canonicalization_Implementation_Notes.md).
+in [Canonicalization Implementation Notes](../../../contex/Canonicalization_Implementation_Notes.md).
 For the reason different source releases need different treatment, see
-[Dataset Filtering and Processing](../../contex/Dataset_Filtering_and_Processing.md).
+[Dataset Filtering and Processing](../../../contex/Dataset_Filtering_and_Processing.md).
 
 Do not import a converter from training or embedding code. A model benchmark
 should consume the resulting canonical Parquet file through `scripts/data/`.

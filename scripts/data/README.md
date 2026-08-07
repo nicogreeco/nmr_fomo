@@ -32,9 +32,9 @@ Parquet writers serialize it as `[]`. Optional peak annotations remain nullable.
 
 The Parquet reader requires `record_id` and projects the current dataclass
 fields that are present; omitted optional fields receive their normal defaults.
-Extra columns in a legacy file are ignored in memory, which keeps the
-deferred schema-v1 NMR-Solver file readable. The analysis tool still reports
-that its physical Arrow schema and footer are not schema v2.
+All currently maintained source and final-release Parquet files use schema v2.
+The reader still ignores extra physical columns so that small fixtures and
+older external files can be inspected without changing the in-memory model.
 
 The readers only consume records that are already canonical. They do not
 tokenize spectra, adapt fields for a model, or convert a raw dataset.

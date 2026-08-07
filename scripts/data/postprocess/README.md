@@ -52,6 +52,17 @@ and reporting, but is not an input to this production extraction step. This is
 the property-benchmark path; it is distinct from the connectivity-based
 benchmark disjoining helper above.
 
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/extract_annotated_peaks.py \
+  --merged datasets/merged/merged_train_val_all.parquet \
+  --overwrite
+```
+
+The script reads the configured local TDC release, writes the pre-cleaning
+endpoint files under `datasets/properties/annonated_peaks/`, and creates
+`merged_train_val_all_disjoint.parquet`. The final cleaned endpoint subsets are
+then placed under `datasets/cleaned/admet/` with their paired label CSVs.
+
 ## `filter_dataset.py`
 
 Creates a cleaned derived copy of one canonical schema-v2 Parquet file. The
@@ -170,5 +181,7 @@ Downloads or reuses the configured property releases, audits their overlap with
 the merged NMR dataset, and writes reports under `datasets/properties/`. It does
 not rewrite the merged canonical input.
 
-All post-processing outputs are disposable derived artifacts. Keep the source
-canonical Parquet files unchanged and record the command and identity policy
+Intermediate post-processing outputs are reproducible derived artifacts. The
+files under `datasets/cleaned/` are the curated final release; keep their
+source canonical Parquet inputs unchanged and record the command and identity
+policy used to regenerate them.
