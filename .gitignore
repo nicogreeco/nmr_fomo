@@ -11,7 +11,7 @@ __pycache__
 /datasets/properties/tdc_admet/admet_group/
 /tmp/
 /dataset_overlap_audit/
-/datasets/
+/datasets
 
 *.png
 *.parquet
