@@ -27,7 +27,3 @@ __pycache__
 *.parquet.partial
 *.log
 
-# Versioned summary tables and plots used by the cleaned-dataset data card.
-!datasets/cleaned/analytics/
-!datasets/cleaned/analytics/*.csv
-!datasets/cleaned/analytics/*.png

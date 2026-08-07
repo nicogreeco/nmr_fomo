@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Extract exact TDC/NMR overlaps and write disjoint canonical records.
 
-The audit notebook already establishes the exact full-InChIKey matches for
-each TDC split.  This script uses that audit manifest, adds every matching
-canonical ``record_id`` to the source property rows, and copies the matching
-canonical records into endpoint-specific Parquet files.
+The script calculates RDKit full InChIKeys directly from the source property
+SMILES and from canonical NMR SMILES. It adds every exact-match canonical
+``record_id`` to the property rows, then copies those canonical records into
+endpoint-specific Parquet files.
 
 Connectivity-only matches are deliberately not considered anywhere here.
 """
@@ -50,22 +50,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="merged canonical input Parquet file",
     )
     parser.add_argument(
-        "--audit-matches",
-        type=Path,
-        default=Path("datasets/properties/admet_overlap/exact_matches.csv"),
-        help="exact-match manifest written by admet_overlap_audit.ipynb",
-    )
-    parser.add_argument(
-        "--audit-summary",
-        type=Path,
-        default=Path("datasets/properties/admet_overlap/overlap_summary.csv"),
-        help="overlap summary written by admet_overlap_audit.ipynb",
-    )
-    parser.add_argument(
         "--tdc-root",
         type=Path,
         default=Path("datasets/properties/tdc_admet/admet_group"),
         help="directory containing endpoint train_val.csv and test.csv files",
+    )
+    parser.add_argument(
+        "--smiles-column",
+        default="Drug",
+        help="SMILES column in each TDC property CSV (default: Drug)",
     )
     parser.add_argument(
         "--output-root",
@@ -107,85 +100,6 @@ def full_inchikey(smiles: object) -> str | None:
         return Chem.MolToInchiKey(molecule)
     except Exception:
         return None
-
-
-def load_audit_matches(
-    path: Path,
-) -> dict[tuple[str, str], list[dict[str, object]]]:
-    """Load the notebook's exact-match rows for the three target endpoints."""
-
-    required_columns = {
-        "source",
-        "dataset",
-        "split",
-        "_source_row",
-        "full_inchikey",
-        "nmr_record_count",
-    }
-    matches: dict[tuple[str, str], list[dict[str, object]]] = defaultdict(list)
-
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        missing_columns = required_columns - set(reader.fieldnames or [])
-        if missing_columns:
-            missing_text = ", ".join(sorted(missing_columns))
-            raise ValueError(f"{path} is missing columns: {missing_text}")
-
-        for row in reader:
-            endpoint = row["dataset"]
-            split = row["split"]
-            if row["source"] != "TDC ADMET":
-                continue
-            if endpoint not in ENDPOINTS or split not in SPLITS:
-                continue
-
-            key = row["full_inchikey"].strip()
-            if not key:
-                raise ValueError(
-                    f"{path} contains an empty full_inchikey for "
-                    f"{endpoint}/{split}"
-                )
-
-            try:
-                source_row = int(row["_source_row"])
-            except (TypeError, ValueError) as error:
-                raise ValueError(
-                    f"invalid _source_row in {path}: {row['_source_row']!r}"
-                ) from error
-
-            expected_count = None
-            if row["nmr_record_count"].strip():
-                expected_count = int(row["nmr_record_count"])
-
-            matches[(endpoint, split)].append(
-                {
-                    "source_row": source_row,
-                    "full_inchikey": key,
-                    "expected_record_count": expected_count,
-                }
-            )
-
-    for release, rows in matches.items():
-        rows.sort(key=lambda row: int(row["source_row"]))
-
-    return matches
-
-
-def load_audit_summary(path: Path) -> dict[tuple[str, str], dict[str, str]]:
-    """Load summary values for provenance without recomputing property labels."""
-
-    summary: dict[tuple[str, str], dict[str, str]] = {}
-    if not path.is_file():
-        return summary
-
-    with path.open(newline="", encoding="utf-8-sig") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            endpoint = row.get("dataset", "")
-            split = row.get("split", "")
-            if row.get("source") == "TDC ADMET" and endpoint in ENDPOINTS:
-                summary[(endpoint, split)] = row
-    return summary
 
 
 def build_record_index(
@@ -249,6 +163,49 @@ def read_csv_rows(path: Path) -> tuple[list[str], list[dict[str, str]]]:
         if "record_id" in fieldnames:
             raise ValueError(f"{path} already contains a record_id column")
         return fieldnames, list(reader)
+
+
+def find_exact_matches(
+    property_rows: list[dict[str, str]],
+    smiles_column: str,
+    record_ids_by_key: dict[str, list[str]],
+) -> tuple[list[dict[str, str]], set[str], set[str], set[str], int, int]:
+    """Expand property rows by exact full-InChIKey matches in merged NMR data."""
+
+    expanded_rows: list[dict[str, str]] = []
+    matched_record_ids: set[str] = set()
+    matched_molecule_keys: set[str] = set()
+    property_molecule_keys: set[str] = set()
+    invalid_or_unkeyed_rows = 0
+    matched_property_rows = 0
+
+    for property_row in property_rows:
+        key = full_inchikey(property_row.get(smiles_column))
+        if key is None:
+            invalid_or_unkeyed_rows += 1
+            continue
+        property_molecule_keys.add(key)
+
+        record_ids = record_ids_by_key.get(key, [])
+        if not record_ids:
+            continue
+        matched_property_rows += 1
+
+        for record_id in record_ids:
+            expanded_row = dict(property_row)
+            expanded_row["record_id"] = record_id
+            expanded_rows.append(expanded_row)
+            matched_record_ids.add(record_id)
+        matched_molecule_keys.add(key)
+
+    return (
+        expanded_rows,
+        matched_record_ids,
+        matched_molecule_keys,
+        property_molecule_keys,
+        invalid_or_unkeyed_rows,
+        matched_property_rows,
+    )
 
 
 def write_csv_atomically(
@@ -388,12 +345,10 @@ def main() -> None:
     if args.batch_size < 1:
         raise ValueError("--batch-size must be at least 1")
 
-    for path in [args.merged, args.audit_matches, args.tdc_root]:
+    for path in [args.merged, args.tdc_root]:
         if not path.exists():
             raise FileNotFoundError(path)
 
-    audit_matches = load_audit_matches(args.audit_matches)
-    audit_summary = load_audit_summary(args.audit_summary)
     record_ids_by_key, merged_summary = build_record_index(
         args.merged,
         batch_size=args.batch_size,
@@ -413,51 +368,22 @@ def main() -> None:
                 raise FileNotFoundError(source_path)
 
             fieldnames, property_rows = read_csv_rows(source_path)
-            entries = audit_matches.get(release, [])
-            rows_by_source_index = {
-                index: row for index, row in enumerate(property_rows)
-            }
-            expanded_rows: list[dict[str, str]] = []
-            matched_record_ids: set[str] = set()
-            matched_molecule_keys: set[str] = set()
-            seen_source_rows: set[int] = set()
-
-            for entry in entries:
-                source_row = int(entry["source_row"])
-                if source_row not in rows_by_source_index:
-                    raise ValueError(
-                        f"audit source row {source_row} is outside {source_path}"
-                    )
-                if source_row in seen_source_rows:
-                    raise ValueError(
-                        f"audit contains duplicate source row {source_row} for "
-                        f"{endpoint}/{split}"
-                    )
-                seen_source_rows.add(source_row)
-
-                key = str(entry["full_inchikey"])
-                record_ids = record_ids_by_key.get(key, [])
-                if not record_ids:
-                    raise ValueError(
-                        f"audit full InChIKey {key} is not present in the current "
-                        f"merged file for {endpoint}/{split}"
-                    )
-
-                expected_count = entry["expected_record_count"]
-                if expected_count is not None and len(record_ids) != expected_count:
-                    raise ValueError(
-                        f"record count mismatch for {endpoint}/{split}, {key}: "
-                        f"audit={expected_count}, current={len(record_ids)}"
-                    )
-
-                property_row = rows_by_source_index[source_row]
-                for record_id in record_ids:
-                    expanded_row = dict(property_row)
-                    expanded_row["record_id"] = record_id
-                    expanded_rows.append(expanded_row)
-                    matched_record_ids.add(record_id)
-
-                matched_molecule_keys.add(key)
+            if args.smiles_column not in fieldnames:
+                raise ValueError(
+                    f"{source_path} is missing SMILES column {args.smiles_column!r}"
+                )
+            (
+                expanded_rows,
+                matched_record_ids,
+                matched_molecule_keys,
+                property_molecule_keys,
+                invalid_or_unkeyed_rows,
+                matched_property_rows,
+            ) = find_exact_matches(
+                property_rows,
+                args.smiles_column,
+                record_ids_by_key,
+            )
 
             csv_path = endpoint_output / f"{split}.csv"
             expanded_csv_rows = write_csv_atomically(
@@ -471,19 +397,14 @@ def main() -> None:
             split_molecule_keys[release] = matched_molecule_keys
             endpoint_sets[endpoint].update(matched_molecule_keys)
 
-            summary_row = audit_summary.get(release, {})
             endpoint_stats.append(
                 {
                     "dataset": endpoint,
                     "split": split,
                     "property_rows": len(property_rows),
-                    "audit_property_unique_molecules": summary_row.get(
-                        "property_unique_molecules", ""
-                    ),
-                    "audit_exact_overlap_unique_molecules": summary_row.get(
-                        "exact_overlap_unique_molecules", ""
-                    ),
-                    "matched_property_rows": len(entries),
+                    "property_unique_molecules": len(property_molecule_keys),
+                    "property_invalid_or_unkeyed_rows": invalid_or_unkeyed_rows,
+                    "matched_property_rows": matched_property_rows,
                     "matched_unique_molecules": len(matched_molecule_keys),
                     "matched_merged_records": len(matched_record_ids),
                     "expanded_csv_rows": expanded_csv_rows,
@@ -588,8 +509,8 @@ def main() -> None:
     manifest = {
         "match_policy": "exact RDKit full InChIKey equality only",
         "merged_input": str(args.merged),
-        "audit_matches": str(args.audit_matches),
         "tdc_root": str(args.tdc_root),
+        "smiles_column": args.smiles_column,
         "output_root": str(args.output_root),
         "disjoint_output": str(args.disjoint_output),
         "merged_summary": merged_summary,

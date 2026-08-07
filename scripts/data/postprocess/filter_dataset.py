@@ -242,49 +242,65 @@ def find_removed_records(input_path: str | Path) -> list[dict[str, str | None]]:
             }
         )
 
-    signature_columns = [
-        "_signature_hash",
-        "_molecule_key",
-        "_h_shifts",
-        "_c_shifts",
-    ]
-    duplicate_rows = (
+    duplicate_hashes = (
+        # This cheap first pass makes exact duplicate verification feasible for
+        # very large inputs: only repeated hashes reach the full-key grouping.
         audit.filter(~pl.col("_fails_filter"))
-        .select(
-            "record_id",
-            *signature_columns,
-            "_annotation_count",
-            "_missing_or_unknown",
-        )
-        .group_by(signature_columns)
-        .agg(
-            pl.col("record_id")
-            .sort_by(
-                "_annotation_count",
-                "_missing_or_unknown",
-                "record_id",
-                descending=[True, False, False],
-            )
-            .alias("_ranked_record_ids"),
-            pl.len().alias("_group_size"),
-        )
-        .filter(pl.col("_group_size") > 1)
-        .select(
-            pl.col("_ranked_record_ids").list.first().alias("duplicate_of"),
-            pl.col("_ranked_record_ids").list.slice(1).alias("record_id"),
-        )
-        .explode("record_id", empty_as_null=False)
+        .group_by("_signature_hash")
+        .len()
+        .filter(pl.col("len") > 1)
+        .select("_signature_hash")
         .collect(engine="streaming")
     )
 
-    for row in duplicate_rows.iter_rows(named=True):
-        removed.append(
-            {
-                "record_id": row["record_id"],
-                "removal_reason": "duplicate_shift_signature",
-                "duplicate_of": row["duplicate_of"],
-            }
+    if duplicate_hashes.height > 0:
+        candidate_hashes = duplicate_hashes.get_column("_signature_hash")
+        signature_columns = [
+            "_signature_hash",
+            "_molecule_key",
+            "_h_shifts",
+            "_c_shifts",
+        ]
+        duplicate_rows = (
+            audit.filter(
+                ~pl.col("_fails_filter")
+                & pl.col("_signature_hash").is_in(candidate_hashes.implode())
+            )
+            .select(
+                "record_id",
+                *signature_columns,
+                "_annotation_count",
+                "_missing_or_unknown",
+            )
+            .group_by(signature_columns)
+            .agg(
+                pl.col("record_id")
+                .sort_by(
+                    "_annotation_count",
+                    "_missing_or_unknown",
+                    "record_id",
+                    descending=[True, False, False],
+                )
+                .alias("_ranked_record_ids"),
+                pl.len().alias("_group_size"),
+            )
+            .filter(pl.col("_group_size") > 1)
+            .select(
+                pl.col("_ranked_record_ids").list.first().alias("duplicate_of"),
+                pl.col("_ranked_record_ids").list.slice(1).alias("record_id"),
+            )
+            .explode("record_id", empty_as_null=False)
+            .collect(engine="streaming")
         )
+
+        for row in duplicate_rows.iter_rows(named=True):
+            removed.append(
+                {
+                    "record_id": row["record_id"],
+                    "removal_reason": "duplicate_shift_signature",
+                    "duplicate_of": row["duplicate_of"],
+                }
+            )
 
     removed.sort(key=lambda row: str(row["record_id"]))
     return removed

@@ -57,6 +57,7 @@ SOURCE_DISPLAY_NAMES = {
     "NMRPeak-MST-NMR": "MST-NMR",
     "NMRPeak-NMRexp": "NMRexp",
     "NMRTrans-NMRSpec": "NMRTrans / NMRSpec",
+    "SimNMR-PubChem": "SimNMR-PubChem",
 }
 ENDPOINT_DISPLAY_NAMES = {
     "ames": "Ames",
@@ -78,6 +79,14 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=20_000,
         help="maximum records per source/endpoint used by plots (default: 20000)",
+    )
+    parser.add_argument(
+        "--nmrsolver-parquet",
+        type=Path,
+        help=(
+            "analyze one cleaned NMR-Solver Parquet and its adjacent "
+            "_mol_properties.csv, then exit"
+        ),
     )
     return parser.parse_args()
 
@@ -101,17 +110,20 @@ def sample_by_group(
     sample_per_group: int,
 ) -> pl.DataFrame:
     return (
-        frame
-        .with_columns(
-            pl.int_range(pl.len())
-            .shuffle(seed=42)
-            .over(group_column)
-            .alias("_sample_order")
-        )
-        .filter(pl.col("_sample_order") < sample_per_group)
-        .drop("_sample_order")
+        frame.group_by(group_column, maintain_order=True)
+        .head(sample_per_group)
         .collect(engine="streaming")
     )
+
+
+def first_rows_sample(
+    frame: pl.LazyFrame,
+    columns: tuple[str, ...],
+    sample_size: int,
+) -> pl.DataFrame:
+    """Collect a small projected prefix without grouping the full input."""
+
+    return frame.select(*columns).head(sample_size).collect(engine="streaming")
 
 
 def numeric_summary_expressions(columns: tuple[str, ...]) -> list[pl.Expr]:
@@ -179,6 +191,37 @@ def inventory_by_source(records: pl.LazyFrame, dataset_name: str) -> pl.DataFram
     return pl.concat([by_source, total]).sort("source")
 
 
+def nmrsolver_inventory(records: pl.LazyFrame) -> pl.DataFrame:
+    """Summarize NMR-Solver without an exact 105M-string distinct set."""
+
+    stats = record_statistics(records)
+    return (
+        stats.group_by("source")
+        .agg(
+            pl.len().alias("records"),
+            pl.col("smiles_canonical")
+            .approx_n_unique()
+            .alias("approx_unique_canonical_smiles"),
+            (pl.col("n_h_peaks") > 0).sum().alias("records_with_h"),
+            (pl.col("n_c_peaks") > 0).sum().alias("records_with_c"),
+            (
+                (pl.col("n_h_peaks") > 0) & (pl.col("n_c_peaks") > 0)
+            ).sum().alias("records_with_h_and_c"),
+        )
+        .with_columns(pl.lit("nmrsolver").alias("dataset"))
+        .select(
+            "dataset",
+            "source",
+            "records",
+            "approx_unique_canonical_smiles",
+            "records_with_h",
+            "records_with_c",
+            "records_with_h_and_c",
+        )
+        .collect(engine="streaming")
+    )
+
+
 def molecular_frame_from_csv(
     records: pl.LazyFrame,
     properties_path: Path,
@@ -206,6 +249,41 @@ def molecular_frame_from_csv(
     )
 
 
+def molecular_frame_from_aligned_csv(
+    records: pl.LazyFrame,
+    properties_path: Path,
+) -> pl.LazyFrame:
+    """Read a very large property CSV without a record-ID hash join.
+
+    calculate_mol_properties.py writes exactly one output row per input row
+    and preserves input order, including when worker processes are used.
+    """
+
+    require_file(properties_path)
+    record_fields = records.select(
+        "record_id",
+        "source",
+        pl.col("atoms").list.len().alias("num_atoms"),
+    )
+    property_fields = pl.scan_csv(
+        properties_path,
+        empty_string_is_null=True,
+    ).select(
+        pl.col("record_id").alias("_properties_record_id"),
+        "rdkit_status",
+        *PROPERTY_COLUMNS,
+        *FUNCTIONAL_GROUP_COLUMNS,
+    )
+    return (
+        pl.concat([record_fields, property_fields], how="horizontal_extend")
+        .filter(
+            (pl.col("record_id") == pl.col("_properties_record_id"))
+            & (pl.col("rdkit_status") == "ok")
+        )
+        .drop("_properties_record_id", "rdkit_status")
+    )
+
+
 def write_molecular_tables_and_plot(
     molecular: pl.LazyFrame,
     group_column: str,
@@ -213,6 +291,8 @@ def write_molecular_tables_and_plot(
     title: str,
     analytics_dir: Path,
     sample_per_group: int,
+    *,
+    first_rows_sample_only: bool = False,
 ) -> None:
     summary = (
         molecular.group_by(group_column)
@@ -236,11 +316,15 @@ def write_molecular_tables_and_plot(
         analytics_dir / f"{output_prefix}_functional_group_prevalence.csv"
     )
 
-    sample = sample_by_group(
-        molecular.select(group_column, *CONTINUOUS_MOLECULAR_COLUMNS),
-        group_column,
-        sample_per_group,
-    )
+    sample_columns = (group_column, *CONTINUOUS_MOLECULAR_COLUMNS)
+    if first_rows_sample_only:
+        sample = first_rows_sample(molecular, sample_columns, sample_per_group)
+    else:
+        sample = sample_by_group(
+            molecular.select(*sample_columns),
+            group_column,
+            sample_per_group,
+        )
     groups = sample.get_column(group_column).unique().sort().to_list()
     colors = plt.get_cmap("tab10")(np.linspace(0, 1, len(groups)))
 
@@ -384,6 +468,9 @@ def write_peak_tables_and_plot(
     title: str,
     analytics_dir: Path,
     sample_per_group: int,
+    *,
+    shift_only: bool = False,
+    first_rows_sample_only: bool = False,
 ) -> None:
     stats, h_peaks, c_peaks, j_values = peak_frames_for_group(
         records,
@@ -425,17 +512,26 @@ def write_peak_tables_and_plot(
         )
         .collect(engine="streaming")
     )
-    j_summary = (
-        j_values.group_by(group_column)
-        .agg(
-            pl.len().alias("j_value_count"),
-            pl.col("j_hz").mean().alias("j_mean_hz"),
-            pl.col("j_hz").std().alias("j_std_hz"),
-            pl.col("j_hz").min().alias("j_min_hz"),
-            pl.col("j_hz").max().alias("j_max_hz"),
+    if shift_only:
+        j_summary = record_summary.select(group_column).with_columns(
+            pl.lit(None, dtype=pl.UInt64).alias("j_value_count"),
+            pl.lit(None, dtype=pl.Float64).alias("j_mean_hz"),
+            pl.lit(None, dtype=pl.Float64).alias("j_std_hz"),
+            pl.lit(None, dtype=pl.Float64).alias("j_min_hz"),
+            pl.lit(None, dtype=pl.Float64).alias("j_max_hz"),
         )
-        .collect(engine="streaming")
-    )
+    else:
+        j_summary = (
+            j_values.group_by(group_column)
+            .agg(
+                pl.len().alias("j_value_count"),
+                pl.col("j_hz").mean().alias("j_mean_hz"),
+                pl.col("j_hz").std().alias("j_std_hz"),
+                pl.col("j_hz").min().alias("j_min_hz"),
+                pl.col("j_hz").max().alias("j_max_hz"),
+            )
+            .collect(engine="streaming")
+        )
     peak_summary = (
         record_summary
         .join(h_summary, on=group_column, how="left")
@@ -481,7 +577,23 @@ def write_peak_tables_and_plot(
         analytics_dir / f"{output_prefix}_multiplicity_distribution.csv"
     )
 
-    record_sample = sample_by_group(stats, group_column, sample_per_group)
+    sample_columns = (
+        group_column,
+        "n_h_peaks",
+        "n_c_peaks",
+        "h_peaks_per_atom",
+        "c_peaks_per_atom",
+        "h_nmr_peaks",
+        "c_nmr_peaks",
+    )
+    if first_rows_sample_only:
+        record_sample = first_rows_sample(stats, sample_columns, sample_per_group)
+    else:
+        record_sample = sample_by_group(
+            stats.select(*sample_columns),
+            group_column,
+            sample_per_group,
+        )
     h_sample = (
         record_sample.lazy()
         .select(group_column, "h_nmr_peaks")
@@ -498,14 +610,19 @@ def write_peak_tables_and_plot(
         .unnest("c_nmr_peaks")
         .collect()
     )
-    j_sample = (
-        h_sample.lazy()
-        .select(group_column, "j_values")
-        .explode("j_values", empty_as_null=True)
-        .filter(pl.col("j_values").is_not_null())
-        .rename({"j_values": "j_hz"})
-        .collect()
-    )
+    if shift_only:
+        j_sample = pl.DataFrame(
+            schema={group_column: pl.String, "j_hz": pl.Float64}
+        )
+    else:
+        j_sample = (
+            h_sample.lazy()
+            .select(group_column, "j_values")
+            .explode("j_values", empty_as_null=True)
+            .filter(pl.col("j_values").is_not_null())
+            .rename({"j_values": "j_hz"})
+            .collect()
+        )
 
     groups = peak_summary.get_column(group_column).to_list()
     colors = plt.get_cmap("tab10")(np.linspace(0, 1, len(groups)))
@@ -724,9 +841,13 @@ def analyze_main_dataset(
     sample_per_group: int,
 ) -> pl.DataFrame:
     print(f"Analyzing {dataset_name}", flush=True)
+    dataset_analytics_dir = analytics_dir / dataset_name
+    dataset_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = main_records(cleaned_root / f"{dataset_name}.parquet")
     inventory = inventory_by_source(records, dataset_name)
-    inventory.write_csv(analytics_dir / f"{dataset_name}_source_inventory.csv")
+    inventory.write_csv(
+        dataset_analytics_dir / f"{dataset_name}_source_inventory.csv"
+    )
 
     molecular = molecular_frame_from_csv(
         records,
@@ -737,18 +858,60 @@ def analyze_main_dataset(
         "source",
         dataset_name,
         f"{dataset_name}: molecular properties by source",
-        analytics_dir,
+        dataset_analytics_dir,
         sample_per_group,
+        first_rows_sample_only=True,
     )
     write_peak_tables_and_plot(
         records,
         "source",
         dataset_name,
         f"{dataset_name}: NMR peak statistics by source",
-        analytics_dir,
+        dataset_analytics_dir,
         sample_per_group,
     )
     return inventory
+
+
+def analyze_nmrsolver_dataset(
+    parquet_path: Path,
+    sample_per_group: int,
+) -> None:
+    require_file(parquet_path)
+    properties_path = parquet_path.with_name(
+        f"{parquet_path.stem}_mol_properties.csv"
+    )
+    require_file(properties_path)
+    analytics_dir = parquet_path.parent / "analytics" / "simnmr"
+    analytics_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Analyzing NMR-Solver dataset: {parquet_path}", flush=True)
+    records = main_records(parquet_path)
+    nmrsolver_inventory(records).write_csv(
+        analytics_dir / "nmrsolver_source_inventory.csv"
+    )
+    molecular = molecular_frame_from_aligned_csv(records, properties_path)
+    write_molecular_tables_and_plot(
+        molecular,
+        "source",
+        "nmrsolver",
+        "NMR-Solver: molecular properties",
+        analytics_dir,
+        sample_per_group,
+    )
+    write_peak_tables_and_plot(
+        records,
+        "source",
+        "nmrsolver",
+        "NMR-Solver: NMR peak statistics",
+        analytics_dir,
+        sample_per_group,
+        shift_only=True,
+        # NMR-Solver has one source and over 100 million nested rows. Select
+        # the plotting prefix before collecting, while summaries use all rows.
+        first_rows_sample_only=True,
+    )
+    print(f"Wrote NMR-Solver analytics to {analytics_dir}", flush=True)
 
 
 def admet_records(cleaned_root: Path) -> pl.LazyFrame:
@@ -859,16 +1022,22 @@ def analyze_admet(
     sample_per_group: int,
 ) -> None:
     print("Analyzing ADMET cohorts", flush=True)
+    admet_analytics_dir = analytics_dir / "admet"
+    admet_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = admet_records(cleaned_root)
-    admet_inventory(records).write_csv(analytics_dir / "admet_source_inventory.csv")
-    admet_target_summary(cleaned_root).write_csv(analytics_dir / "admet_summary.csv")
+    admet_inventory(records).write_csv(
+        admet_analytics_dir / "admet_source_inventory.csv"
+    )
+    admet_target_summary(cleaned_root).write_csv(
+        admet_analytics_dir / "admet_summary.csv"
+    )
     molecular = admet_molecular_frame(records)
     write_molecular_tables_and_plot(
         molecular,
         "endpoint",
         "admet",
         "ADMET cohorts: molecular properties",
-        analytics_dir,
+        admet_analytics_dir,
         sample_per_group,
     )
     write_peak_tables_and_plot(
@@ -876,7 +1045,7 @@ def analyze_admet(
         "endpoint",
         "admet",
         "ADMET cohorts: NMR peak statistics",
-        analytics_dir,
+        admet_analytics_dir,
         sample_per_group,
     )
 
@@ -885,6 +1054,13 @@ def main() -> None:
     args = parse_args()
     if args.sample_per_group < 1:
         raise ValueError("--sample-per-group must be at least 1")
+
+    if args.nmrsolver_parquet is not None:
+        analyze_nmrsolver_dataset(
+            args.nmrsolver_parquet,
+            args.sample_per_group,
+        )
+        return
 
     cleaned_root = args.cleaned_root
     analytics_dir = cleaned_root / "analytics"
@@ -899,7 +1075,11 @@ def main() -> None:
         )
         for dataset_name in MAIN_DATASETS
     ]
-    pl.concat(inventories).write_csv(analytics_dir / "source_inventory.csv")
+    collection_analytics_dir = analytics_dir / "collection"
+    collection_analytics_dir.mkdir(parents=True, exist_ok=True)
+    pl.concat(inventories).write_csv(
+        collection_analytics_dir / "source_inventory.csv"
+    )
     analyze_admet(cleaned_root, analytics_dir, args.sample_per_group)
     print(f"Wrote cleaned-dataset analytics to {analytics_dir}")
 

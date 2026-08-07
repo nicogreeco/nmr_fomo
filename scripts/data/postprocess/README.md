@@ -1,8 +1,7 @@
 # Post-processing tools
 
 These tools operate on already-canonical datasets or on derived audit outputs.
-They are not source converters, do not define the canonical schema, and should
-not be used as a substitute for source-level curation.
+
 
 Run the commands from the repository root with `scripts` on `PYTHONPATH`.
 
@@ -36,21 +35,21 @@ remove overlapping train/validation records.
 The script compares connectivity InChIKeys and removes every record in the
 first input whose connectivity key appears in a later input. This conservative
 rule is intentional for this benchmark split, but it can group stereoisomers
-with the same connectivity. It must not be used for exact property matching,
-general dataset deduplication, or canonical source conversion. Those workflows
-use their own identity and provenance policies.
+with the same connectivity.
 
-The output is a derived benchmark artifact, not a newly canonicalized source
-dataset. The script does not modify any input file. It preserves all Parquet
+The script does not modify any input file. It preserves all Parquet
 footer metadata from the first input and adds the comparison inputs, identity
 rule, script path, and removed-record count. Output is written to a hidden
 `.partial` file and promoted only after a successful close.
 
 ## `extract_annotated_peaks.py`
 
-Uses the ADMET audit's exact full-InChIKey matches to create endpoint-specific
-annotated outputs and a merged dataset with those matched record IDs removed.
-This is the property-benchmark path; it is distinct from the connectivity-based
+Creates endpoint-specific annotated outputs and a merged dataset with those
+matched record IDs removed. It independently calculates RDKit full InChIKeys
+from the TDC `Drug` SMILES column and from the merged canonical SMILES, then
+keeps only exact full-key equality. The audit notebook is useful for exploration
+and reporting, but is not an input to this production extraction step. This is
+the property-benchmark path; it is distinct from the connectivity-based
 benchmark disjoining helper above.
 
 ## `filter_dataset.py`
@@ -77,6 +76,11 @@ matches are verified with the actual key values. The best-annotated row is retai
 with `record_id` used as a deterministic final tie-breaker. Same-molecule rows
 with different shift lists remain separate records, and output records retain
 the canonical schema without extra columns.
+
+For large collections such as NMR-Solver, duplicate detection is deliberately
+two-stage: it first finds repeated hashes, then groups only those candidates by
+the complete SMILES-and-shift-list key. The hash is therefore only a scalable
+prefilter.
 
 Existing outputs are protected unless `--overwrite` is passed. Both files are
 first written to hidden `.partial` paths and promoted only after successful
@@ -136,9 +140,29 @@ violin values to `Q1 - 2.5*IQR` through `Q3 + 2.5*IQR`.
 PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py
 ```
 
-The default output directory is `datasets/cleaned/analytics`. Use
-`--cleaned-root` for another final collection and `--sample-per-group` to
-change the plotting sample size.
+The default output directory is `datasets/cleaned/analytics`, with one
+subdirectory each for `train_val`, `test_benchmark`, `admet`, and collection-
+level summaries. Use `--cleaned-root` for another final collection and
+`--sample-per-group` to change the plotting sample size.
+
+For the separately stored shift-only SimNMR-PubChem collection, pass its
+cleaned Parquet directly. The script derives the adjacent molecular-property
+CSV path and writes the results under `datasets/cleaned/analytics/simnmr`:
+
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
+  --nmrsolver-parquet datasets/cleaned/simnmr.parquet
+```
+
+The NMR-Solver path makes three dataset-specific choices. It treats the source
+as shift-only, so J-coupling summaries and the J violin are intentionally left
+empty rather than inferred from unavailable annotations. Its property CSV is
+aligned by row order with the Parquet file: `calculate_mol_properties.py`
+preserves that order and both files retain one row per input record, avoiding a
+memory-heavy 100-million-row join. Finally, numerical summaries still use every
+record, while plots use the first projected `--sample-per-group` rows. Selecting
+that small prefix before nested peak lists are collected avoids materialising the
+whole NMR-Solver dataset solely to make a figure.
 
 ## `admet_overlap_audit.ipynb`
 
