@@ -96,7 +96,8 @@ The curated local release is under `datasets/cleaned/` and is intentionally
 ignored by Git because it is distributed separately. Its accompanying
 `datasets/cleaned/README.md` is the collection data card; it describes the
 rich train/validation pool, the connectivity-disjoint benchmark, the ADMET
-subsets, and the separate SimNMR-PubChem shift-only corpus.
+subsets, and the separate SimNMR-PubChem shift-only corpus. The published
+release is available on [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
 
 ## How to navigate the project
 
