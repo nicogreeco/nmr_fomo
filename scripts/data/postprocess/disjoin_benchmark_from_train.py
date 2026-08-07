@@ -11,20 +11,21 @@ from data.canonicalize.common import (
     normalize_modality_lists,
 )
 
+
 def structure_identifiers(smiles: object) -> dict[str, str | None]:
     if not isinstance(smiles, str) or not smiles.strip():
         return {
-            'canonical_smiles_rdkit': None,
-            'full_inchikey': None,
-            'connectivity_inchikey': None,
+            "canonical_smiles_rdkit": None,
+            "full_inchikey": None,
+            "connectivity_inchikey": None,
         }
 
     molecule = Chem.MolFromSmiles(smiles)
     if molecule is None:
         return {
-            'canonical_smiles_rdkit': None,
-            'full_inchikey': None,
-            'connectivity_inchikey': None,
+            "canonical_smiles_rdkit": None,
+            "full_inchikey": None,
+            "connectivity_inchikey": None,
         }
 
     canonical_smiles = Chem.MolToSmiles(
@@ -32,95 +33,167 @@ def structure_identifiers(smiles: object) -> dict[str, str | None]:
         canonical=True,
         isomericSmiles=True,
     )
-
     try:
         full_inchikey = Chem.MolToInchiKey(molecule)
     except Exception:
         full_inchikey = None
 
-    connectivity_inchikey = (
-        full_inchikey.split('-')[0]
-        if full_inchikey
-        else None
+    return {
+        "canonical_smiles_rdkit": canonical_smiles,
+        "full_inchikey": full_inchikey,
+        "connectivity_inchikey": (
+            full_inchikey.split("-")[0] if full_inchikey else None
+        ),
+    }
+
+
+def make_progress_bar(
+    parquet_file: parquet.ParquetFile,
+    description: str,
+    show_progress: bool,
+):
+    if not show_progress:
+        return None
+
+    try:
+        from tqdm import tqdm
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "showing disjoin progress requires tqdm; install it in the "
+            "environment used for post-processing"
+        ) from error
+
+    return tqdm(
+        total=parquet_file.metadata.num_rows,
+        desc=description,
+        unit="records",
     )
 
-    return {
-        'canonical_smiles_rdkit': canonical_smiles,
-        'full_inchikey': full_inchikey,
-        'connectivity_inchikey': connectivity_inchikey,
-    }
 
 def build_connectivity_index(
     parquet_file: parquet.ParquetFile,
-    batch_size: int = 10_000,
-) -> dict[str, list[dict[str, object]]]:
+    batch_size: int = 50_000,
+    source_name: str = "dataset",
+    show_progress: bool = True,
+) -> dict[str, list[str]]:
 
     if "smiles_canonical" not in parquet_file.schema_arrow.names:
         raise KeyError(
             "Dataset has no 'smiles_canonical' column"
         )
 
-    connectivity_index: dict[str, list[dict[str, object]]] = {}
+    connectivity_index: dict[str, list[str]] = {}
     invalid_or_unkeyed_rows = 0
     processed_rows = 0
+    progress_bar = make_progress_bar(
+        parquet_file,
+        f"Indexing {source_name}",
+        show_progress,
+    )
 
-    for batch in parquet_file.iter_batches(
-        batch_size=batch_size,
-        columns=["smiles_canonical", "record_id"],
-    ):
-        smiles_values = batch.column("smiles_canonical").to_pylist()
-        record_ids = batch.column("record_id").to_pylist()
-
-        for row_offset, (smiles, record_id) in enumerate(
-            zip(smiles_values, record_ids)
+    try:
+        for batch in parquet_file.iter_batches(
+            batch_size=batch_size,
+            columns=["smiles_canonical", "record_id"],
         ):
-            parquet_row_index = processed_rows + row_offset
+            smiles_values = batch.column("smiles_canonical").to_pylist()
+            record_ids = batch.column("record_id").to_pylist()
 
-            identifiers = structure_identifiers(smiles)
-            connectivity_inchikey = identifiers["connectivity_inchikey"]
+            for smiles, record_id in zip(smiles_values, record_ids):
+                connectivity_key = structure_identifiers(smiles)[
+                    "connectivity_inchikey"
+                ]
+                if connectivity_key is None:
+                    invalid_or_unkeyed_rows += 1
+                    continue
+                connectivity_index.setdefault(connectivity_key, []).append(record_id)
 
-            if connectivity_inchikey is None:
-                invalid_or_unkeyed_rows += 1
-                continue
-
-            connectivity_index.setdefault(connectivity_inchikey, []).append({
-                "index": parquet_row_index,
-                "record_id": record_id,
-            })
-
-        processed_rows += batch.num_rows
-
-        if processed_rows % 50_000 == 0:
-            print(
-                f"Processed {processed_rows:,} dataset records"
-            )
+            processed_rows += batch.num_rows
+            if progress_bar is not None:
+                progress_bar.update(batch.num_rows)
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
 
     print(
-        f"Finished: {processed_rows:,} records, "
+        f"Finished {source_name}: {processed_rows:,} records, "
         f"{len(connectivity_index):,} unique connectivity keys, "
         f"{invalid_or_unkeyed_rows:,} invalid/unkeyed rows"
     )
-
     return connectivity_index
+
+
+def find_connectivity_intersections(
+    parquet_file: parquet.ParquetFile,
+    candidate_keys: set[str],
+    batch_size: int = 50_000,
+    source_name: str = "dataset",
+    show_progress: bool = True,
+) -> set[str]:
+    """Stream one comparison file and return matching connectivity keys."""
+
+    if "smiles_canonical" not in parquet_file.schema_arrow.names:
+        raise KeyError("Dataset has no 'smiles_canonical' column")
+
+    unmatched_keys = set(candidate_keys)
+    invalid_or_unkeyed_rows = 0
+    processed_rows = 0
+    progress_bar = make_progress_bar(
+        parquet_file,
+        f"Scanning {source_name}",
+        show_progress,
+    )
+
+    try:
+        for batch in parquet_file.iter_batches(
+            batch_size=batch_size,
+            columns=["smiles_canonical"],
+        ):
+            for smiles in batch.column("smiles_canonical").to_pylist():
+                connectivity_key = structure_identifiers(smiles)[
+                    "connectivity_inchikey"
+                ]
+                if connectivity_key is None:
+                    invalid_or_unkeyed_rows += 1
+                else:
+                    unmatched_keys.discard(connectivity_key)
+
+            processed_rows += batch.num_rows
+            if progress_bar is not None:
+                progress_bar.update(batch.num_rows)
+
+            if not unmatched_keys:
+                break
+    finally:
+        if progress_bar is not None:
+            progress_bar.close()
+
+    matched_keys = candidate_keys - unmatched_keys
+    print(
+        f"Finished {source_name}: scanned {processed_rows:,} records, "
+        f"matched {len(matched_keys):,} connectivity keys, "
+        f"{invalid_or_unkeyed_rows:,} invalid/unkeyed rows"
+    )
+    return matched_keys
+
 
 def disjoint_datasets(
     parquet_file_to_disjoint: list[Path],
     output_path: Path,
     arrow_batch_size: int = 50_000,
     overwrite: bool = False,
+    show_progress: bool = True,
 ) -> dict[str, object]:
     """
-    Remove intersection of molecules from the first canonical Parquet file in the list
-    
-    
-    and write the result to a new canonical Parquet file.
+    Remove connectivity intersections from the first canonical Parquet file.
 
     Args:
         parquet_file_to_disjoint (list[Path]): List of input canonical Parquet files.
             The first file will be used as the base dataset from which the intersection
             will be removed. The others will remain unchanged.
         output_path (Path): Output canonical Parquet file.
-        arrow_batch_size (int, optional): Number of rows copied at once. Defaults to 50_000.
+        arrow_batch_size (int, optional): Number of rows read at once.
+            Defaults to 50,000.
         overwrite (bool, optional): If True, replace an existing output file. Defaults to False.
     """
 
@@ -176,19 +249,34 @@ def disjoint_datasets(
         versions_text = ", ".join(sorted(rdkit_versions))
         raise ValueError(f"input RDKit versions differ: {versions_text}")
     to_disjoint = parquet_files.pop(0)
-    to_disjoint_index = build_connectivity_index(to_disjoint, batch_size=arrow_batch_size)
-    parquet_files_indexes = [build_connectivity_index(parquet_file, batch_size=arrow_batch_size) for parquet_file in parquet_files]
+    to_disjoint_index = build_connectivity_index(
+        to_disjoint,
+        batch_size=arrow_batch_size,
+        source_name=parquet_file_to_disjoint[0].name,
+        show_progress=show_progress,
+    )
 
-    intersection_keys = set()
-    for parquet_file_index in parquet_files_indexes:
-        intersection_keys.update(
-            to_disjoint_index.keys() & parquet_file_index.keys()
+    intersection_keys: set[str] = set()
+    remaining_keys = set(to_disjoint_index)
+    for path, parquet_file in zip(parquet_file_to_disjoint[1:], parquet_files):
+        if not remaining_keys:
+            print("All first-dataset connectivity keys matched; stopping early")
+            break
+
+        matched_keys = find_connectivity_intersections(
+            parquet_file,
+            remaining_keys,
+            batch_size=arrow_batch_size,
+            source_name=path.name,
+            show_progress=show_progress,
         )
+        intersection_keys.update(matched_keys)
+        remaining_keys.difference_update(matched_keys)
 
     record_ids_to_remove = {
-        entry["record_id"]
+        record_id
         for key in intersection_keys
-        for entry in to_disjoint_index[key]
+        for record_id in to_disjoint_index[key]
     }
 
     input_metadata = dict(to_disjoint.schema_arrow.metadata or {})
@@ -260,11 +348,6 @@ def disjoint_datasets(
         "intersection_rows": total_rows - final_rows,
         "bytes": output.stat().st_size,
     }
-
-
-
-
-
 def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -290,12 +373,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--arrow-batch-size",
         type=int,
         default=50_000,
-        help="rows copied at once (default: 50000)",
+        help="rows read at once (default: 50000)",
     )
     parser.add_argument(
         "--overwrite",
         action="store_true",
         help="replace an existing output file",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable progress bars",
     )
     return parser
 
@@ -307,6 +395,7 @@ def main() -> None:
         args.output,
         arrow_batch_size=args.arrow_batch_size,
         overwrite=args.overwrite,
+        show_progress=not args.no_progress,
     )
     print(
         f"Disjoint dataset written to {args.output} with "

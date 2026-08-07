@@ -88,6 +88,26 @@ def parse_args() -> argparse.Namespace:
             "_mol_properties.csv, then exit"
         ),
     )
+    parser.add_argument(
+        "--train-val-parquet",
+        type=Path,
+        help="custom cleaned train/validation Parquet",
+    )
+    parser.add_argument(
+        "--test-benchmark-parquet",
+        type=Path,
+        help="custom cleaned benchmark-test Parquet",
+    )
+    parser.add_argument(
+        "--analytics-dir",
+        type=Path,
+        help="custom output directory for generated analytics",
+    )
+    parser.add_argument(
+        "--skip-admet",
+        action="store_true",
+        help="analyze only the two main datasets and skip unchanged ADMET cohorts",
+    )
     return parser.parse_args()
 
 
@@ -835,7 +855,7 @@ def main_records(path: Path) -> pl.LazyFrame:
 
 
 def analyze_main_dataset(
-    cleaned_root: Path,
+    parquet_path: Path,
     dataset_name: str,
     analytics_dir: Path,
     sample_per_group: int,
@@ -843,7 +863,7 @@ def analyze_main_dataset(
     print(f"Analyzing {dataset_name}", flush=True)
     dataset_analytics_dir = analytics_dir / dataset_name
     dataset_analytics_dir.mkdir(parents=True, exist_ok=True)
-    records = main_records(cleaned_root / f"{dataset_name}.parquet")
+    records = main_records(parquet_path)
     inventory = inventory_by_source(records, dataset_name)
     inventory.write_csv(
         dataset_analytics_dir / f"{dataset_name}_source_inventory.csv"
@@ -851,7 +871,7 @@ def analyze_main_dataset(
 
     molecular = molecular_frame_from_csv(
         records,
-        cleaned_root / f"{dataset_name}_mol_properties.csv",
+        parquet_path.with_name(f"{parquet_path.stem}_mol_properties.csv"),
     )
     write_molecular_tables_and_plot(
         molecular,
@@ -1063,12 +1083,21 @@ def main() -> None:
         return
 
     cleaned_root = args.cleaned_root
-    analytics_dir = cleaned_root / "analytics"
+    analytics_dir = args.analytics_dir or cleaned_root / "analytics"
     analytics_dir.mkdir(parents=True, exist_ok=True)
 
+    main_dataset_paths = {
+        "train_val": (
+            args.train_val_parquet or cleaned_root / "train_val.parquet"
+        ),
+        "test_benchmark": (
+            args.test_benchmark_parquet
+            or cleaned_root / "test_benchmark.parquet"
+        ),
+    }
     inventories = [
         analyze_main_dataset(
-            cleaned_root,
+            main_dataset_paths[dataset_name],
             dataset_name,
             analytics_dir,
             args.sample_per_group,
@@ -1080,7 +1109,8 @@ def main() -> None:
     pl.concat(inventories).write_csv(
         collection_analytics_dir / "source_inventory.csv"
     )
-    analyze_admet(cleaned_root, analytics_dir, args.sample_per_group)
+    if not args.skip_admet:
+        analyze_admet(cleaned_root, analytics_dir, args.sample_per_group)
     print(f"Wrote cleaned-dataset analytics to {analytics_dir}")
 
 

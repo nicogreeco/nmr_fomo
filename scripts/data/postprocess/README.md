@@ -42,6 +42,35 @@ footer metadata from the first input and adds the comparison inputs, identity
 rule, script path, and removed-record count. Output is written to a hidden
 `.partial` file and promoted only after a successful close.
 
+Only the connectivity index of the first input is kept in memory. Later
+comparison files are streamed, so their size does not determine peak memory.
+
+## `create_double_disjoint_extended.py`
+
+Creates an experimental exact-canonical-SMILES variant without changing the
+connectivity-based release recipe above. It first removes benchmark SMILES
+present in the rich train/validation reference. It then scans the remaining
+benchmark SMILES against NMR-Solver, removes those matches from the benchmark,
+and appends only that NMR-Solver-only group to an already ADMET-disjoint rich
+train/validation file.
+
+```bash
+PYTHONPATH=scripts python \
+  scripts/data/postprocess/create_double_disjoint_extended.py \
+  datasets/merged/merged_benchmark_test.parquet \
+  datasets/merged/merged_train_val_all.parquet \
+  datasets/nmrsolver/all.parquet \
+  datasets/merged/merged_train_val_all_disjoint.parquet \
+  --test-output datasets/merged/merged_benchmark_test_double_disjoint.parquet \
+  --train-output datasets/merged/merged_train_val_all_disjoint_extended.parquet
+```
+
+The comparison files are streamed using only `smiles_canonical`; only the
+small benchmark index is retained in memory. Exact canonical SMILES preserves
+stereochemical distinctions encoded in the strings, unlike the conservative
+connectivity-only helper. Both outputs are first completed as hidden partial
+files and are promoted together after a successful run.
+
 ## `extract_annotated_peaks.py`
 
 Creates endpoint-specific annotated outputs and a merged dataset with those
@@ -155,6 +184,11 @@ The default output directory is `datasets/cleaned/analytics`, with one
 subdirectory each for `train_val`, `test_benchmark`, `admet`, and collection-
 level summaries. Use `--cleaned-root` for another final collection and
 `--sample-per-group` to change the plotting sample size.
+
+For candidate collections whose files do not use the release names, pass
+`--train-val-parquet`, `--test-benchmark-parquet`, and `--analytics-dir`.
+Use `--skip-admet` when the ADMET cohorts are unchanged and only the two main
+datasets need to be compared.
 
 For the separately stored shift-only SimNMR-PubChem collection, pass its
 cleaned Parquet directly. The script derives the adjacent molecular-property
