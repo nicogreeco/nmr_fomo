@@ -96,8 +96,18 @@ The curated local release is under `datasets/cleaned/` and is intentionally
 ignored by Git because it is distributed separately. Its accompanying
 `datasets/cleaned/README.md` is the collection data card; it describes the
 rich train/validation pool, the connectivity-disjoint benchmark, the ADMET
-subsets, and the separate SimNMR-PubChem shift-only corpus. The published
-release is available on [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
+subsets, the separate simulated SimNMR-PubChem shift-only corpus, and the
+smaller experimental NMRGym shift-only corpus. The published release is
+available on [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
+The exact columns and encodings in its adjacent RDKit molecular-property CSVs
+are documented in [Dataset Analysis](<contex/Dataset%20Analysis.md#rdkit-molecular-property-csvs>).
+
+A stricter local candidate is prepared under `datasets/cleadne_v2/`. It uses an
+exact-canonical-SMILES double disjoin against rich training and
+SimNMR-PubChem, recovers eligible rich benchmark spectra into an extended
+training pool, and then applies the NMRGym connectivity disjoin. It has its own
+data card and regenerated analytics and has not been pushed as the published
+collection.
 
 ## How to navigate the project
 

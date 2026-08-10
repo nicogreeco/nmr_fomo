@@ -12,6 +12,13 @@ model.
 - `canonicalize/` contains source-specific conversion and dataset-analysis tools.
 - `postprocess/` contains derived-data and benchmark-preparation utilities.
 
+The post-processing commands, including benchmark disjoining, common
+filtering, same-order RDKit molecular-property CSV generation, and final
+analytics modes, are documented in
+[`postprocess/README.md`](postprocess/README.md). Those CSV descriptors and
+fingerprints are derived sidecars; they are not canonical schema fields or
+filter acceptance criteria.
+
 Canonical schema version 2 stores the record identifier and provenance,
 source and canonical SMILES, molecular formula, acquisition metadata, an
 atom-symbol list, and the two nested resonance lists. It deliberately has no

@@ -23,9 +23,6 @@ import polars as pl
 from matplotlib.lines import Line2D
 from matplotlib.ticker import PercentFormatter
 
-from data.postprocess.calculate_mol_properties import calculate_row
-
-
 MAIN_DATASETS = ("train_val", "test_benchmark")
 ADMET_ENDPOINTS = ("ames", "ld50_zhu", "solubility_aqsoldb")
 ADMET_SPLITS = ("train_val", "test")
@@ -54,6 +51,7 @@ FUNCTIONAL_GROUP_COLUMNS = (
 CONTINUOUS_MOLECULAR_COLUMNS = ("num_atoms", *PROPERTY_COLUMNS)
 
 SOURCE_DISPLAY_NAMES = {
+    "NMRGym": "NMRGym",
     "NMRPeak-MST-NMR": "MST-NMR",
     "NMRPeak-NMRexp": "NMRexp",
     "NMRTrans-NMRSpec": "NMRTrans / NMRSpec",
@@ -86,6 +84,14 @@ def parse_args() -> argparse.Namespace:
         help=(
             "analyze one cleaned NMR-Solver Parquet and its adjacent "
             "_mol_properties.csv, then exit"
+        ),
+    )
+    parser.add_argument(
+        "--nmrgym-parquet",
+        type=Path,
+        help=(
+            "analyze one cleaned NMRGym Parquet and its adjacent "
+            "_mol_properties.csv as a shift-only dataset, then exit"
         ),
     )
     parser.add_argument(
@@ -934,6 +940,45 @@ def analyze_nmrsolver_dataset(
     print(f"Wrote NMR-Solver analytics to {analytics_dir}", flush=True)
 
 
+def analyze_nmrgym_dataset(
+    parquet_path: Path,
+    sample_per_group: int,
+) -> None:
+    require_file(parquet_path)
+    properties_path = parquet_path.with_name(
+        f"{parquet_path.stem}_mol_properties.csv"
+    )
+    require_file(properties_path)
+    analytics_dir = parquet_path.parent / "analytics" / "nmrgym"
+    analytics_dir.mkdir(parents=True, exist_ok=True)
+
+    print(f"Analyzing NMRGym dataset: {parquet_path}", flush=True)
+    records = main_records(parquet_path)
+    inventory_by_source(records, "nmrgym").write_csv(
+        analytics_dir / "nmrgym_source_inventory.csv"
+    )
+    molecular = molecular_frame_from_aligned_csv(records, properties_path)
+    write_molecular_tables_and_plot(
+        molecular,
+        "source",
+        "nmrgym",
+        "NMRGym: molecular properties",
+        analytics_dir,
+        sample_per_group,
+    )
+    write_peak_tables_and_plot(
+        records,
+        "source",
+        "nmrgym",
+        "NMRGym: NMR peak statistics",
+        analytics_dir,
+        sample_per_group,
+        shift_only=True,
+        first_rows_sample_only=True,
+    )
+    print(f"Wrote NMRGym analytics to {analytics_dir}", flush=True)
+
+
 def admet_records(cleaned_root: Path) -> pl.LazyFrame:
     frames = []
     for endpoint in ADMET_ENDPOINTS:
@@ -1002,6 +1047,11 @@ def admet_target_summary(cleaned_root: Path) -> pl.DataFrame:
 
 
 def admet_molecular_frame(records: pl.LazyFrame) -> pl.LazyFrame:
+    # ADMET is the only analysis path that calculates properties in-process.
+    # Keep this import lazy so the main and shift-only analyses do not import
+    # the full ``data`` package (including optional PyTorch dependencies).
+    from data.postprocess.calculate_mol_properties import calculate_row
+
     unique_records = (
         records.select("record_id", "smiles_canonical")
         .unique(subset=["record_id"])
@@ -1075,9 +1125,24 @@ def main() -> None:
     if args.sample_per_group < 1:
         raise ValueError("--sample-per-group must be at least 1")
 
+    if (
+        args.nmrsolver_parquet is not None
+        and args.nmrgym_parquet is not None
+    ):
+        raise ValueError(
+            "--nmrsolver-parquet and --nmrgym-parquet are mutually exclusive"
+        )
+
     if args.nmrsolver_parquet is not None:
         analyze_nmrsolver_dataset(
             args.nmrsolver_parquet,
+            args.sample_per_group,
+        )
+        return
+
+    if args.nmrgym_parquet is not None:
+        analyze_nmrgym_dataset(
+            args.nmrgym_parquet,
             args.sample_per_group,
         )
         return

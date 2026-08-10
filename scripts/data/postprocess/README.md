@@ -17,7 +17,8 @@ molecules, assign splits, or remove benchmark overlap.
 This is a deliberately narrow, ad hoc benchmark-preparation helper. The first
 Parquet is always the dataset being filtered; every later Parquet is only a
 comparison dataset and remains unchanged. Input order therefore determines the
-direction of removal. The current benchmark-test preparation command is:
+direction of removal. The rich train/validation disjoin used for the published
+benchmark starts with:
 
 ```bash
 PYTHONPATH=scripts python \
@@ -31,6 +32,22 @@ PYTHONPATH=scripts python \
 This removes benchmark-test records whose molecular connectivity is present in
 the train/validation collection. Reversing the first two inputs would instead
 remove overlapping train/validation records.
+
+After common cleaning, the published benchmark uses the same directional
+helper a second time against the cleaned experimental NMRGym component:
+
+```bash
+PYTHONPATH=scripts python \
+  scripts/data/postprocess/disjoin_benchmark_from_train.py \
+  datasets/merged/merged_benchmark_test_disjoint_cleaned.parquet \
+  datasets/cleaned/nmrgym.parquet \
+  --output datasets/cleaned/test_benchmark.parquet \
+  --overwrite
+```
+
+The two passes remove overlap with different training resources but use the
+same connectivity-InChIKey identity rule. Molecular-property CSVs and
+analytics must be regenerated from the final second-pass benchmark.
 
 The script compares connectivity InChIKeys and removes every record in the
 first input whose connectivity key appears in a later input. This conservative
@@ -68,8 +85,10 @@ PYTHONPATH=scripts python \
 The comparison files are streamed using only `smiles_canonical`; only the
 small benchmark index is retained in memory. Exact canonical SMILES preserves
 stereochemical distinctions encoded in the strings, unlike the conservative
-connectivity-only helper. Both outputs are first completed as hidden partial
-files and are promoted together after a successful run.
+connectivity-only helper. Both hidden partial files are completed before
+either final path is replaced. The script then promotes the test output and
+the train output sequentially; this prevents promotion of incomplete files but
+is not a filesystem transaction across both final paths.
 
 ## `extract_annotated_peaks.py`
 
@@ -159,6 +178,20 @@ Rows with missing or invalid SMILES are retained and marked through
 written to `.<name>.partial` and promoted only on success; an existing CSV is
 protected unless `--overwrite` is passed.
 
+Descriptor values are derived from the RDKit molecule parsed from
+`smiles_canonical`; they are not copied from a source release and are not used
+by `filter_dataset.py`. `exact_molecular_weight` is in daltons,
+`calculated_logp` is RDKit Crippen MolLogP, `tpsa` is in square angstroms, and
+HBA, HBD, and rotatable bonds are counts. `fraction_csp3` is the fraction of
+carbon atoms that are sp3 hybridized. `aromatic_atom_fraction` is calculated
+here as aromatic heavy atoms divided by all heavy atoms. Every `has_*` field is
+an integer `0`/`1` SMARTS match indicator, not a group count.
+
+`rdkit_status` is one of `ok`, `missing_smiles`, `invalid_smiles`, or
+`calculation_error`. For a non-`ok` row, `rdkit_error` contains the reason and
+all descriptors, flags, and fingerprints are blank. Row order is the same as
+the input Parquet, including when worker processes are used.
+
 For larger machines, increase `--workers`; `--batch-size` bounds the rows held
 by the parent at once, while `--records-per-task` bounds each serialized worker
 task. The defaults are deliberately conservative (`4096`, `512`, and up to
@@ -192,7 +225,8 @@ datasets need to be compared.
 
 For the separately stored shift-only SimNMR-PubChem collection, pass its
 cleaned Parquet directly. The script derives the adjacent molecular-property
-CSV path and writes the results under `datasets/cleaned/analytics/simnmr`:
+CSV path and writes results under `<parquet.parent>/analytics/simnmr` (for the
+example below, `datasets/cleaned/analytics/simnmr`):
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
@@ -208,6 +242,21 @@ memory-heavy 100-million-row join. Finally, numerical summaries still use every
 record, while plots use the first projected `--sample-per-group` rows. Selecting
 that small prefix before nested peak lists are collected avoids materialising the
 whole NMR-Solver dataset solely to make a figure.
+
+For the smaller experimental shift-only NMRGym collection, use its dedicated
+mode. It treats integration, multiplicity, J, and range annotations as
+unavailable, uses exact source inventory counts, and writes under
+`<parquet.parent>/analytics/nmrgym` (for the example below,
+`datasets/cleaned/analytics/nmrgym`):
+
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
+  --nmrgym-parquet datasets/cleaned/nmrgym.parquet
+```
+
+`--nmrsolver-parquet` and `--nmrgym-parquet` select separate shift-only modes
+and are mutually exclusive. Run the command once per collection when both
+analytics sets are required.
 
 ## `admet_overlap_audit.ipynb`
 
