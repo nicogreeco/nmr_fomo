@@ -1,0 +1,6 @@
+outs:
+- md5: 5d8ac4b2c55f4d85e4f19e24406a5546.dir
+  size: 44247243
+  nfiles: 3
+  hash: md5
+  path: nmrtrans
