@@ -9,6 +9,10 @@ research changes:
 - real checkpoint loading where a local checkpoint is available;
 - the observed NMRTrans padding and PMA behavior.
 
+They do not require `dvc pull` or a materialized `datasets/cleaned/` directory.
+
+Only explicitly marked checkpoint tests may require local model assets.
+
 Fixtures are small hand-written canonical records. The tests do not scan or
 rewrite the real datasets.
 

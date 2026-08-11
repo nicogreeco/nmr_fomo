@@ -19,8 +19,11 @@ PyArrow is installed in every environment. It streams canonical Parquet input
 and writes embedding batches incrementally, including when a benchmark runs
 outside the main project environment.
 
-RDKit is installed in the main `nmr_venv`; use that environment for schema-v2
-canonicalization because its structure fields are derived from SMILES.
+RDKit, DVC with the S3 remote extra, and the YAML libraries used by the pipeline
+generator are installed in the main `nmr_venv`. Use that environment for
+schema-v2 canonicalization and for `dvc dag`, `dvc repro`, and `dvc push`.
+Object-storage credentials are machine-local AWS configuration and are never
+written by these setup scripts or committed to the repository.
 
 ## CPU VM
 
@@ -113,3 +116,5 @@ helper:
   extensions remain disabled, matching the simple NMRPeak installation path and
   avoiding a hard dependency on a local `nvcc` toolkit.
 - Installed package inventories are written under `VENV_ROOT/manifests/`.
+- Re-run the main-environment setup after data-pipeline requirement changes;
+  existing valid environments are updated in place.

@@ -18,7 +18,7 @@ contains positions 1--166 as ``maccs_keys_166_bits``.
 
 Example:
     PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \\
-        datasets/merged/merged_train_val_all.parquet --workers 8
+        datasets/cleaned/train_val.parquet --workers 4
 """
 
 from __future__ import annotations

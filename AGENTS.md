@@ -82,13 +82,23 @@ La raccolta pubblicata e già materializzata contiene:
 | SimNMR-PubChem | 105.509.616 | grande pool shift-only |
 | NMRGym | 265.095 | fonte shift-only sperimentale separata |
 
-La prossima rigenerazione usa exact `smiles_canonical` per tutti gli overlap
+La pipeline DVC mantenuta usa exact `smiles_canonical` per tutti gli overlap
 NMR–NMR. Prima sposta dal benchmark al train gli spettri rich le cui molecole
 sono in SimNMR; poi rimuove dal test residuo le molecole presenti nel train
 esteso o in NMRGym. Dopo il filtro comune, prepara ADMET dal train pulito usando
 full InChIKey, risolve le label ripetute e rimuove i match dal pretraining.
 Proprietà molecolari e analytics vengono generate soltanto sui file finali.
 Non attribuire nuovi conteggi a questa ricetta prima di averla eseguita.
+
+I raw source sono centralizzati in `datasets/raw/`, identificati da pointer
+`.dvc` e conservati nel remote Nebius. `dvc.yaml` definisce il DAG esplicito,
+`params.yaml` i parametri condivisi e `datasets/raw/sources.yaml` la provenance
+umana. I Parquet canonici, gli intermedi e gli audit di rimozione sono output
+ricostruibili con `push: false`; dataset finali, coorti ADMET, sidecar di
+proprietà, analytics e report strutturati usano il normale push. Dopo la prima
+run completa, `dvc.lock` e i report sono l'autorità per hash e conteggi. La
+pipeline è definita ma non è ancora stata materializzata end-to-end: i conteggi
+sopra appartengono alla release storica pubblicata.
 
 Nel pool ricco, MST-NMR e NMRTrans sono completamente appaiati H+C; NMRexp è l’unica fonte con record monomodali. Le distribuzioni tra train/validation e benchmark risultano simili, pur con differenze chimiche tra le sorgenti.
 
@@ -134,6 +144,10 @@ Il piano di tirocinio dura tre mesi: onboarding cloud; pipeline dati; modello e 
 ## Documentation Guide
 
 - `README.md` gives the repository overview and published-model boundaries.
+- `datasets/README.md` explains raw, canonical, intermediate, and cleaned
+  directory ownership, DVC policies, and reproduction.
+- `dvc.yaml`, `params.yaml`, and `datasets/raw/sources.yaml` define the runnable
+  data graph, tunable values, and source provenance.
 - `contex/Internship – NMR Project Plan.md` defines project goals, phases, and deliverables.
 - `contex/NMR foundations and AI.md` covers NMR fundamentals and the broader AI research context.
 - `contex/Datasets.md` explains the dataset landscape, schema rationale,
@@ -156,6 +170,9 @@ Il piano di tirocinio dura tre mesi: onboarding cloud; pipeline dati; modello e 
 
 ## Repository Navigation
 
+- Before changing the data DAG, read `README.md`, `datasets/README.md`,
+  `scripts/data/README.md`, `dvc.yaml`, and `params.yaml`; regenerate stage
+  definitions with `scripts/data/generate_dvc_pipeline.sh`.
 - Before changing canonical schema or shared data code, read `contex/Datasets.md`,
   `contex/Canonicalization_Implementation_Notes.md`, and
   `contex/Multiplicity analysis.md`.

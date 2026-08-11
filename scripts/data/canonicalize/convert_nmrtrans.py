@@ -7,8 +7,8 @@ as train/validation/test labels.
 
 Example:
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrtrans.py \
-        models/NMRTrans/data \
-        datasets/canonical/nmrtrans_nmrspec.parquet
+        datasets/raw/nmrtrans/train.pkl.lz4 \
+        datasets/canonical/nmrtrans/train.parquet
 """
 
 import argparse

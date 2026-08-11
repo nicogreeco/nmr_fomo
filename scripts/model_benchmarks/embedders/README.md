@@ -19,3 +19,6 @@ not corrected in this project.
 
 Keep repository imports inside the model-specific path so the shared packages
 remain importable in every model environment.
+
+Embedders consume model-native batches only. DVC dataset restoration and
+raw-to-cleaned processing remain responsibilities of `scripts/data/`.

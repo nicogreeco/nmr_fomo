@@ -10,6 +10,7 @@ __pycache__
 /models/NMR-Solver/database/
 /datasets/properties/tdc_admet/admet_group/
 /tmp/
+/runs/
 /dataset_overlap_audit/
 /datasets_old
 

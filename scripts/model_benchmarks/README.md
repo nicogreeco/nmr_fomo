@@ -3,6 +3,10 @@
 This package adapts canonical NMR records to the four existing model families
 used for latent-space comparison.
 
+Inputs come from the DVC-managed canonical or cleaned collection. This package
+does not belong to the raw-to-cleaned DAG and must never convert, filter, split,
+or rewrite those datasets.
+
 The main pieces are:
 
 - `factory.py`: readable, lazy `build_processor()` and `build_embedder()`
@@ -21,7 +25,7 @@ from torch.utils.data import DataLoader
 from data import CanonicalParquetDataset
 from model_benchmarks import build_embedder, build_processor
 
-dataset = CanonicalParquetDataset("datasets/mst_nmr/test.parquet")
+dataset = CanonicalParquetDataset("datasets/cleaned/test_benchmark.parquet")
 processor = build_processor("nmrpeak", mode="canonical", strict=True)
 embedder = build_embedder("nmrpeak", device="cpu")
 
@@ -32,4 +36,6 @@ for batch in loader:
 ```
 
 Only combined `1H + 13C` input is supported. Run one model family per process
-in its corresponding environment.
+in its corresponding environment. The cleaned benchmark may also contain
+single-modality NMRexp rows; extraction must therefore use the documented
+incompatibility handling when processing the complete file.

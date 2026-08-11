@@ -5,8 +5,10 @@ NMR records. It is separate from the reusable `scripts/data/` package: the
 latter only reads records that are already canonical.
 
 Use the converter that matches the original release, then validate the result
-with the streaming analysis tool. These commands write a new output file; they
-do not modify the source dataset.
+with the streaming analysis tool. The production invocations are the
+`canonicalize_*` stages in the root `dvc.yaml`; their inputs come from
+`datasets/raw/`, and their outputs go to `datasets/canonical/`. These commands
+write new files and never modify the source datasets.
 
 ## Canonical schema version 2
 
@@ -43,11 +45,12 @@ every proton peak also has a J list, with `[]` representing no retained or
 reported numerical coupling. Shift-only sources use `j_values = null` because
 J is structurally unavailable.
 
-The completed SimNMR-PubChem conversion follows the same v2 rules.
-`datasets/nmrsolver/all.parquet` contains 105,764,812 records. The source scan
-contained 105,764,875 candidate rows; 63 rows for which RDKit could not derive
-coherent chemical metadata are recorded in the adjacent JSONL rejection report
-rather than being serialized with incomplete structure fields.
+A previously completed SimNMR-PubChem conversion following these v2 rules
+contained 105,764,812 records from 105,764,875 candidate rows. The 63 rejected
+rows could not provide coherent RDKit chemical metadata and were written to the
+adjacent JSONL rejection report. These are measured historical results; the
+next DVC reproduction writes its own counts to
+`datasets/canonical/simnmr/all_report.json`.
 
 Each converter also writes a compact deterministic processing JSON beside its
 Parquet (`<output>_report.json`). It records the stage, input, output, and
@@ -57,8 +60,8 @@ the individual skipped source rows.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/analysis/analyze_parquet.py \
-  datasets/<source>/all.parquet \
-  --output datasets/<source>/canonical_analysis.json
+  datasets/canonical/<source>/all.parquet \
+  --output datasets/canonical/<source>/canonical_analysis.json
 ```
 
 The normal analysis uses Arrow's column operations and has bounded memory. It
@@ -76,9 +79,9 @@ PYTHONPATH=scripts python scripts/data/canonicalize/analysis/compare_source_and_
 
 PYTHONPATH=scripts python \
   scripts/data/canonicalize/analysis/analyze_processor_compatibility.py \
-  datasets/mst_nmr/all.parquet \
+  datasets/canonical/mst_nmr/train.parquet \
   --dataset-name mst_nmr \
-  --output datasets/mst_nmr/processor_compatibility.json
+  --output datasets/canonical/mst_nmr/processor_compatibility.json
 ```
 
 The source/split command supports the published split sources `mst_nmr`,
@@ -96,8 +99,8 @@ keeps LMDB reading and Parquet/JSONL writing ordered and bounded in memory:
 
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
-  models/NMR-Solver/database/metadata/PubChem_merged_id.lmdb \
-  datasets/nmrsolver/all.parquet --overwrite --workers 4
+  datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb \
+  datasets/canonical/simnmr/all.parquet --workers 4
 ```
 
 Start with four workers and increase only after confirming available CPU, RAM,
@@ -113,13 +116,16 @@ annotations with null fields while keeping modalities themselves as lists:
 
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
-  <nmrgym-pickle-directory> datasets/nmrgym/all.parquet --overwrite
+  datasets/raw/nmrgym datasets/canonical/nmrgym/all.parquet
 ```
 
 The canonical fields and the rules to preserve during future conversions are
 in [Canonicalization Implementation Notes](../../../contex/Canonicalization_Implementation_Notes.md).
 For the reason different source releases need different treatment, see
 [Dataset Filtering and Processing](../../../contex/Dataset_Filtering_and_Processing.md).
+
+Converter parameters are centralized in `params.yaml`. Do not hand-edit
+`dvc.yaml`; change the Bash generator when stage structure changes.
 
 Do not import a converter from training or embedding code. A model benchmark
 should consume the resulting canonical Parquet file through `scripts/data/`.

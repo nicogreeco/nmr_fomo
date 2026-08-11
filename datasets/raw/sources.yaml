@@ -8,6 +8,7 @@ sources:
     upstream: https://tdcommons.ai/benchmark/admet_group/overview/
     content: 22 TDC ADMET endpoints with official train_val and test splits
     files: "<endpoint>/{train_val,test}.csv"
+    pipeline_endpoints: [ames, ld50_zhu, solubility_aqsoldb]
     used_by: scripts/data/postprocess/prepare_admet_datasets.py
 
   mst_nmr:

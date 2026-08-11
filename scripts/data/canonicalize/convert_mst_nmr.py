@@ -7,8 +7,8 @@ not retain split labels, filter records, or deduplicate molecules.
 
 Example:
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py \
-        models/NMRPeak/data/MST_NMR \
-        datasets/canonical/nmrpeak_mst_nmr.parquet
+        datasets/raw/mst_nmr/train.lmdb \
+        datasets/canonical/mst_nmr/train.parquet
 """
 
 import argparse

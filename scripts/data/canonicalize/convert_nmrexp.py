@@ -8,8 +8,8 @@ needed. No records are filtered, deduplicated, or split by this script.
 
 Example:
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py \
-        models/NMRPeak/data/NMRexp/lmdb_dataset \
-        datasets/canonical/nmrpeak_nmrexp.parquet
+        datasets/raw/nmrexp/train.lmdb \
+        datasets/canonical/nmrexp/train.parquet
 """
 
 import argparse

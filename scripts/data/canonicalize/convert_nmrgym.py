@@ -11,11 +11,11 @@ directory containing train/val/test pickles to make their ordered union.
 
 Examples:
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
-        dataset_overlap_audit/NMRGym_train_balanced_dedup.pkl \
-        datasets/nmrgym/train.parquet
+        datasets/raw/nmrgym/NMRGym_train_balanced_dedup.pkl \
+        datasets/canonical/nmrgym/train.parquet
 
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py \
-        dataset_overlap_audit datasets/nmrgym/all.parquet
+        datasets/raw/nmrgym datasets/canonical/nmrgym/all.parquet
 """
 
 import argparse

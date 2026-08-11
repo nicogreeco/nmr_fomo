@@ -10,8 +10,8 @@ produces one physical Parquet file without inventing split labels.
 
 Example:
     PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
-        models/NMR-Solver/database/metadata/PubChem_merged_id.lmdb \
-        datasets/nmrsolver/all.parquet
+        datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb \
+        datasets/canonical/simnmr/all.parquet
 """
 
 import argparse

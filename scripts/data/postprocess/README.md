@@ -9,6 +9,10 @@ source ~/.bashrc
 nmr-env main
 ```
 
+The production invocations are explicit stages in the root `dvc.yaml`.
+Commands below explain individual tools; use `dvc repro` for the maintained
+end-to-end workflow and `params.yaml` for shared batch and worker settings.
+
 ## Final collection workflow
 
 The maintained preparation order is:
@@ -74,9 +78,9 @@ script path, inputs, identity policy, and relevant row counts.
 By default, every command writes a compact report beside its primary output.
 Reports use the same `stage`, `inputs`, `outputs`, and `counts` fields,
 with an optional `details` section only for useful breakdowns. These JSONs are
-intended as DVC metrics/artifacts: they record transformation results without
+ordinary cached DVC outputs: they record transformation results without
 repeating the command, Git revision, DVC hashes, or environment already
-captured by the pipeline.
+captured by the pipeline. They are not configured as no-cache DVC metrics.
 
 `common.py` contains the small shared implementation for schema validation,
 compatible-RDKit checks, temporary output paths, progress bars, exact-SMILES
@@ -89,12 +93,12 @@ does not deduplicate, assign splits, filter records, or remove overlap.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py \
-  datasets/nmrpeak_mst/train.parquet \
-  datasets/nmrpeak_mst/val.parquet \
-  datasets/nmrpeak_nmrexp/train.parquet \
-  datasets/nmrpeak_nmrexp/val.parquet \
-  datasets/nmrtrans/train.parquet \
-  datasets/nmrtrans/val.parquet \
+  datasets/canonical/mst_nmr/train.parquet \
+  datasets/canonical/mst_nmr/val.parquet \
+  datasets/canonical/nmrexp/train.parquet \
+  datasets/canonical/nmrexp/val.parquet \
+  datasets/canonical/nmrtrans/train.parquet \
+  datasets/canonical/nmrtrans/val.parquet \
   --output datasets/intermediate/rich_train_val.parquet
 ```
 
@@ -113,10 +117,10 @@ output. Only the benchmark SMILES-to-record-ID index is retained in memory.
 PYTHONPATH=scripts python \
   scripts/data/postprocess/move_benchmark_overlaps_to_train.py \
   datasets/intermediate/rich_test.parquet \
-  datasets/nmrsolver/all.parquet \
+  datasets/canonical/simnmr/all.parquet \
   datasets/intermediate/rich_train_val.parquet \
   --test-output datasets/intermediate/test_after_simnmr.parquet \
-  --train-output datasets/intermediate/train_val_with_simnmr_matches.parquet
+  --train-output datasets/intermediate/train_val_extended.parquet
 ```
 
 Run this before the general benchmark disjoint. This ordering recovers every
@@ -133,8 +137,8 @@ indexed; later datasets are streamed one at a time.
 PYTHONPATH=scripts python \
   scripts/data/postprocess/remove_benchmark_overlaps.py \
   datasets/intermediate/test_after_simnmr.parquet \
-  datasets/intermediate/train_val_with_simnmr_matches.parquet \
-  datasets/nmrgym/all.parquet \
+  datasets/intermediate/train_val_extended.parquet \
+  datasets/canonical/nmrgym/all.parquet \
   --output datasets/intermediate/test_benchmark_preclean.parquet
 ```
 
@@ -161,9 +165,9 @@ different shift lists remain separate.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py \
-  datasets/intermediate/train_val_with_simnmr_matches.parquet \
+  datasets/intermediate/train_val_extended.parquet \
   --output datasets/intermediate/train_val_filtered.parquet \
-  --removed-output datasets/intermediate/train_val_removed.parquet
+  --removed-output datasets/intermediate/audits/train_val_removed.parquet
 ```
 
 If output arguments are omitted, the command uses `<input>_cleaned.parquet`
@@ -187,9 +191,9 @@ Repeated property rows for one full InChIKey are handled during the same step:
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/prepare_admet_datasets.py \
   datasets/intermediate/train_val_filtered.parquet \
-  --tdc-root datasets/properties/tdc_admet/admet_group \
-  --output-root datasets/final/admet \
-  --train-output datasets/final/train_val.parquet
+  --tdc-root datasets/raw/admet \
+  --output-root datasets/cleaned/admet \
+  --train-output datasets/cleaned/train_val.parquet
 ```
 
 Because the input has already passed the common filter, the resulting ADMET
@@ -207,7 +211,7 @@ small process pool.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
-  datasets/final/train_val.parquet \
+  datasets/cleaned/train_val.parquet \
   --workers 4
 ```
 
@@ -230,7 +234,7 @@ ADMET target summaries, and plots for the final collection.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
-  --cleaned-root datasets/final
+  --cleaned-root datasets/cleaned
 ```
 
 Before analyzing a molecular-property sidecar, the script verifies that it has
@@ -246,8 +250,10 @@ Use `--nmrsolver-parquet` or `--nmrgym-parquet` to analyze those independent
 shift-only components. For candidate collections with different filenames,
 use `--train-val-parquet`, `--test-benchmark-parquet`, `--analytics-dir`, and
 optionally `--skip-admet`.
-Analytics writes `processing_report.json` inside its analytics directory.
-Pass `--overwrite` when intentionally replacing an existing report.
+By default analytics writes `processing_report.json` inside its analytics
+directory. The DVC stage supplies three explicit report paths outside that
+directory—main collection, SimNMR, and NMRGym—while keeping all figures and
+tables under `datasets/cleaned/analytics/`.
 
 ## `admet_overlap_audit.ipynb`
 

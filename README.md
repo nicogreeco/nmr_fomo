@@ -69,12 +69,17 @@ for the exact environment setup and repair commands.
 ```text
 contex/                     project diary, literature notes, decisions, and analyses
   NMR/DL Methods/           notes on the relevant papers and repositories
-datasets/                   local raw/canonical data and generated reports (ignored)
+datasets/
+  raw/                      DVC-pinned upstream releases
+  canonical/                reproducible source conversions
+  intermediate/             reproducible merge, overlap, and audit outputs
+  cleaned/                  final datasets, molecular properties, and analytics
 models/                     pinned upstream repositories (Git submodules)
 scripts/
   data/                     canonical data code and data-preparation utilities
     canonicalize/           source-specific conversion and dataset-analysis tools
     postprocess/            derived-data and benchmark-preparation utilities
+    generate_dvc_pipeline.sh  generator for the root DVC DAG
   model_benchmarks/         processors and embedders for published-model comparison
   envs_scr/                 model-specific environment setup material
   test_notebook.ipynb       exploratory work
@@ -92,28 +97,154 @@ canonical SMILES, molecular formula, and atom symbols. It deliberately omits
 `scripts/data/canonicalize/README.md` and the canonicalization
 implementation note linked below.
 
-The curated local release is under `datasets/cleaned/` and is intentionally
-ignored by Git because it is distributed separately. Its accompanying
-`datasets/cleaned/README.md` is the collection data card; it describes the
-rich train/validation pool, the connectivity-disjoint benchmark, the ADMET
-subsets, the separate simulated SimNMR-PubChem shift-only corpus, and the
-smaller experimental NMRGym shift-only corpus. The published release is
-available on [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
-The exact columns and encodings in its adjacent RDKit molecular-property CSVs
-are documented in [Dataset Analysis](<contex/Dataset%20Analysis.md#rdkit-molecular-property-csvs>).
+## Dataset management
 
-The maintained post-processing recipe for the next collection regeneration is
-documented in [scripts/data/postprocess/README.md](scripts/data/postprocess/README.md).
-It first recovers rich benchmark spectra whose molecules occur in SimNMR,
-removes the residual exact-canonical-SMILES overlap with extended rich training
-and NMRGym, applies the common filter, and only then prepares the full-InChIKey
-ADMET cohorts. Dataset counts are updated only after that recipe has been run
-and audited.
+Git versions code and small control files; DVC versions dataset contents. The
+data directories have deliberately different storage policies:
 
-Raw source bytes are tracked with DVC under `datasets/raw/`; their compact
-provenance manifest is [sources.yaml](datasets/raw/sources.yaml). Reproducible
-pipeline defaults are in [params.yaml](params.yaml), and each maintained data
-stage emits a small structured JSON report for DVC to retain with its outputs.
+| Directory | Role | Versioning and remote policy |
+|---|---|---|
+| `datasets/raw/` | Original inputs to this pipeline | One committed `.dvc` pointer per source; bytes stored in Nebius Object Storage |
+| `datasets/canonical/` | Schema-v2 conversion outputs | DVC pipeline outputs with `push: false`; reproducible from raw inputs |
+| `datasets/intermediate/` | Merges, overlap outputs, filtering inputs, removal audits | DVC pipeline outputs with `push: false`; reproducible and not uploaded normally |
+| `datasets/cleaned/` | Final train/test, shift-only pools, ADMET cohorts, molecular properties, analytics | DVC pipeline outputs with normal `push: true` policy |
+| `*_report.json` | Deterministic stage counts and useful breakdowns | Small ordinary DVC outputs retained with the run |
+
+The raw pointers pin exact byte hashes. Their human-readable provenance and
+role are in [sources.yaml](datasets/raw/sources.yaml), while shared batch,
+worker, and analytics settings are in [params.yaml](params.yaml). The default
+remote is `s3://nmr-datasets/dvc-cache` on Nebius Object Storage. Access keys
+remain in machine-local AWS configuration and must never be committed.
+
+Canonical and intermediate data still participate in the DVC cache and are
+recorded in `dvc.lock`, but `push: false` prevents a normal `dvc push` from
+uploading those large rebuildable files. Final cleaned outputs and reports use
+the normal push policy. The local cache uses hardlinks to avoid a second local
+copy where the filesystem supports them.
+
+The maintained transformation order is:
+
+```text
+raw MST-NMR, NMRexp, NMRTrans, NMRGym, SimNMR-PubChem
+  -> schema-v2 canonical Parquets
+  -> rich train/validation and source-test merges
+  -> move rich test spectra whose molecules occur in SimNMR into rich train
+  -> remove residual test overlap with extended rich train and NMRGym
+  -> common filtering of rich train, rich test, SimNMR, and NMRGym
+  -> prepare ADMET cohorts and remove matched records from rich pretraining
+  -> calculate aligned RDKit molecular-property sidecars
+  -> generate final analytics
+```
+
+All NMR-to-NMR overlap uses exact equality of converter-produced
+`smiles_canonical`. External ADMET structures are matched with exact full RDKit
+InChIKeys. Structured reports record outcomes such as row counts, filtering
+reasons, overlap removals, and cohort sizes without duplicating DVC hashes or
+environment information already captured elsewhere.
+
+The Hugging Face collection currently available at
+[nmr-canonical-cleaned](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned)
+was produced by an earlier materialized recipe. Its measured counts remain
+documented as historical results in [Dataset Analysis](<contex/Dataset%20Analysis.md>);
+they must not be attributed to this DVC recipe until it has been run and audited.
+
+## Reproducing the dataset pipeline
+
+### 1. Prepare the environment
+
+From the repository root, activate the main environment:
+
+```bash
+source ~/.bashrc
+nmr-env main
+```
+
+The main requirements include RDKit, PyArrow, DVC with S3 support, and the YAML
+dependency used by the pipeline generator. See
+[scripts/envs_scr/README.md](scripts/envs_scr/README.md) to create or repair it.
+
+### 2. Configure Nebius credentials
+
+The endpoint, region, bucket, and default remote are committed in `.dvc/config`.
+Only credentials are local. For a new service-account key:
+
+```bash
+aws configure set aws_access_key_id '<access-key-id>'
+aws configure set aws_secret_access_key '<secret-access-key>'
+aws configure set region eu-west1
+aws configure set endpoint_url https://storage.eu-west1.nebius.cloud
+```
+
+Verify access without printing credentials:
+
+```bash
+dvc remote list
+aws s3 ls s3://nmr-datasets
+```
+
+### 3. Restore the raw inputs
+
+```bash
+dvc pull datasets/raw/*.dvc
+```
+
+The six `.dvc` targets restore ADMET, MST-NMR, NMRexp, NMRTrans, NMRGym, and
+the roughly 400 GB SimNMR-PubChem LMDB. Check their role and upstream release in
+`datasets/raw/sources.yaml` rather than renaming or copying them into submodules.
+
+### 4. Inspect configuration
+
+```bash
+dvc dag
+cat params.yaml
+```
+
+Edit `params.yaml` for batch sizes, worker counts, or plot sampling. Regenerate
+`dvc.yaml` only when a stage command, dependency, output, or topology changes:
+
+```bash
+scripts/data/generate_dvc_pipeline.sh
+```
+
+The generator calls `dvc stage add` and validates the DAG. It does not execute
+any stage and does not create `dvc.lock`.
+
+### 5. Reproduce
+
+Run the complete pipeline:
+
+```bash
+dvc repro
+```
+
+Or target a final component while allowing DVC to run stale prerequisites:
+
+```bash
+dvc repro filter_test
+dvc repro analyze_cleaned_collection
+```
+
+The full run includes conversion and filtering of the 106-million-record
+SimNMR corpus. Plan disk, time, and CPU capacity before starting it.
+
+### 6. Version and publish a successful run
+
+```bash
+dvc push
+git status --short
+git add dvc.yaml dvc.lock params.yaml datasets/raw/*.dvc
+```
+
+Review the processing reports, push their DVC objects, and commit the relevant
+code, documentation, and `dvc.lock` together. The lock file records the
+exact commands,
+parameters, dependencies, and output hashes. `dvc push` uploads the final
+cleaned collection and reports while respecting `push: false` for rebuildable
+canonical and intermediate outputs.
+
+More detail is in [datasets/README.md](datasets/README.md),
+[scripts/data/README.md](scripts/data/README.md), and
+[scripts/data/postprocess/README.md](scripts/data/postprocess/README.md).
 
 ## How to navigate the project
 

@@ -26,6 +26,61 @@ stage-specific breakdowns such as filtering reasons or ADMET cohorts. Git and
 DVC already record code, commands, parameters, and exact data hashes, so
 reports intentionally omit timestamps, hosts, and library dumps.
 
+## DVC pipeline
+
+The explicit root pipeline is [`dvc.yaml`](../../dvc.yaml). Its dependency
+graph is:
+
+```text
+raw source releases
+  -> canonical source/split Parquets
+  -> rich train/test merges
+  -> move SimNMR overlaps from rich test into rich train
+  -> remove residual rich-test overlap with extended train and NMRGym
+  -> common filtering of train, test, SimNMR, and NMRGym
+  -> ADMET cohort preparation and leakage removal from rich train
+  -> final molecular-property sidecars
+  -> final collection analytics
+```
+
+Regenerate stage definitions only after changing this topology or a stage
+command:
+
+```bash
+source ~/.bashrc
+nmr-env main
+scripts/data/generate_dvc_pipeline.sh
+```
+
+The generator calls `dvc stage add`, updates existing stage definitions, and
+validates the DAG. It does not call `dvc repro` or process any dataset. Ordinary
+parameter changes belong in `params.yaml`; its values are referenced directly
+by the affected stages and do not require regenerating `dvc.yaml`.
+
+Canonical Parquets, intermediate Parquets, and removal audits remain in the
+local DVC cache with `push: false`. Final cleaned datasets, molecular-property
+sidecars, analytics, and the small processing reports use the normal push
+policy. Reports are ordinary cached DVC outputs rather than no-cache metrics,
+so they do not disable the stage run cache.
+
+After pulling the raw `.dvc` targets, inspect or execute the pipeline with:
+
+```bash
+dvc pull datasets/raw/*.dvc
+dvc dag
+dvc repro
+dvc push
+```
+
+`dvc repro` includes the full SimNMR conversion and is intentionally not run
+by the generator. A targeted command such as `dvc repro filter_test` also runs
+whatever upstream stages are missing or stale. After a successful run,
+`dvc.lock` pins commands, parameters, dependencies, and output hashes and must
+be committed with the code changes that produced it.
+
+The configured Nebius remote, directory ownership, and clean-checkout procedure
+are documented in [`datasets/README.md`](../../datasets/README.md).
+
 The post-processing commands, including benchmark disjoining, common
 filtering, ADMET preparation, same-order RDKit molecular-property CSV
 generation, and final analytics modes, are documented in
@@ -66,7 +121,7 @@ tokenize spectra, adapt fields for a model, or convert a raw dataset.
 ```python
 from data import CanonicalParquetDataset
 
-dataset = CanonicalParquetDataset("../datasets/mst_nmr/test.parquet")
+dataset = CanonicalParquetDataset("datasets/canonical/mst_nmr/test.parquet")
 ```
 
 Add shared canonical fields or validation rules here. Model-specific input

@@ -22,3 +22,6 @@ no-op for UltraNMR and NMR-Solver.
 Edit the named model file when its required fields or official preprocessing
 path changes. Do not put source-dataset parsing, checkpoint loading, or pooling
 logic here.
+
+Processors read canonical records produced by the DVC data pipeline but are not
+stages in that pipeline; they cannot alter split or filtering decisions.
