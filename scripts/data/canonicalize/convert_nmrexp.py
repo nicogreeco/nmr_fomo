@@ -29,6 +29,11 @@ from data.canonicalize.common import (
     write_canonical_parquet,
 )
 from data.schema import CanonicalRecord
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SOURCE_NAME = "NMRPeak-NMRexp"
@@ -101,6 +106,11 @@ def parse_args() -> argparse.Namespace:
         help="rows per internal Parquet row group (default: 50000)",
     )
     parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: beside the canonical Parquet)",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="allow replacement of an existing output file",
@@ -112,6 +122,11 @@ def main() -> None:
     args = parse_args()
     if args.input.is_file() and args.input.resolve() == args.output.resolve():
         raise ValueError("output must not overwrite the source dataset")
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(args.output),
+        [args.input, args.output],
+        overwrite=args.overwrite,
+    )
 
     record_count = write_canonical_parquet(
         iter_converted_records(args.input),
@@ -121,7 +136,14 @@ def main() -> None:
         row_group_size=args.row_group_size,
         overwrite=args.overwrite,
     )
-    print(f"wrote {record_count} NMRexp records to {args.output}")
+    report = {
+        "stage": "canonicalize_nmrexp",
+        "inputs": {"source": str(args.input)},
+        "outputs": {"dataset": str(args.output)},
+        "counts": {"output_records": record_count},
+    }
+    write_processing_report(report, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

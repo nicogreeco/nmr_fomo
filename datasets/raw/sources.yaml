@@ -1,0 +1,53 @@
+version: 1
+
+# DVC pointers pin the exact bytes. This manifest records what each raw source is
+# and how it enters the canonical pipeline.
+sources:
+  admet:
+    path: datasets/raw/admet
+    upstream: https://tdcommons.ai/benchmark/admet_group/overview/
+    content: 22 TDC ADMET endpoints with official train_val and test splits
+    files: "<endpoint>/{train_val,test}.csv"
+    used_by: scripts/data/postprocess/prepare_admet_datasets.py
+
+  mst_nmr:
+    path: datasets/raw/mst_nmr
+    upstream: https://zenodo.org/records/19122815
+    content: rich simulated 1H and 13C peak tables processed by NMRPeak
+    files: [train.lmdb, valid.lmdb, test.lmdb]
+    license: CC-BY-NC-SA-4.0
+    converter: scripts/data/canonicalize/convert_mst_nmr.py
+
+  nmrexp:
+    path: datasets/raw/nmrexp
+    upstream: https://zenodo.org/records/19122815
+    content: rich literature-derived 1H and 13C peak tables processed by NMRPeak
+    files: [train.lmdb, valid.lmdb, test.lmdb]
+    license: CC-BY-NC-SA-4.0
+    converter: scripts/data/canonicalize/convert_nmrexp.py
+
+  nmrgym:
+    path: datasets/raw/nmrgym
+    upstream: https://huggingface.co/datasets/meaw0415/NMRGym
+    content: experimental shift-only 1H and 13C peak lists
+    files:
+      - NMRGym_train_balanced_dedup.pkl
+      - NMRGym_val_balanced_dedup.pkl
+      - NMRGym_test_balanced_dedup.pkl
+    converter: scripts/data/canonicalize/convert_nmrgym.py
+
+  nmrtrans:
+    path: datasets/raw/nmrtrans
+    upstream: https://huggingface.co/datasets/little1d/NMRTrans-Data
+    content: rich literature-derived NMRSpec records released with NMRTrans
+    files: [train.pkl.lz4, val.pkl.lz4, test.pkl.lz4]
+    license: MIT
+    converter: scripts/data/canonicalize/convert_nmrtrans.py
+
+  simnmr_pubchem:
+    path: datasets/raw/simnmr_pubchem
+    upstream: https://huggingface.co/datasets/yqj01/SimNMR-PubChem
+    content: simulated atom-level 1H and 13C shifts for PubChem molecules
+    files: [metadata/PubChem_merged_id.lmdb]
+    license: MIT
+    converter: scripts/data/canonicalize/convert_nmrsolver.py

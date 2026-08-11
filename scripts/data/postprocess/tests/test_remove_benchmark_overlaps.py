@@ -89,8 +89,8 @@ class RemoveBenchmarkOverlapsTest(unittest.TestCase):
             output_ids = parquet.read_table(output)["record_id"].to_pylist()
 
         self.assertEqual(output_ids, ["stereo-a", "keep"])
-        self.assertEqual(result["removed_records"], 3)
-        self.assertEqual(result["removed_molecules"], 2)
+        self.assertEqual(result["counts"]["removed_records"], 3)
+        self.assertEqual(result["counts"]["removed_molecules"], 2)
         self.assertEqual(
             output_file.schema_arrow.metadata[b"molecule_identity"],
             b"exact smiles_canonical equality",

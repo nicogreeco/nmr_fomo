@@ -62,6 +62,7 @@ Transformation commands use the same conventions where applicable:
 - input Parquet paths are positional;
 - outputs use `--output`, or explicit role names when there are two outputs;
 - `--batch-size` bounds each Arrow batch and defaults to 50,000 rows;
+- `--report-output` selects the processing JSON path;
 - `--overwrite` permits replacement only after temporary outputs are complete;
 - `--no-progress` disables progress output for commands that report progress.
 
@@ -69,6 +70,13 @@ Canonical Parquet outputs are written to hidden `.partial` files and promoted
 only after a successful close. The scripts preserve the input schema and add
 small footer fields describing the post-processing step, repository-relative
 script path, inputs, identity policy, and relevant row counts.
+
+By default, every command writes a compact report beside its primary output.
+Reports use the same `stage`, `inputs`, `outputs`, and `counts` fields,
+with an optional `details` section only for useful breakdowns. These JSONs are
+intended as DVC metrics/artifacts: they record transformation results without
+repeating the command, Git revision, DVC hashes, or environment already
+captured by the pipeline.
 
 `common.py` contains the small shared implementation for schema validation,
 compatible-RDKit checks, temporary output paths, progress bars, exact-SMILES
@@ -187,6 +195,8 @@ PYTHONPATH=scripts python scripts/data/postprocess/prepare_admet_datasets.py \
 Because the input has already passed the common filter, the resulting ADMET
 Parquets and ADMET-disjoint train pool do not require another filtering pass.
 The command writes `preparation_report.json` beside the endpoint directories.
+It follows the common report schema and retains only aggregate matching and
+cohort-cleanup counts.
 
 ## `calculate_mol_properties.py`
 
@@ -236,6 +246,8 @@ Use `--nmrsolver-parquet` or `--nmrgym-parquet` to analyze those independent
 shift-only components. For candidate collections with different filenames,
 use `--train-val-parquet`, `--test-benchmark-parquet`, `--analytics-dir`, and
 optionally `--skip-admet`.
+Analytics writes `processing_report.json` inside its analytics directory.
+Pass `--overwrite` when intentionally replacing an existing report.
 
 ## `admet_overlap_audit.ipynb`
 

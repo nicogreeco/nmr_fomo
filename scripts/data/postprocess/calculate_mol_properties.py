@@ -40,6 +40,11 @@ from rdkit.Chem import (
 )
 
 from data.postprocess.common import open_canonical_parquet
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 # Invalid source structures are represented explicitly in the CSV. Suppress
@@ -346,18 +351,22 @@ def export_molecular_properties(
         temporary_path.unlink(missing_ok=True)
         raise
 
+    input_rows = parquet_file.metadata.num_rows
+    if rows_written != input_rows:
+        temporary_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "molecular-property row count does not match the input dataset"
+        )
     temporary_path.replace(output_file_path)
     return {
-        "input": str(input_file_path),
-        "output": str(output_file_path),
-        "rows": rows_written,
-        "status_counts": dict(sorted(status_counts.items())),
-        "workers": workers,
-        "batch_size": batch_size,
-        "records_per_task": records_per_task,
-        "morgan_radius": MORGAN_RADIUS,
-        "morgan_bits": MORGAN_FP_SIZE,
-        "maccs_output_bits": MACCS_OUTPUT_BITS,
+        "stage": "calculate_mol_properties",
+        "inputs": {"dataset": str(input_file_path)},
+        "outputs": {"molecular_properties": str(output_file_path)},
+        "counts": {
+            "input_records": input_rows,
+            "output_records": rows_written,
+        },
+        "details": {"rdkit_status": dict(sorted(status_counts.items()))},
     }
 
 
@@ -405,6 +414,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="disable periodic progress messages",
     )
     parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: beside the output CSV)",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="replace an existing output CSV after a successful run",
@@ -414,6 +428,12 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    output = args.output or default_output_path(args.input)
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(output),
+        [args.input, output],
+        overwrite=args.overwrite,
+    )
     result = export_molecular_properties(
         args.input,
         args.output,
@@ -424,13 +444,8 @@ def main() -> None:
         show_progress=not args.no_progress,
         overwrite=args.overwrite,
     )
-    statuses = ", ".join(
-        f"{name}={count}" for name, count in result["status_counts"].items()
-    )
-    print(
-        f"Wrote {result['rows']:,} molecular-property rows to {result['output']} "
-        f"({statuses})"
-    )
+    write_processing_report(result, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

@@ -113,7 +113,6 @@ def load_property_releases(
                 "rows": rows,
                 "keyed_rows": keyed_rows,
                 "invalid_rows": invalid_rows,
-                "unique_keys": len(release_keys),
             }
 
         shared_keys = (
@@ -191,7 +190,6 @@ def index_requested_nmr_records(
         "input_invalid_or_unkeyed_records": invalid_or_unkeyed_rows,
         "requested_molecules": len(requested_keys),
         "matched_molecules": len(record_ids_by_key),
-        "matched_records": len(matched_record_ids),
     }
     return input_file, record_ids_by_key, summary
 
@@ -297,6 +295,7 @@ def prepare_admet_datasets(
     output_root: str | Path,
     train_output_path: str | Path,
     *,
+    report_output_path: str | Path | None = None,
     smiles_column: str = "Drug",
     label_column: str = "Y",
     batch_size: int = 50_000,
@@ -348,7 +347,17 @@ def prepare_admet_datasets(
     )
     planned_parquets["train"] = (final_train, train_temporary)
     all_temporary_paths.append(train_temporary)
-    report_output = cohort_root / "preparation_report.json"
+    report_output = (
+        cohort_root / "preparation_report.json"
+        if report_output_path is None
+        else Path(report_output_path)
+    )
+    if report_output.suffix.lower() != ".json":
+        raise ValueError(
+            f"processing report must have a .json suffix: {report_output}"
+        )
+    if report_output.resolve() == input_file_path.resolve():
+        raise ValueError("processing report must not replace the input dataset")
     report_temporary = prepare_temporary_file(report_output, overwrite)
     all_temporary_paths.append(report_temporary)
 
@@ -421,14 +430,15 @@ def prepare_admet_datasets(
                     {
                         "endpoint": endpoint,
                         "split": split,
-                        "property_rows": len(release_data["rows"]),
-                        "property_invalid_or_unkeyed_rows": release_data[
-                            "invalid_rows"
+                        "property_records": len(release_data["rows"]),
+                        "invalid_property_records": release_data["invalid_rows"],
+                        "matched_records": label_stats[
+                            "matched_records_before_label_cleanup"
                         ],
-                        "property_unique_molecules": release_data["unique_keys"],
-                        **label_stats,
-                        "csv_output": str(csv_output),
-                        "parquet_output": str(parquet_output),
+                        "output_records": label_stats["output_records"],
+                        "discordant_molecules": label_stats[
+                            "discordant_molecules"
+                        ],
                     }
                 )
 
@@ -461,15 +471,21 @@ def prepare_admet_datasets(
             raise RuntimeError("ADMET-disjoint train row count is inconsistent")
 
         report = {
-            "input": str(input_file_path),
-            "tdc_root": str(property_root),
-            "output_root": str(cohort_root),
-            "train_output": str(final_train),
-            "match_policy": IDENTITY_DESCRIPTION,
-            "input_summary": input_summary,
-            "release_results": release_results,
-            "removed_pretraining_records": len(all_matched_record_ids),
-            "train_output_rows": train_rows,
+            "stage": "prepare_admet_datasets",
+            "inputs": {
+                "dataset": str(input_file_path),
+                "admet_source": str(property_root),
+            },
+            "outputs": {
+                "train_val": str(final_train),
+                "admet_root": str(cohort_root),
+            },
+            "counts": {
+                **input_summary,
+                "removed_pretraining_records": len(all_matched_record_ids),
+                "train_output_records": train_rows,
+            },
+            "details": {"cohorts": release_results},
         }
         report_temporary.write_text(
             json.dumps(report, indent=2) + "\n",
@@ -502,6 +518,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smiles-column", default="Drug")
     parser.add_argument("--label-column", default="Y")
     parser.add_argument("--batch-size", type=int, default=50_000)
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: <output-root>/preparation_report.json)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     return parser
@@ -509,18 +530,24 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
-    report = prepare_admet_datasets(
+    prepare_admet_datasets(
         args.input,
         args.tdc_root,
         args.output_root,
         args.train_output,
+        report_output_path=args.report_output,
         smiles_column=args.smiles_column,
         label_column=args.label_column,
         batch_size=args.batch_size,
         overwrite=args.overwrite,
         show_progress=not args.no_progress,
     )
-    print(json.dumps(report, indent=2))
+    report_path = (
+        args.report_output
+        if args.report_output is not None
+        else args.output_root / "preparation_report.json"
+    )
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+canonicalize:
+  row_group_size: 50000
+  simnmr_workers: 4
+  simnmr_records_per_task: 256
+
+postprocess:
+  batch_size: 50000
+
+mol_properties:
+  batch_size: 50000
+  records_per_task: 5000
+  workers: 4
+
+analytics:
+  sample_per_group: 20000

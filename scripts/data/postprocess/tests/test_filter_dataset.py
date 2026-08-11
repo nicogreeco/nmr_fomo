@@ -150,9 +150,9 @@ class FilterDatasetTest(unittest.TestCase):
         cleaned_ids = cleaned["record_id"].to_pylist()
         removed_by_id = {row["record_id"]: row for row in removed}
 
-        self.assertEqual(result["input_rows"], 19)
-        self.assertEqual(result["output_rows"], 7)
-        self.assertEqual(result["removed_rows"], 12)
+        self.assertEqual(result["counts"]["input_records"], 19)
+        self.assertEqual(result["counts"]["output_records"], 7)
+        self.assertEqual(result["counts"]["removed_records"], 12)
 
         self.assertIn("duplicate-best", cleaned_ids)
         self.assertNotIn("duplicate-less", cleaned_ids)

@@ -33,6 +33,11 @@ from data.canonicalize.common import (
     write_canonical_parquet,
 )
 from data.schema import CanonicalRecord
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SOURCE_NAME = "SimNMR-PubChem"
@@ -518,6 +523,11 @@ def parse_args() -> argparse.Namespace:
             "(default: beside the output)"
         ),
     )
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: beside the canonical Parquet)",
+    )
     return parser.parse_args()
 
 
@@ -553,6 +563,11 @@ def main() -> None:
             f"refusing to overwrite {rejection_report_path}; pass --overwrite "
             "to replace it"
         )
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(args.output),
+        [args.input, args.output, rejection_report_path],
+        overwrite=args.overwrite,
+    )
     rejection_report_path.parent.mkdir(parents=True, exist_ok=True)
     partial_report_path = rejection_report_path.with_name(
         f".{rejection_report_path.name}.partial"
@@ -585,11 +600,20 @@ def main() -> None:
         )
 
     partial_report_path.replace(rejection_report_path)
-    print(f"wrote {record_count} SimNMR-PubChem records to {args.output}")
-    print(
-        f"skipped {rejection_report.count} records with unprocessable RDKit "
-        f"chemical metadata; details: {rejection_report_path}"
-    )
+    report = {
+        "stage": "canonicalize_simnmr_pubchem",
+        "inputs": {"source": str(lmdb_path)},
+        "outputs": {
+            "dataset": str(args.output),
+            "rejected_records": str(rejection_report_path),
+        },
+        "counts": {
+            "output_records": record_count,
+            "rejected_records": rejection_report.count,
+        },
+    }
+    write_processing_report(report, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,11 @@ from pyarrow import compute, parquet
 
 from data.canonicalize.common import normalize_modality_lists
 from data.postprocess.common import open_canonical_parquet
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SCRIPT_PATH = "scripts/data/postprocess/filter_dataset.py"
@@ -434,13 +439,18 @@ def clean_parquet(
         reason_counts.update(str(row["removal_reason"]).split(";"))
 
     return {
-        "input": str(input_file_path),
-        "output": str(cleaned_path),
-        "removed_output": str(removed_path),
-        "input_rows": input_rows,
-        "output_rows": rows_written,
-        "removed_rows": len(removed_rows),
-        "reason_counts": dict(sorted(reason_counts.items())),
+        "stage": "filter_dataset",
+        "inputs": {"dataset": str(input_file_path)},
+        "outputs": {
+            "dataset": str(cleaned_path),
+            "removed_records": str(removed_path),
+        },
+        "counts": {
+            "input_records": input_rows,
+            "output_records": rows_written,
+            "removed_records": len(removed_rows),
+        },
+        "details": {"removal_reasons": dict(sorted(reason_counts.items()))},
     }
 
 
@@ -466,6 +476,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="Parquet rows copied at once (default: 50000)",
     )
     parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: beside the cleaned output)",
+    )
+    parser.add_argument(
         "--overwrite",
         action="store_true",
         help="replace existing cleaned and removal-report files",
@@ -475,6 +490,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    default_cleaned, default_removed = default_output_paths(args.input)
+    cleaned_output = args.output or default_cleaned
+    removed_output = args.removed_output or default_removed
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(cleaned_output),
+        [args.input, cleaned_output, removed_output],
+        overwrite=args.overwrite,
+    )
     result = clean_parquet(
         args.input,
         args.output,
@@ -482,18 +505,8 @@ def main() -> None:
         batch_size=args.batch_size,
         overwrite=args.overwrite,
     )
-    reasons = ", ".join(
-        f"{reason}={count:,}"
-        for reason, count in result["reason_counts"].items()
-    )
-    print(
-        f"Wrote {result['output_rows']:,} of {result['input_rows']:,} records "
-        f"to {result['output']}"
-    )
-    print(
-        f"Wrote {result['removed_rows']:,} removed record IDs to "
-        f"{result['removed_output']} ({reasons})"
-    )
+    write_processing_report(result, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

@@ -49,6 +49,12 @@ contained 105,764,875 candidate rows; 63 rows for which RDKit could not derive
 coherent chemical metadata are recorded in the adjacent JSONL rejection report
 rather than being serialized with incomplete structure fields.
 
+Each converter also writes a compact deterministic processing JSON beside its
+Parquet (`<output>_report.json`). It records the stage, input, output, and
+record counts; use `--report-output` when a DVC stage needs a different path.
+SimNMR keeps its separate JSONL rejection audit because that file identifies
+the individual skipped source rows.
+
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/analysis/analyze_parquet.py \
   datasets/<source>/all.parquet \

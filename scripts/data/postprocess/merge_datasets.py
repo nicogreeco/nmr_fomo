@@ -16,6 +16,11 @@ from data.postprocess.common import (
     prepare_parquet_output,
     progress_bar,
 )
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SCRIPT_PATH = "scripts/data/postprocess/merge_datasets.py"
@@ -60,7 +65,6 @@ def merge_datasets(
     progress = progress_bar(total_input_rows, f"Writing {output.name}", show_progress)
     writer = parquet.ParquetWriter(temporary, output_schema, compression="zstd")
     rows_written = 0
-    row_groups_written = 0
     try:
         for parquet_file in parquet_files:
             for batch in parquet_file.iter_batches(
@@ -71,7 +75,6 @@ def merge_datasets(
                 table = normalize_modality_lists(table)
                 writer.write_table(table, row_group_size=table.num_rows)
                 rows_written += table.num_rows
-                row_groups_written += 1
                 if progress is not None:
                     progress.update(batch.num_rows)
     except Exception:
@@ -90,12 +93,14 @@ def merge_datasets(
     temporary.replace(output)
 
     return {
-        "inputs": [str(path) for path in paths],
-        "output": str(output),
-        "input_files": len(paths),
-        "rows": rows_written,
-        "row_groups": row_groups_written,
-        "bytes": output.stat().st_size,
+        "stage": "merge_datasets",
+        "inputs": {"datasets": [str(path) for path in paths]},
+        "outputs": {"dataset": str(output)},
+        "counts": {
+            "input_datasets": len(paths),
+            "input_records": total_input_rows,
+            "output_records": rows_written,
+        },
     }
 
 
@@ -109,6 +114,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--batch-size", type=int, default=50_000)
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: <output>_report.json)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     return parser
@@ -116,6 +126,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(args.output),
+        [*args.inputs, args.output],
+        overwrite=args.overwrite,
+    )
     result = merge_datasets(
         args.inputs,
         args.output,
@@ -123,7 +138,8 @@ def main() -> None:
         overwrite=args.overwrite,
         show_progress=not args.no_progress,
     )
-    print(json.dumps(result, indent=2))
+    write_processing_report(result, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

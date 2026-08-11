@@ -23,6 +23,8 @@ import polars as pl
 from matplotlib.lines import Line2D
 from matplotlib.ticker import PercentFormatter
 
+from data.reporting import prepare_report_output, write_processing_report
+
 MAIN_DATASETS = ("train_val", "test_benchmark")
 ADMET_ENDPOINTS = ("ames", "ld50_zhu", "solubility_aqsoldb")
 ADMET_SPLITS = ("train_val", "test")
@@ -113,6 +115,16 @@ def parse_args() -> argparse.Namespace:
         "--skip-admet",
         action="store_true",
         help="analyze only the two main datasets and skip unchanged ADMET cohorts",
+    )
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: <analytics-dir>/processing_report.json)",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace an existing processing report",
     )
     return parser.parse_args()
 
@@ -908,7 +920,7 @@ def analyze_main_dataset(
 def analyze_nmrsolver_dataset(
     parquet_path: Path,
     sample_per_group: int,
-) -> None:
+) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
         f"{parquet_path.stem}_mol_properties.csv"
@@ -919,7 +931,8 @@ def analyze_nmrsolver_dataset(
 
     print(f"Analyzing NMR-Solver dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
-    nmrsolver_inventory(records).write_csv(
+    inventory = nmrsolver_inventory(records)
+    inventory.write_csv(
         analytics_dir / "nmrsolver_source_inventory.csv"
     )
     molecular = molecular_frame_from_aligned_csv(records, properties_path)
@@ -945,12 +958,13 @@ def analyze_nmrsolver_dataset(
         first_rows_sample_only=True,
     )
     print(f"Wrote NMR-Solver analytics to {analytics_dir}", flush=True)
+    return analytics_dir, int(inventory["records"].sum())
 
 
 def analyze_nmrgym_dataset(
     parquet_path: Path,
     sample_per_group: int,
-) -> None:
+) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
         f"{parquet_path.stem}_mol_properties.csv"
@@ -961,7 +975,8 @@ def analyze_nmrgym_dataset(
 
     print(f"Analyzing NMRGym dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
-    inventory_by_source(records, "nmrgym").write_csv(
+    inventory = inventory_by_source(records, "nmrgym")
+    inventory.write_csv(
         analytics_dir / "nmrgym_source_inventory.csv"
     )
     molecular = molecular_frame_from_aligned_csv(records, properties_path)
@@ -985,6 +1000,8 @@ def analyze_nmrgym_dataset(
         first_rows_sample_only=True,
     )
     print(f"Wrote NMRGym analytics to {analytics_dir}", flush=True)
+    total_records = inventory.filter(pl.col("source") == "ALL")["records"].item()
+    return analytics_dir, int(total_records)
 
 
 def admet_records(cleaned_root: Path) -> pl.LazyFrame:
@@ -1142,17 +1159,61 @@ def main() -> None:
         )
 
     if args.nmrsolver_parquet is not None:
-        analyze_nmrsolver_dataset(
+        properties_path = args.nmrsolver_parquet.with_name(
+            f"{args.nmrsolver_parquet.stem}_mol_properties.csv"
+        )
+        default_analytics_dir = (
+            args.nmrsolver_parquet.parent / "analytics" / "simnmr"
+        )
+        report_path, report_temporary = prepare_report_output(
+            args.report_output
+            or default_analytics_dir / "processing_report.json",
+            [args.nmrsolver_parquet, properties_path],
+            overwrite=args.overwrite,
+        )
+        analytics_dir, record_count = analyze_nmrsolver_dataset(
             args.nmrsolver_parquet,
             args.sample_per_group,
         )
+        report = {
+            "stage": "analyze_cleaned_datasets",
+            "inputs": {
+                "dataset": str(args.nmrsolver_parquet),
+                "molecular_properties": str(properties_path),
+            },
+            "outputs": {"analytics": str(analytics_dir)},
+            "counts": {"input_records": record_count},
+        }
+        write_processing_report(report, report_path, report_temporary)
         return
 
     if args.nmrgym_parquet is not None:
-        analyze_nmrgym_dataset(
+        properties_path = args.nmrgym_parquet.with_name(
+            f"{args.nmrgym_parquet.stem}_mol_properties.csv"
+        )
+        default_analytics_dir = (
+            args.nmrgym_parquet.parent / "analytics" / "nmrgym"
+        )
+        report_path, report_temporary = prepare_report_output(
+            args.report_output
+            or default_analytics_dir / "processing_report.json",
+            [args.nmrgym_parquet, properties_path],
+            overwrite=args.overwrite,
+        )
+        analytics_dir, record_count = analyze_nmrgym_dataset(
             args.nmrgym_parquet,
             args.sample_per_group,
         )
+        report = {
+            "stage": "analyze_cleaned_datasets",
+            "inputs": {
+                "dataset": str(args.nmrgym_parquet),
+                "molecular_properties": str(properties_path),
+            },
+            "outputs": {"analytics": str(analytics_dir)},
+            "counts": {"input_records": record_count},
+        }
+        write_processing_report(report, report_path, report_temporary)
         return
 
     cleaned_root = args.cleaned_root
@@ -1168,6 +1229,17 @@ def main() -> None:
             or cleaned_root / "test_benchmark.parquet"
         ),
     }
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or analytics_dir / "processing_report.json",
+        [
+            *main_dataset_paths.values(),
+            *[
+                path.with_name(f"{path.stem}_mol_properties.csv")
+                for path in main_dataset_paths.values()
+            ],
+        ],
+        overwrite=args.overwrite,
+    )
     inventories = [
         analyze_main_dataset(
             main_dataset_paths[dataset_name],
@@ -1184,6 +1256,37 @@ def main() -> None:
     )
     if not args.skip_admet:
         analyze_admet(cleaned_root, analytics_dir, args.sample_per_group)
+    total_by_dataset = {
+        dataset_name: int(
+            inventory.filter(pl.col("source") == "ALL")["records"].item()
+        )
+        for dataset_name, inventory in zip(MAIN_DATASETS, inventories)
+    }
+    report = {
+        "stage": "analyze_cleaned_datasets",
+        "inputs": {
+            **{
+                dataset_name: str(path)
+                for dataset_name, path in main_dataset_paths.items()
+            },
+            **(
+                {}
+                if args.skip_admet
+                else {"admet_root": str(cleaned_root / "admet")}
+            ),
+        },
+        "outputs": {"analytics": str(analytics_dir)},
+        "counts": {
+            **{
+                f"{dataset_name}_records": count
+                for dataset_name, count in total_by_dataset.items()
+            },
+            "admet_cohorts": 0
+            if args.skip_admet
+            else len(ADMET_ENDPOINTS) * len(ADMET_SPLITS),
+        },
+    }
+    write_processing_report(report, report_path, report_temporary)
     print(f"Wrote cleaned-dataset analytics to {analytics_dir}")
 
 

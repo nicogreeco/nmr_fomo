@@ -11,6 +11,20 @@ model.
   streaming Parquet dataset.
 - `canonicalize/` contains source-specific conversion and dataset-analysis tools.
 - `postprocess/` contains derived-data and benchmark-preparation utilities.
+- `reporting.py` writes the small JSON processing reports shared by both
+  conversion and post-processing commands.
+
+Raw inputs are pinned by the `.dvc` files under `datasets/raw/`.
+`datasets/raw/sources.yaml` records their upstream identity and role without
+duplicating DVC hashes, while the tunable pipeline defaults live in the root
+`params.yaml`.
+
+Every maintained pipeline transformation, plus final analytics, writes a
+deterministic processing report. The common top-level fields are `stage`,
+`inputs`, `outputs`, and `counts`; `details` appears only for useful
+stage-specific breakdowns such as filtering reasons or ADMET cohorts. Git and
+DVC already record code, commands, parameters, and exact data hashes, so
+reports intentionally omit timestamps, hosts, and library dumps.
 
 The post-processing commands, including benchmark disjoining, common
 filtering, ADMET preparation, same-order RDKit molecular-property CSV

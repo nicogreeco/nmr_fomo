@@ -130,7 +130,10 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                 show_progress=False,
             )
 
-            self.assertEqual(report["removed_pretraining_records"], 2)
+            self.assertEqual(
+                report["counts"]["removed_pretraining_records"],
+                2,
+            )
             self.assertEqual(
                 parquet.read_table(train_output)["record_id"].to_pylist(),
                 ["nitrogen"],

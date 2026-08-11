@@ -85,9 +85,9 @@ class CalculateMolecularPropertiesTest(unittest.TestCase):
             output_path = default_output_path(input_path)
             rows = self.read_rows(output_path)
 
-        self.assertEqual(result["rows"], 5)
+        self.assertEqual(result["counts"]["output_records"], 5)
         self.assertEqual(
-            result["status_counts"],
+            result["details"]["rdkit_status"],
             {"invalid_smiles": 1, "missing_smiles": 1, "ok": 3},
         )
         self.assertEqual(

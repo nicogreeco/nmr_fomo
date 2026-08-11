@@ -88,8 +88,8 @@ class MoveBenchmarkOverlapsToTrainTest(unittest.TestCase):
 
         self.assertEqual(test_ids, ["keep"])
         self.assertEqual(train_ids, ["base", "move-a", "move-b"])
-        self.assertEqual(result["appended_records"], 2)
-        self.assertEqual(result["moved_molecules"], 1)
+        self.assertEqual(result["counts"]["moved_records"], 2)
+        self.assertEqual(result["counts"]["moved_molecules"], 1)
         self.assertEqual(train_metadata[b"moved_record_count"], b"2")
 
 

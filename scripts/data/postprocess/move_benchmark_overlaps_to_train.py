@@ -26,6 +26,11 @@ from data.postprocess.common import (
     record_ids_for_smiles,
     write_filtered_parquet,
 )
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SCRIPT_PATH = "scripts/data/postprocess/move_benchmark_overlaps_to_train.py"
@@ -212,18 +217,24 @@ def move_benchmark_overlaps_to_train(
         raise
 
     return {
-        "benchmark_input": str(benchmark),
-        "reference": str(reference),
-        "train_input": str(train),
-        "test_output": str(test_output),
-        "train_output": str(train_output),
-        "benchmark_input_rows": benchmark_file.metadata.num_rows,
-        "test_output_rows": test_rows,
-        "train_input_rows": base_train_rows,
-        "appended_records": appended_rows,
-        "moved_molecules": len(matching_smiles),
-        "train_output_rows": base_train_rows + appended_rows,
-        "molecule_identity": IDENTITY_DESCRIPTION,
+        "stage": "move_benchmark_overlaps_to_train",
+        "inputs": {
+            "benchmark": str(benchmark),
+            "reference": str(reference),
+            "train_val": str(train),
+        },
+        "outputs": {
+            "benchmark": str(test_output),
+            "train_val": str(train_output),
+        },
+        "counts": {
+            "benchmark_input_records": benchmark_file.metadata.num_rows,
+            "benchmark_output_records": test_rows,
+            "train_input_records": base_train_rows,
+            "moved_records": appended_rows,
+            "moved_molecules": len(matching_smiles),
+            "train_output_records": base_train_rows + appended_rows,
+        },
     }
 
 
@@ -235,6 +246,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument("--test-output", required=True, type=Path)
     parser.add_argument("--train-output", required=True, type=Path)
     parser.add_argument("--batch-size", type=int, default=50_000)
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: beside --test-output)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     return parser
@@ -242,6 +258,17 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(args.test_output),
+        [
+            args.benchmark,
+            args.reference,
+            args.train,
+            args.test_output,
+            args.train_output,
+        ],
+        overwrite=args.overwrite,
+    )
     result = move_benchmark_overlaps_to_train(
         args.benchmark,
         args.reference,
@@ -252,7 +279,8 @@ def main() -> None:
         overwrite=args.overwrite,
         show_progress=not args.no_progress,
     )
-    print(json.dumps(result, indent=2))
+    write_processing_report(result, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

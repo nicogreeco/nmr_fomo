@@ -110,6 +110,11 @@ and NMRGym, applies the common filter, and only then prepares the full-InChIKey
 ADMET cohorts. Dataset counts are updated only after that recipe has been run
 and audited.
 
+Raw source bytes are tracked with DVC under `datasets/raw/`; their compact
+provenance manifest is [sources.yaml](datasets/raw/sources.yaml). Reproducible
+pipeline defaults are in [params.yaml](params.yaml), and each maintained data
+stage emits a small structured JSON report for DVC to retain with its outputs.
+
 ## How to navigate the project
 
 Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:

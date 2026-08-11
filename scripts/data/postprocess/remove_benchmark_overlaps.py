@@ -21,6 +21,11 @@ from data.postprocess.common import (
     record_ids_for_smiles,
     write_filtered_parquet,
 )
+from data.reporting import (
+    default_report_path,
+    prepare_report_output,
+    write_processing_report,
+)
 
 
 SCRIPT_PATH = "scripts/data/postprocess/remove_benchmark_overlaps.py"
@@ -61,7 +66,7 @@ def remove_benchmark_overlaps(
     )
     remaining_smiles = set(smiles_index)
     matched_smiles: set[str] = set()
-    matches_by_input: dict[str, int] = {}
+    matches_by_input = {str(path): 0 for path in references}
 
     for reference_path, reference_file in zip(references, comparison_files):
         new_matches = find_exact_smiles_matches(
@@ -115,15 +120,19 @@ def remove_benchmark_overlaps(
         raise
 
     return {
-        "input": str(input_file_path),
-        "comparisons": [str(path) for path in references],
-        "output": str(output),
-        "input_rows": input_file.metadata.num_rows,
-        "output_rows": rows_written,
-        "removed_records": len(record_ids_to_remove),
-        "removed_molecules": len(matched_smiles),
-        "new_molecule_matches_by_comparison": matches_by_input,
-        "molecule_identity": IDENTITY_DESCRIPTION,
+        "stage": "remove_benchmark_overlaps",
+        "inputs": {
+            "dataset": str(input_file_path),
+            "comparisons": [str(path) for path in references],
+        },
+        "outputs": {"dataset": str(output)},
+        "counts": {
+            "input_records": input_file.metadata.num_rows,
+            "output_records": rows_written,
+            "removed_records": len(record_ids_to_remove),
+            "removed_molecules": len(matched_smiles),
+        },
+        "details": {"new_molecule_matches_by_comparison": matches_by_input},
     }
 
 
@@ -138,6 +147,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--batch-size", type=int, default=50_000)
+    parser.add_argument(
+        "--report-output",
+        type=Path,
+        help="processing JSON (default: <output>_report.json)",
+    )
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--no-progress", action="store_true")
     return parser
@@ -145,6 +159,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    report_path, report_temporary = prepare_report_output(
+        args.report_output or default_report_path(args.output),
+        [args.input, *args.comparisons, args.output],
+        overwrite=args.overwrite,
+    )
     result = remove_benchmark_overlaps(
         args.input,
         args.comparisons,
@@ -153,7 +172,8 @@ def main() -> None:
         overwrite=args.overwrite,
         show_progress=not args.no_progress,
     )
-    print(json.dumps(result, indent=2))
+    write_processing_report(result, report_path, report_temporary)
+    print(f"Wrote processing report to {report_path}")
 
 
 if __name__ == "__main__":

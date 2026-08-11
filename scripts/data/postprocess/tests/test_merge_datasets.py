@@ -69,7 +69,8 @@ class MergeDatasetsTest(unittest.TestCase):
             output_ids = parquet.read_table(output)["record_id"].to_pylist()
 
         self.assertEqual(output_ids, ["a", "b", "c"])
-        self.assertEqual(result["rows"], 3)
+        self.assertEqual(result["stage"], "merge_datasets")
+        self.assertEqual(result["counts"]["output_records"], 3)
 
 
 if __name__ == "__main__":
