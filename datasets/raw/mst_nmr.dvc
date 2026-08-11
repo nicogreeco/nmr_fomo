@@ -1,0 +1,6 @@
+outs:
+- md5: 8038d2ff948ae1297b1a501f33d62d6a.dir
+  size: 3019923456
+  nfiles: 3
+  hash: md5
+  path: mst_nmr

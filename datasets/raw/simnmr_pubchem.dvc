@@ -1,0 +1,6 @@
+outs:
+- md5: b57c6154b87269d54e63548abc95d4a3.dir
+  size: 400000000000
+  nfiles: 1
+  hash: md5
+  path: simnmr_pubchem

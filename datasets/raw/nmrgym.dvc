@@ -1,0 +1,6 @@
+outs:
+- md5: be497787a7c96ca91434127909a71b2b.dir
+  size: 694039644
+  nfiles: 3
+  hash: md5
+  path: nmrgym

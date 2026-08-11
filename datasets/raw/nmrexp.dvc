@@ -1,0 +1,6 @@
+outs:
+- md5: c99b6687856a6204d70183af801203aa.dir
+  size: 3359444992
+  nfiles: 3
+  hash: md5
+  path: nmrexp
