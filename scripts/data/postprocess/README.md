@@ -1,270 +1,244 @@
 # Post-processing tools
 
-These tools operate on already-canonical datasets or on derived audit outputs.
+These commands operate on canonical schema-v2 Parquet files. They do not
+modify canonical source files in place. Run them from the repository root with
+`scripts` on `PYTHONPATH` and use the main NMR environment.
 
+```bash
+source ~/.bashrc
+nmr-env main
+```
 
-Run the commands from the repository root with `scripts` on `PYTHONPATH`.
+## Final collection workflow
+
+The maintained preparation order is:
+
+```text
+merge rich train/validation inputs
+merge rich benchmark-test inputs
+        |
+        v
+move benchmark molecules found in SimNMR into train/validation
+        |
+        v
+remove residual benchmark molecules found in:
+  - the extended rich train/validation pool
+  - NMRGym
+        |
+        v
+apply the common filter to the final train, test, SimNMR, and NMRGym pools
+        |
+        v
+prepare ADMET cohorts from the cleaned extended train/validation pool
+and write the cleaned ADMET-disjoint train/validation dataset
+        |
+        v
+calculate molecular-property sidecars for final Parquet files
+        |
+        v
+generate final analytics
+```
+
+All NMR-to-NMR overlap operations use exact equality of the existing
+`smiles_canonical` strings. The canonical converters generate these strings
+with RDKit and record the RDKit version; overlap scripts require compatible
+input versions. This avoids reparsing very large comparison datasets and keeps
+stereoisomers distinct.
+
+ADMET is different because its property SMILES come from an external release.
+`prepare_admet_datasets.py` calculates full RDKit InChIKeys for both sides and
+requires exact full-key equality. Connectivity-only matching is not part of
+the maintained pipeline.
+
+Intermediate names should describe their current role. Final collection files
+should use stable names such as `train_val.parquet`, `test_benchmark.parquet`,
+`simnmr.parquet`, and `nmrgym.parquet`; historical names such as `double` and
+`extended` are not needed in the final release.
+
+## Common command conventions
+
+Transformation commands use the same conventions where applicable:
+
+- input Parquet paths are positional;
+- outputs use `--output`, or explicit role names when there are two outputs;
+- `--batch-size` bounds each Arrow batch and defaults to 50,000 rows;
+- `--overwrite` permits replacement only after temporary outputs are complete;
+- `--no-progress` disables progress output for commands that report progress.
+
+Canonical Parquet outputs are written to hidden `.partial` files and promoted
+only after a successful close. The scripts preserve the input schema and add
+small footer fields describing the post-processing step, repository-relative
+script path, inputs, identity policy, and relevant row counts.
+
+`common.py` contains the small shared implementation for schema validation,
+compatible-RDKit checks, temporary output paths, progress bars, exact-SMILES
+indexing, and record-ID filtering. It is an internal module, not a command.
 
 ## `merge_datasets.py`
 
-Concatenates compatible canonical Parquet files into one v2 file. It requires
-the current Arrow schema, canonical schema version, and a common RDKit version.
-It preserves input rows in the requested order and does not deduplicate
-molecules, assign splits, or remove benchmark overlap.
-
-## `disjoin_benchmark_from_train.py`
-
-This is a deliberately narrow, ad hoc benchmark-preparation helper. The first
-Parquet is always the dataset being filtered; every later Parquet is only a
-comparison dataset and remains unchanged. Input order therefore determines the
-direction of removal. The rich train/validation disjoin used for the published
-benchmark starts with:
+Concatenates compatible canonical Parquet files in the requested order. It
+does not deduplicate, assign splits, filter records, or remove overlap.
 
 ```bash
-PYTHONPATH=scripts python \
-  scripts/data/postprocess/disjoin_benchmark_from_train.py \
-  datasets/merged/merged_benchmark_test.parquet \
-  datasets/merged/merged_train_val_all.parquet \
-  --output datasets/merged/merged_benchmark_test_disjoint.parquet \
-  --overwrite
+PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py \
+  datasets/nmrpeak_mst/train.parquet \
+  datasets/nmrpeak_mst/val.parquet \
+  datasets/nmrpeak_nmrexp/train.parquet \
+  datasets/nmrpeak_nmrexp/val.parquet \
+  datasets/nmrtrans/train.parquet \
+  datasets/nmrtrans/val.parquet \
+  --output datasets/intermediate/rich_train_val.parquet
 ```
 
-This removes benchmark-test records whose molecular connectivity is present in
-the train/validation collection. Reversing the first two inputs would instead
-remove overlapping train/validation records.
+Call the same command separately for the published source-test files. Input
+order is retained, which is useful for reproducible source inventories but
+must not be mistaken for randomization.
 
-After common cleaning, the published benchmark uses the same directional
-helper a second time against the cleaned experimental NMRGym component:
+## `move_benchmark_overlaps_to_train.py`
 
-```bash
-PYTHONPATH=scripts python \
-  scripts/data/postprocess/disjoin_benchmark_from_train.py \
-  datasets/merged/merged_benchmark_test_disjoint_cleaned.parquet \
-  datasets/cleaned/nmrgym.parquet \
-  --output datasets/cleaned/test_benchmark.parquet \
-  --overwrite
-```
-
-The two passes remove overlap with different training resources but use the
-same connectivity-InChIKey identity rule. Molecular-property CSVs and
-analytics must be regenerated from the final second-pass benchmark.
-
-The script compares connectivity InChIKeys and removes every record in the
-first input whose connectivity key appears in a later input. This conservative
-rule is intentional for this benchmark split, but it can group stereoisomers
-with the same connectivity.
-
-The script does not modify any input file. It preserves all Parquet
-footer metadata from the first input and adds the comparison inputs, identity
-rule, script path, and removed-record count. Output is written to a hidden
-`.partial` file and promoted only after a successful close.
-
-Only the connectivity index of the first input is kept in memory. Later
-comparison files are streamed, so their size does not determine peak memory.
-
-## `create_double_disjoint_extended.py`
-
-Creates an experimental exact-canonical-SMILES variant without changing the
-connectivity-based release recipe above. It first removes benchmark SMILES
-present in the rich train/validation reference. It then scans the remaining
-benchmark SMILES against NMR-Solver, removes those matches from the benchmark,
-and appends only that NMR-Solver-only group to an already ADMET-disjoint rich
-train/validation file.
+Streams one large reference dataset, normally SimNMR-PubChem, and finds exact
+canonical-SMILES matches in the benchmark. Matching rich benchmark records are
+removed from the test output and appended unchanged to the train/validation
+output. Only the benchmark SMILES-to-record-ID index is retained in memory.
 
 ```bash
 PYTHONPATH=scripts python \
-  scripts/data/postprocess/create_double_disjoint_extended.py \
-  datasets/merged/merged_benchmark_test.parquet \
-  datasets/merged/merged_train_val_all.parquet \
+  scripts/data/postprocess/move_benchmark_overlaps_to_train.py \
+  datasets/intermediate/rich_test.parquet \
   datasets/nmrsolver/all.parquet \
-  datasets/merged/merged_train_val_all_disjoint.parquet \
-  --test-output datasets/merged/merged_benchmark_test_double_disjoint.parquet \
-  --train-output datasets/merged/merged_train_val_all_disjoint_extended.parquet
+  datasets/intermediate/rich_train_val.parquet \
+  --test-output datasets/intermediate/test_after_simnmr.parquet \
+  --train-output datasets/intermediate/train_val_with_simnmr_matches.parquet
 ```
 
-The comparison files are streamed using only `smiles_canonical`; only the
-small benchmark index is retained in memory. Exact canonical SMILES preserves
-stereochemical distinctions encoded in the strings, unlike the conservative
-connectivity-only helper. Both hidden partial files are completed before
-either final path is replaced. The script then promotes the test output and
-the train output sequentially; this prevents promotion of incomplete files but
-is not a filesystem transaction across both final paths.
+Run this before the general benchmark disjoint. This ordering recovers every
+rich benchmark spectrum whose molecule occurs in SimNMR, including molecules
+that may also occur in another training resource.
 
-## `extract_annotated_peaks.py`
+## `remove_benchmark_overlaps.py`
 
-Creates endpoint-specific annotated outputs and a merged dataset with those
-matched record IDs removed. It independently calculates RDKit full InChIKeys
-from the TDC `Drug` SMILES column and from the merged canonical SMILES, then
-keeps only exact full-key equality. The audit notebook is useful for exploration
-and reporting, but is not an input to this production extraction step. This is
-the property-benchmark path; it is distinct from the connectivity-based
-benchmark disjoining helper above.
+Removes rows only from the first input when its exact `smiles_canonical` occurs
+in any later input. Comparison files are never modified. The first dataset is
+indexed; later datasets are streamed one at a time.
 
 ```bash
-PYTHONPATH=scripts python scripts/data/postprocess/extract_annotated_peaks.py \
-  --merged datasets/merged/merged_train_val_all.parquet \
-  --overwrite
+PYTHONPATH=scripts python \
+  scripts/data/postprocess/remove_benchmark_overlaps.py \
+  datasets/intermediate/test_after_simnmr.parquet \
+  datasets/intermediate/train_val_with_simnmr_matches.parquet \
+  datasets/nmrgym/all.parquet \
+  --output datasets/intermediate/test_benchmark_preclean.parquet
 ```
 
-The script reads the configured local TDC release, writes the pre-cleaning
-endpoint files under `datasets/properties/annonated_peaks/`, and creates
-`merged_train_val_all_disjoint.parquet`. The final cleaned endpoint subsets are
-then placed under `datasets/cleaned/admet/` with their paired label CSVs.
+The command is directional and reusable: the first positional input is always
+the file being filtered, while every later positional input is a comparison.
 
 ## `filter_dataset.py`
 
-Creates a cleaned derived copy of one canonical schema-v2 Parquet file. The
-input is not modified. Output names are automatic: `records.parquet` produces
-`records_cleaned.parquet` and the minimal audit `records_removed.parquet`.
+Applies the common cleaning and exact-shift deduplication policy to one
+canonical Parquet. It removes records with no NMR peaks, non-finite or
+out-of-range shifts, more than 60 peaks per modality, more than six J values
+per proton peak, non-finite or negative J values, non-positive supplied proton
+integration, or a multi-fragment canonical structure.
+
+Deduplication then uses:
+
+```text
+smiles_canonical + sorted exact 1H shifts + sorted exact 13C shifts
+```
+
+No shift rounding is applied. The most completely annotated record wins, with
+`record_id` as the final deterministic tie-breaker. Same-molecule records with
+different shift lists remain separate.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py \
-  datasets/merged/merged_train_val_all_disjoint.parquet
+  datasets/intermediate/train_val_with_simnmr_matches.parquet \
+  --output datasets/intermediate/train_val_filtered.parquet \
+  --removed-output datasets/intermediate/train_val_removed.parquet
 ```
 
-The filter keeps one or both spectral modalities, requires finite shifts in
--5..20 ppm for H and -50..300 ppm for C, limits each modality to 60 peaks,
-limits each proton peak to six J values, rejects non-finite or negative J
-values and non-positive supplied proton integrations, and removes
-multi-fragment structures. `J=0` and missing integration are retained.
-Molecular-property and drug-likeness thresholds are not used.
+If output arguments are omitted, the command uses `<input>_cleaned.parquet`
+and `<input>_removed.parquet` beside the input.
 
-Exact duplicates use canonical SMILES plus sorted exact H and C shift lists;
-a modality without usable peaks contributes its canonical empty list. Hash
-matches are verified with the actual key values. The best-annotated row is retained,
-with `record_id` used as a deterministic final tie-breaker. Same-molecule rows
-with different shift lists remain separate records, and output records retain
-the canonical schema without extra columns.
+## `prepare_admet_datasets.py`
 
-For large collections such as NMR-Solver, duplicate detection is deliberately
-two-stage: it first finds repeated hashes, then groups only those candidates by
-the complete SMILES-and-shift-list key. The hash is therefore only a scalable
-prefilter.
+Runs after rich train/validation has been extended and filtered. It reads the
+small TDC endpoint files first, calculates their full InChIKeys, then streams
+the large cleaned NMR input once and retains only requested matches in memory.
+It creates the endpoint `train_val` and `test` label/Parquet pairs and removes
+the union of all matched records from the pretraining output.
 
-Existing outputs are protected unless `--overwrite` is passed. Both files are
-first written to hidden `.partial` paths and promoted only after successful
-completion.
+Repeated property rows for one full InChIKey are handled during the same step:
+
+- agreeing numerical labels are collapsed to one label per NMR `record_id`;
+- discordant labels are excluded from the supervised cohort;
+- all matched identities, including discordant ones, remain excluded from the
+  pretraining output to prevent label leakage.
+
+```bash
+PYTHONPATH=scripts python scripts/data/postprocess/prepare_admet_datasets.py \
+  datasets/intermediate/train_val_filtered.parquet \
+  --tdc-root datasets/properties/tdc_admet/admet_group \
+  --output-root datasets/final/admet \
+  --train-output datasets/final/train_val.parquet
+```
+
+Because the input has already passed the common filter, the resulting ADMET
+Parquets and ADMET-disjoint train pool do not require another filtering pass.
+The command writes `preparation_report.json` beside the endpoint directories.
 
 ## `calculate_mol_properties.py`
 
-Streams one canonical Parquet file and writes a same-directory CSV containing
-one RDKit molecular-property row per canonical `record_id`. It reads only
-`record_id` and `smiles_canonical`, processes bounded Arrow batches, and can
-split each batch across several RDKit worker processes. The default output for
-`datasets/merged/merged_train_val_all.parquet` is
-`datasets/merged/merged_train_val_all_mol_properties.csv`.
+Streams one final canonical Parquet and writes a same-order
+`*_mol_properties.csv`. It reads only `record_id` and `smiles_canonical`, uses
+bounded batches, and parallelizes the CPU-bound RDKit calculations with a
+small process pool.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
-  datasets/merged/merged_train_val_all.parquet \
-  --workers 8
+  datasets/final/train_val.parquet \
+  --workers 4
 ```
 
-The CSV contains the following columns in addition to `record_id` and
-`smiles_canonical`:
+Function and CLI defaults are identical: 50,000 rows per Arrow batch, 5,000
+records per worker task, and up to four workers. Increase `--workers` only
+after measuring memory and throughput on the target machine.
 
-- `exact_molecular_weight`, `calculated_logp`, `tpsa`, `hba`, `hbd`,
-  `rotatable_bonds`, `fraction_csp3`, and `aromatic_atom_fraction`;
-- one multi-label `has_*` column for each SMARTS-defined group: amine, amide,
-  alcohol/phenol, ester, carboxylic acid, aldehyde/ketone, nitrile,
-  carbon-halogen bond, and heteroaromatic ring;
-- `morgan_ecfp4_2048_hex`: radius-2, 2,048-bit Morgan/ECFP4 fingerprint,
-  encoded as reversible hexadecimal RDKit binary bytes (512 characters);
-- `maccs_keys_166_bits`: the 166 usable RDKit MACCS keys. RDKit internally
-  exposes 167 positions; the unused position 0 is omitted here.
-
-Rows with missing or invalid SMILES are retained and marked through
-`rdkit_status` and `rdkit_error`, instead of being silently dropped. Output is
-written to `.<name>.partial` and promoted only on success; an existing CSV is
-protected unless `--overwrite` is passed.
-
-Descriptor values are derived from the RDKit molecule parsed from
-`smiles_canonical`; they are not copied from a source release and are not used
-by `filter_dataset.py`. `exact_molecular_weight` is in daltons,
-`calculated_logp` is RDKit Crippen MolLogP, `tpsa` is in square angstroms, and
-HBA, HBD, and rotatable bonds are counts. `fraction_csp3` is the fraction of
-carbon atoms that are sp3 hybridized. `aromatic_atom_fraction` is calculated
-here as aromatic heavy atoms divided by all heavy atoms. Every `has_*` field is
-an integer `0`/`1` SMARTS match indicator, not a group count.
-
-`rdkit_status` is one of `ok`, `missing_smiles`, `invalid_smiles`, or
-`calculation_error`. For a non-`ok` row, `rdkit_error` contains the reason and
-all descriptors, flags, and fingerprints are blank. Row order is the same as
-the input Parquet, including when worker processes are used.
-
-For larger machines, increase `--workers`; `--batch-size` bounds the rows held
-by the parent at once, while `--records-per-task` bounds each serialized worker
-task. The defaults are deliberately conservative (`4096`, `512`, and up to
-four workers).
+The output contains exact molecular weight, Crippen logP, TPSA, HBA/HBD,
+rotatable bonds, fraction Csp3, aromatic heavy-atom fraction, nine binary
+SMARTS functional-group indicators, Morgan/ECFP4, and MACCS. Invalid structures
+remain represented by a row with `rdkit_status` and `rdkit_error` rather than
+being silently dropped. The complete column definitions are in
+`contex/Dataset Analysis.md`.
 
 ## `analyze_cleaned_datasets.py`
 
-Generates the final data-card analytics for `train_val`,
-`test_benchmark`, and the three ADMET cohorts under `datasets/cleaned`.
-It writes source inventories, molecular-property summaries,
-functional-group prevalence, peak and multiplicity statistics, proton
-annotation completeness, ADMET target summaries, and six distribution plots.
-
-Summary tables use every eligible record. Plots use a deterministic sample of
-at most 20,000 records per source or endpoint and limit only the displayed
-violin values to `Q1 - 2.5*IQR` through `Q3 + 2.5*IQR`.
-
-```bash
-PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py
-```
-
-The default output directory is `datasets/cleaned/analytics`, with one
-subdirectory each for `train_val`, `test_benchmark`, `admet`, and collection-
-level summaries. Use `--cleaned-root` for another final collection and
-`--sample-per-group` to change the plotting sample size.
-
-For candidate collections whose files do not use the release names, pass
-`--train-val-parquet`, `--test-benchmark-parquet`, and `--analytics-dir`.
-Use `--skip-admet` when the ADMET cohorts are unchanged and only the two main
-datasets need to be compared.
-
-For the separately stored shift-only SimNMR-PubChem collection, pass its
-cleaned Parquet directly. The script derives the adjacent molecular-property
-CSV path and writes results under `<parquet.parent>/analytics/simnmr` (for the
-example below, `datasets/cleaned/analytics/simnmr`):
+Generates source inventories, molecular-property summaries, functional-group
+prevalence, peak and multiplicity statistics, proton annotation completeness,
+ADMET target summaries, and plots for the final collection.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
-  --nmrsolver-parquet datasets/cleaned/simnmr.parquet
+  --cleaned-root datasets/final
 ```
 
-The NMR-Solver path makes three dataset-specific choices. It treats the source
-as shift-only, so J-coupling summaries and the J violin are intentionally left
-empty rather than inferred from unavailable annotations. Its property CSV is
-aligned by row order with the Parquet file: `calculate_mol_properties.py`
-preserves that order and both files retain one row per input record, avoiding a
-memory-heavy 100-million-row join. Finally, numerical summaries still use every
-record, while plots use the first projected `--sample-per-group` rows. Selecting
-that small prefix before nested peak lists are collected avoids materialising the
-whole NMR-Solver dataset solely to make a figure.
+Before analyzing a molecular-property sidecar, the script verifies that it has
+the same number, order, and sequence of `record_id` values as its Parquet. A
+stale or manually trimmed sidecar is an error rather than a partial analysis.
 
-For the smaller experimental shift-only NMRGym collection, use its dedicated
-mode. It treats integration, multiplicity, J, and range annotations as
-unavailable, uses exact source inventory counts, and writes under
-`<parquet.parent>/analytics/nmrgym` (for the example below,
-`datasets/cleaned/analytics/nmrgym`):
+Summary tables use all eligible records. Main-dataset plots take a deterministic
+sample of at most `--sample-per-group` records from every source, so block order
+from the merge cannot hide later sources. The first-row optimization is used
+only by single-source shift-only modes such as SimNMR and NMRGym.
 
-```bash
-PYTHONPATH=scripts python scripts/data/postprocess/analyze_cleaned_datasets.py \
-  --nmrgym-parquet datasets/cleaned/nmrgym.parquet
-```
-
-`--nmrsolver-parquet` and `--nmrgym-parquet` select separate shift-only modes
-and are mutually exclusive. Run the command once per collection when both
-analytics sets are required.
+Use `--nmrsolver-parquet` or `--nmrgym-parquet` to analyze those independent
+shift-only components. For candidate collections with different filenames,
+use `--train-val-parquet`, `--test-benchmark-parquet`, `--analytics-dir`, and
+optionally `--skip-admet`.
 
 ## `admet_overlap_audit.ipynb`
 
-Downloads or reuses the configured property releases, audits their overlap with
-the merged NMR dataset, and writes reports under `datasets/properties/`. It does
-not rewrite the merged canonical input.
-
-Intermediate post-processing outputs are reproducible derived artifacts. The
-files under `datasets/cleaned/` are the curated final release; keep their
-source canonical Parquet inputs unchanged and record the command and identity
-policy used to regenerate them.
+This notebook remains an exploratory audit. It can compare property releases
+and report alternative identity intersections, but it is not an input to the
+production ADMET preparation command.

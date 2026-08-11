@@ -19,13 +19,11 @@ import polars as pl
 import pyarrow as pa
 from pyarrow import compute, parquet
 
-from data.canonicalize.common import (
-    CANONICAL_PARQUET_SCHEMA_VERSION,
-    canonical_parquet_schema,
-    normalize_modality_lists,
-)
+from data.canonicalize.common import normalize_modality_lists
+from data.postprocess.common import open_canonical_parquet
 
 
+SCRIPT_PATH = "scripts/data/postprocess/filter_dataset.py"
 H_SHIFT_MIN = -5.0
 H_SHIFT_MAX = 20.0
 C_SHIFT_MIN = -50.0
@@ -70,25 +68,7 @@ def default_output_paths(input_path: str | Path) -> tuple[Path, Path]:
 def validate_canonical_input(path: Path) -> parquet.ParquetFile:
     """Open a schema-v2 canonical Parquet file."""
 
-    if not path.is_file():
-        raise FileNotFoundError(f"canonical Parquet input not found: {path}")
-
-    parquet_file = parquet.ParquetFile(path)
-    expected_schema = canonical_parquet_schema()
-    input_schema = parquet_file.schema_arrow
-    if not input_schema.remove_metadata().equals(expected_schema):
-        raise ValueError(f"{path} does not use the current canonical schema")
-
-    metadata = input_schema.metadata or {}
-    schema_version = metadata.get(b"canonical_schema_version", b"").decode(
-        "utf-8"
-    )
-    if schema_version != CANONICAL_PARQUET_SCHEMA_VERSION:
-        raise ValueError(
-            f"{path} uses canonical schema version {schema_version!r}; "
-            f"expected {CANONICAL_PARQUET_SCHEMA_VERSION!r}"
-        )
-    return parquet_file
+    return open_canonical_parquet(path)
 
 
 def _audit_frame(input_path: Path) -> pl.LazyFrame:
@@ -335,9 +315,12 @@ def _write_outputs(
     metadata = dict(input_file.schema_arrow.metadata or {})
     metadata.update(
         {
+            b"postprocess_step": b"filter_dataset",
+            b"postprocess_script": SCRIPT_PATH.encode("utf-8"),
+            b"postprocess_inputs": json.dumps([str(input_path)]).encode("utf-8"),
             b"cleaning_policy_version": b"1",
             b"cleaned_from": input_path.name.encode("utf-8"),
-            b"cleaning_script": str(Path(__file__).resolve()).encode("utf-8"),
+            b"cleaning_script": SCRIPT_PATH.encode("utf-8"),
             b"cleaning_removed_record_count": str(len(removed_ids)).encode("utf-8"),
             b"cleaning_reason_counts": json.dumps(
                 dict(sorted(reason_counts.items())), sort_keys=True
@@ -394,6 +377,8 @@ def _write_outputs(
 
 def clean_parquet(
     input_path: str | Path,
+    output_path: str | Path | None = None,
+    removed_output_path: str | Path | None = None,
     *,
     batch_size: int = 50_000,
     overwrite: bool = False,
@@ -405,9 +390,21 @@ def clean_parquet(
 
     input_file_path = Path(input_path)
     input_file = validate_canonical_input(input_file_path)
-    cleaned_path, removed_path = default_output_paths(input_file_path)
+    default_cleaned, default_removed = default_output_paths(input_file_path)
+    cleaned_path = default_cleaned if output_path is None else Path(output_path)
+    removed_path = (
+        default_removed
+        if removed_output_path is None
+        else Path(removed_output_path)
+    )
+    if cleaned_path.resolve() == removed_path.resolve():
+        raise ValueError(
+            "cleaned and removed-record outputs must be different files"
+        )
 
     for output_path in (cleaned_path, removed_path):
+        if output_path.suffix.lower() != ".parquet":
+            raise ValueError(f"output must have a .parquet suffix: {output_path}")
         if output_path.resolve() == input_file_path.resolve():
             raise ValueError("output must not replace the input Parquet file")
         if output_path.exists() and not overwrite:
@@ -451,6 +448,18 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="input canonical Parquet file")
     parser.add_argument(
+        "--output",
+        type=Path,
+        help="cleaned Parquet output (default: <input>_cleaned.parquet)",
+    )
+    parser.add_argument(
+        "--removed-output",
+        type=Path,
+        help=(
+            "removed-record audit output (default: <input>_removed.parquet)"
+        ),
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=50_000,
@@ -468,6 +477,8 @@ def main() -> None:
     args = build_argument_parser().parse_args()
     result = clean_parquet(
         args.input,
+        args.output,
+        args.removed_output,
         batch_size=args.batch_size,
         overwrite=args.overwrite,
     )

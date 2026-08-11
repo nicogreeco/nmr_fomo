@@ -13,11 +13,14 @@ model.
 - `postprocess/` contains derived-data and benchmark-preparation utilities.
 
 The post-processing commands, including benchmark disjoining, common
-filtering, same-order RDKit molecular-property CSV generation, and final
-analytics modes, are documented in
+filtering, ADMET preparation, same-order RDKit molecular-property CSV
+generation, and final analytics modes, are documented in
 [`postprocess/README.md`](postprocess/README.md). Those CSV descriptors and
 fingerprints are derived sidecars; they are not canonical schema fields or
 filter acceptance criteria.
+
+NMR-to-NMR overlap uses exact `smiles_canonical` equality. Full RDKit
+InChIKeys are reserved for matching external ADMET property structures.
 
 Canonical schema version 2 stores the record identifier and provenance,
 source and canonical SMILES, molecular formula, acquisition metadata, an

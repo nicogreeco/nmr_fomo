@@ -102,12 +102,13 @@ available on [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canon
 The exact columns and encodings in its adjacent RDKit molecular-property CSVs
 are documented in [Dataset Analysis](<contex/Dataset%20Analysis.md#rdkit-molecular-property-csvs>).
 
-A stricter local candidate is prepared under `datasets/cleadne_v2/`. It uses an
-exact-canonical-SMILES double disjoin against rich training and
-SimNMR-PubChem, recovers eligible rich benchmark spectra into an extended
-training pool, and then applies the NMRGym connectivity disjoin. It has its own
-data card and regenerated analytics and has not been pushed as the published
-collection.
+The maintained post-processing recipe for the next collection regeneration is
+documented in [scripts/data/postprocess/README.md](scripts/data/postprocess/README.md).
+It first recovers rich benchmark spectra whose molecules occur in SimNMR,
+removes the residual exact-canonical-SMILES overlap with extended rich training
+and NMRGym, applies the common filter, and only then prepares the full-InChIKey
+ADMET cohorts. Dataset counts are updated only after that recipe has been run
+and audited.
 
 ## How to navigate the project
 

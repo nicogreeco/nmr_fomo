@@ -39,6 +39,8 @@ from rdkit.Chem import (
     rdMolDescriptors,
 )
 
+from data.postprocess.common import open_canonical_parquet
+
 
 # Invalid source structures are represented explicitly in the CSV. Suppress
 # RDKit's per-record stderr output so a very large run remains readable.
@@ -210,7 +212,9 @@ def iter_chunks(
     """Split one Arrow batch into bounded process-pool tasks in input order."""
 
     if len(record_ids) != len(smiles_values):
-        raise RuntimeError("record_id and smiles_canonical columns have different lengths")
+        raise RuntimeError(
+            "record_id and smiles_canonical columns have different lengths"
+        )
 
     current_chunk: list[tuple[str, object]] = []
     for offset, (record_id, smiles) in enumerate(zip(record_ids, smiles_values)):
@@ -249,10 +253,11 @@ def export_molecular_properties(
     input_path: str | Path,
     output_path: str | Path | None = None,
     *,
-    batch_size: int = 4096,
-    records_per_task: int = 512,
+    batch_size: int = 50_000,
+    records_per_task: int = 5_000,
     workers: int | None = None,
     progress_every: int = 250_000,
+    show_progress: bool = True,
     overwrite: bool = False,
 ) -> dict[str, object]:
     """Stream a canonical Parquet file into a CSV of RDKit properties.
@@ -270,13 +275,16 @@ def export_molecular_properties(
         raise ValueError("progress_every must be at least 1")
 
     input_file_path = Path(input_path)
-    if not input_file_path.is_file():
-        raise FileNotFoundError(f"canonical Parquet input not found: {input_file_path}")
+    parquet_file = open_canonical_parquet(input_file_path)
     output_file_path = (
         default_output_path(input_file_path)
         if output_path is None
         else Path(output_path)
     )
+    if output_file_path.suffix.lower() != ".csv":
+        raise ValueError(
+            f"molecular-property output must be a .csv file: {output_file_path}"
+        )
     if output_file_path.exists() and not overwrite:
         raise FileExistsError(
             f"refusing to overwrite {output_file_path}; pass --overwrite to replace it"
@@ -288,21 +296,6 @@ def export_molecular_properties(
         workers = min(4, os.cpu_count() or 1)
     if workers < 1:
         raise ValueError("workers must be at least 1")
-
-    try:
-        import pyarrow.parquet as parquet
-    except ModuleNotFoundError as error:
-        raise ModuleNotFoundError(
-            "molecular-property export requires pyarrow; install it in the "
-            "environment used for postprocessing"
-        ) from error
-
-    parquet_file = parquet.ParquetFile(input_file_path)
-    required_columns = {"record_id", "smiles_canonical"}
-    missing_columns = required_columns - set(parquet_file.schema_arrow.names)
-    if missing_columns:
-        missing_text = ", ".join(sorted(missing_columns))
-        raise ValueError(f"{input_file_path} is missing required columns: {missing_text}")
 
     output_file_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = output_file_path.with_name(f".{output_file_path.name}.partial")
@@ -343,7 +336,7 @@ def export_molecular_properties(
                         row_groups = executor.map(calculate_chunk, chunks)
                     rows_written += _write_rows(writer, row_groups, status_counts)
 
-                    while rows_written >= next_progress:
+                    while show_progress and rows_written >= next_progress:
                         print(f"Processed {rows_written:,} records")
                         next_progress += progress_every
             finally:
@@ -395,13 +388,21 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--workers",
         type=int,
         default=min(4, os.cpu_count() or 1),
-        help="RDKit worker processes; use 1 to disable multiprocessing (default: up to 4)",
+        help=(
+            "RDKit worker processes; use 1 to disable multiprocessing "
+            "(default: up to 4)"
+        ),
     )
     parser.add_argument(
         "--progress-every",
         type=int,
         default=250_000,
         help="print progress after this many records (default: 250000)",
+    )
+    parser.add_argument(
+        "--no-progress",
+        action="store_true",
+        help="disable periodic progress messages",
     )
     parser.add_argument(
         "--overwrite",
@@ -420,6 +421,7 @@ def main() -> None:
         records_per_task=args.records_per_task,
         workers=args.workers,
         progress_every=args.progress_every,
+        show_progress=not args.no_progress,
         overwrite=args.overwrite,
     )
     statuses = ", ".join(

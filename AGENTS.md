@@ -69,18 +69,26 @@ Lo schema conserva sia `multiplicity_raw` sia `multiplicity` normalizzata. Il vo
 
 #### Qualità, filtraggio e raccolta finale
 
-Il filtro comune è un passaggio derivato e non modifica mai le fonti canoniche. Elimina record senza picchi, valori non finiti, shift fuori da limiti fisici, oltre 60 picchi per modalità, più di 6 `J` per picco, `J` negativi, integrazioni positive mancanti e strutture a frammenti multipli. Non applica filtri di drug-likeness.
+Il filtro comune è un passaggio derivato e non modifica mai le fonti canoniche. Elimina record senza picchi, valori non finiti, shift fuori da limiti fisici, oltre 60 picchi per modalità, più di 6 `J` per picco, `J` negativi, integrazioni fornite ma non positive e strutture a frammenti multipli. Non applica filtri di drug-likeness.
 
 La deduplicazione è prudente: solo stessa struttura canonica e liste di shift H/C esattamente uguali, senza arrotondamenti. Record della stessa molecola ma con spettri differenti restano: possono rappresentare repliche, condizioni sperimentali o vista simulata/esperimentale.
 
-La raccolta pulita attuale contiene:
+La raccolta pubblicata e già materializzata contiene:
 
 | Componente | Record | Ruolo |
 |---|---:|---|
 | Rich train/validation | 1.837.226 | pretraining ricco, disgiunto dagli ADMET |
-| Rich benchmark test | 180.111 | disgiunto per connectivity InChIKey |
+| Rich benchmark test | 179.239 | disgiunto dal rich train e da NMRGym nella ricetta storica |
 | SimNMR-PubChem | 105.509.616 | grande pool shift-only |
-| NMRGym | 269.999 | fonte shift-only separata |
+| NMRGym | 265.095 | fonte shift-only sperimentale separata |
+
+La prossima rigenerazione usa exact `smiles_canonical` per tutti gli overlap
+NMR–NMR. Prima sposta dal benchmark al train gli spettri rich le cui molecole
+sono in SimNMR; poi rimuove dal test residuo le molecole presenti nel train
+esteso o in NMRGym. Dopo il filtro comune, prepara ADMET dal train pulito usando
+full InChIKey, risolve le label ripetute e rimuove i match dal pretraining.
+Proprietà molecolari e analytics vengono generate soltanto sui file finali.
+Non attribuire nuovi conteggi a questa ricetta prima di averla eseguita.
 
 Nel pool ricco, MST-NMR e NMRTrans sono completamente appaiati H+C; NMRexp è l’unica fonte con record monomodali. Le distribuzioni tra train/validation e benchmark risultano simili, pur con differenze chimiche tra le sorgenti.
 

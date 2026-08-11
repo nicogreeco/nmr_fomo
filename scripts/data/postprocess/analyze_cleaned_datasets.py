@@ -202,7 +202,11 @@ def inventory_by_source(records: pl.LazyFrame, dataset_name: str) -> pl.DataFram
         stats.group_by("source")
         .agg(aggregations)
         .with_columns(pl.lit(dataset_name).alias("dataset"))
-        .select("dataset", "source", *[expr.meta.output_name() for expr in aggregations])
+        .select(
+            "dataset",
+            "source",
+            *[expr.meta.output_name() for expr in aggregations],
+        )
         .collect(engine="streaming")
     )
     total = (
@@ -248,38 +252,11 @@ def nmrsolver_inventory(records: pl.LazyFrame) -> pl.DataFrame:
     )
 
 
-def molecular_frame_from_csv(
-    records: pl.LazyFrame,
-    properties_path: Path,
-) -> pl.LazyFrame:
-    require_file(properties_path)
-    properties = pl.scan_csv(
-        properties_path,
-        empty_string_is_null=True,
-    ).select(
-        "record_id",
-        "rdkit_status",
-        *PROPERTY_COLUMNS,
-        *FUNCTIONAL_GROUP_COLUMNS,
-    )
-    record_fields = records.select(
-        "record_id",
-        "source",
-        pl.col("atoms").list.len().alias("num_atoms"),
-    )
-    return (
-        properties
-        .filter(pl.col("rdkit_status") == "ok")
-        .join(record_fields, on="record_id", how="inner")
-        .drop("rdkit_status")
-    )
-
-
 def molecular_frame_from_aligned_csv(
     records: pl.LazyFrame,
     properties_path: Path,
 ) -> pl.LazyFrame:
-    """Read a very large property CSV without a record-ID hash join.
+    """Read a same-order property CSV and fail on any alignment mismatch.
 
     calculate_mol_properties.py writes exactly one output row per input row
     and preserves input order, including when worker processes are used.
@@ -289,6 +266,7 @@ def molecular_frame_from_aligned_csv(
     record_fields = records.select(
         "record_id",
         "source",
+        pl.lit(True).alias("_record_present"),
         pl.col("atoms").list.len().alias("num_atoms"),
     )
     property_fields = pl.scan_csv(
@@ -297,16 +275,45 @@ def molecular_frame_from_aligned_csv(
     ).select(
         pl.col("record_id").alias("_properties_record_id"),
         "rdkit_status",
+        pl.lit(True).alias("_properties_present"),
         *PROPERTY_COLUMNS,
         *FUNCTIONAL_GROUP_COLUMNS,
     )
-    return (
-        pl.concat([record_fields, property_fields], how="horizontal_extend")
-        .filter(
-            (pl.col("record_id") == pl.col("_properties_record_id"))
-            & (pl.col("rdkit_status") == "ok")
+    aligned = pl.concat([record_fields, property_fields], how="horizontal_extend")
+    alignment = (
+        aligned.select(
+            (~pl.col("_record_present").fill_null(False))
+            .sum()
+            .alias("missing_parquet_rows"),
+            (~pl.col("_properties_present").fill_null(False))
+            .sum()
+            .alias("missing_property_rows"),
+            (
+                pl.col("_record_present").fill_null(False)
+                & pl.col("_properties_present").fill_null(False)
+                & (pl.col("record_id") != pl.col("_properties_record_id"))
+            )
+            .fill_null(False)
+            .sum()
+            .alias("mismatched_record_ids"),
         )
-        .drop("_properties_record_id", "rdkit_status")
+        .collect(engine="streaming")
+        .row(0, named=True)
+    )
+    if any(alignment.values()):
+        raise ValueError(
+            f"{properties_path} is not aligned with its Parquet dataset: "
+            f"{alignment}"
+        )
+
+    return (
+        aligned.filter(pl.col("rdkit_status") == "ok")
+        .drop(
+            "_properties_record_id",
+            "rdkit_status",
+            "_record_present",
+            "_properties_present",
+        )
     )
 
 
@@ -875,7 +882,7 @@ def analyze_main_dataset(
         dataset_analytics_dir / f"{dataset_name}_source_inventory.csv"
     )
 
-    molecular = molecular_frame_from_csv(
+    molecular = molecular_frame_from_aligned_csv(
         records,
         parquet_path.with_name(f"{parquet_path.stem}_mol_properties.csv"),
     )
@@ -886,7 +893,6 @@ def analyze_main_dataset(
         f"{dataset_name}: molecular properties by source",
         dataset_analytics_dir,
         sample_per_group,
-        first_rows_sample_only=True,
     )
     write_peak_tables_and_plot(
         records,
@@ -924,6 +930,7 @@ def analyze_nmrsolver_dataset(
         "NMR-Solver: molecular properties",
         analytics_dir,
         sample_per_group,
+        first_rows_sample_only=True,
     )
     write_peak_tables_and_plot(
         records,
@@ -965,6 +972,7 @@ def analyze_nmrgym_dataset(
         "NMRGym: molecular properties",
         analytics_dir,
         sample_per_group,
+        first_rows_sample_only=True,
     )
     write_peak_tables_and_plot(
         records,

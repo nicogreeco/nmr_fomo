@@ -212,6 +212,14 @@ class FilterDatasetTest(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 clean_parquet(input_path)
 
+            shared_output = Path(directory) / "shared.parquet"
+            with self.assertRaises(ValueError):
+                clean_parquet(
+                    input_path,
+                    output_path=shared_output,
+                    removed_output_path=shared_output,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
