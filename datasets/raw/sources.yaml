@@ -6,6 +6,7 @@ sources:
   admet:
     path: datasets/raw/admet
     upstream: https://tdcommons.ai/benchmark/admet_group/overview/
+    download_file_id: 4426004
     content: 22 TDC ADMET endpoints with official train_val and test splits
     files: "<endpoint>/{train_val,test}.csv"
     pipeline_endpoints: [ames, ld50_zhu, solubility_aqsoldb]
@@ -14,22 +15,27 @@ sources:
   mst_nmr:
     path: datasets/raw/mst_nmr
     upstream: https://zenodo.org/records/19122815
+    archive: data.zip
+    archive_md5: b27be622059908c9f07b6e9ba3ff641f
     content: rich simulated 1H and 13C peak tables processed by NMRPeak
     files: [train.lmdb, valid.lmdb, test.lmdb]
-    license: CC-BY-NC-SA-4.0
+    license: CC-BY-4.0
     converter: scripts/data/canonicalize/convert_mst_nmr.py
 
   nmrexp:
     path: datasets/raw/nmrexp
     upstream: https://zenodo.org/records/19122815
+    archive: data.zip
+    archive_md5: b27be622059908c9f07b6e9ba3ff641f
     content: rich literature-derived 1H and 13C peak tables processed by NMRPeak
     files: [train.lmdb, valid.lmdb, test.lmdb]
-    license: CC-BY-NC-SA-4.0
+    license: CC-BY-4.0
     converter: scripts/data/canonicalize/convert_nmrexp.py
 
   nmrgym:
     path: datasets/raw/nmrgym
     upstream: https://huggingface.co/datasets/meaw0415/NMRGym
+    revision: b1172058c1961d10d3005aec3eec93e5b0e4342e
     content: experimental shift-only 1H and 13C peak lists
     files:
       - NMRGym_train_balanced_dedup.pkl
@@ -40,6 +46,7 @@ sources:
   nmrtrans:
     path: datasets/raw/nmrtrans
     upstream: https://huggingface.co/datasets/little1d/NMRTrans-Data
+    revision: 658e28c074b340435b7edc4c5f6a7b76974dcba8
     content: rich literature-derived NMRSpec records released with NMRTrans
     files: [train.pkl.lz4, val.pkl.lz4, test.pkl.lz4]
     license: MIT
@@ -48,7 +55,9 @@ sources:
   simnmr_pubchem:
     path: datasets/raw/simnmr_pubchem
     upstream: https://huggingface.co/datasets/yqj01/SimNMR-PubChem
+    revision: d915caf02834759858afccfccbb7cff1a377bbc7
     content: simulated atom-level 1H and 13C shifts for PubChem molecules
+    source_files: metadata/PubChem_merged_id.lmdb.part-{001..038}
     files: [metadata/PubChem_merged_id.lmdb]
     license: MIT
     converter: scripts/data/canonicalize/convert_nmrsolver.py

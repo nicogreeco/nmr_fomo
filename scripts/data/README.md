@@ -13,6 +13,8 @@ model.
 - `postprocess/` contains derived-data and benchmark-preparation utilities.
 - `reporting.py` writes the small JSON processing reports shared by both
   conversion and post-processing commands.
+- `download_raw_datasets.sh` retrieves pinned public releases into
+  `datasets/raw/` and verifies them against the committed DVC pointers.
 
 Raw inputs are pinned by the `.dvc` files under `datasets/raw/`.
 `datasets/raw/sources.yaml` records their upstream identity and role without
@@ -60,16 +62,17 @@ by the affected stages and do not require regenerating `dvc.yaml`.
 Canonical Parquets, intermediate Parquets, and removal audits remain in the
 local DVC cache with `push: false`. Final cleaned datasets, molecular-property
 sidecars, analytics, and the small processing reports use the normal push
-policy. Reports are ordinary cached DVC outputs rather than no-cache metrics,
+policy for the private maintainer cache and are released publicly through
+Hugging Face. Reports are ordinary cached DVC outputs rather than no-cache metrics,
 so they do not disable the stage run cache.
 
-After pulling the raw `.dvc` targets, inspect or execute the pipeline with:
+After downloading the pinned public raw releases, inspect or execute the
+pipeline with:
 
 ```bash
-dvc pull datasets/raw/*.dvc
+scripts/data/download_raw_datasets.sh all
 dvc dag
 dvc repro
-dvc push
 ```
 
 `dvc repro` includes the full SimNMR conversion and is intentionally not run
@@ -82,8 +85,9 @@ useful; `--no-progress` disables only its bar. After a successful run,
 `dvc.lock` pins commands, parameters, dependencies, and output hashes and must
 be committed with the code changes that produced it.
 
-The configured Nebius remote, directory ownership, and clean-checkout procedure
-are documented in [`datasets/README.md`](../../datasets/README.md).
+The downloader, private Nebius maintainer cache, public Hugging Face release,
+directory ownership, and clean-checkout procedure are documented in
+[`datasets/README.md`](../../datasets/README.md).
 
 The post-processing commands, including benchmark disjoining, common
 filtering, ADMET preparation, same-order RDKit molecular-property CSV

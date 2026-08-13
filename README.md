@@ -79,6 +79,7 @@ scripts/
   data/                     canonical data code and data-preparation utilities
     canonicalize/           source-specific conversion and dataset-analysis tools
     postprocess/            derived-data and benchmark-preparation utilities
+    download_raw_datasets.sh  pinned public-source downloader
     generate_dvc_pipeline.sh  generator for the root DVC DAG
   model_benchmarks/         processors and embedders for published-model comparison
   envs_scr/                 model-specific environment setup material
@@ -104,23 +105,33 @@ data directories have deliberately different storage policies:
 
 | Directory | Role | Versioning and remote policy |
 |---|---|---|
-| `datasets/raw/` | Original inputs to this pipeline | One committed `.dvc` pointer per source; bytes stored in Nebius Object Storage |
+| `datasets/raw/` | Original inputs to this pipeline | One committed `.dvc` pointer per source; public users download the pinned upstream releases |
 | `datasets/canonical/` | Schema-v2 conversion outputs | DVC pipeline outputs with `push: false`; reproducible from raw inputs |
 | `datasets/intermediate/` | Merges, overlap outputs, filtering inputs, removal audits | DVC pipeline outputs with `push: false`; reproducible and not uploaded normally |
-| `datasets/cleaned/` | Final train/test, shift-only pools, ADMET cohorts, molecular properties, analytics | DVC pipeline outputs with normal `push: true` policy |
+| `datasets/cleaned/` | Final train/test, shift-only pools, ADMET cohorts, molecular properties, analytics | Public release artifacts published on Hugging Face |
 | `*_report.json` | Deterministic stage counts and useful breakdowns | Small ordinary DVC outputs retained with the run |
 
 The raw pointers pin exact byte hashes. Their human-readable provenance and
 role are in [sources.yaml](datasets/raw/sources.yaml), while shared batch,
-worker, and analytics settings are in [params.yaml](params.yaml). The default
-remote is `s3://nmr-datasets/dvc-cache` on Nebius Object Storage. Access keys
-remain in machine-local AWS configuration and must never be committed.
+worker, and analytics settings are in [params.yaml](params.yaml).
+
+The project has two deliberately separate distribution channels:
+
+- [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned)
+  is the public release for the final cleaned collection.
+- Nebius Object Storage is a private maintainer cache. It accelerates work on
+  trusted project machines, but its credentials and objects are not part of
+  the public reproduction procedure.
+
+The `.dvc` files still pin the exact raw bytes expected by the pipeline. Public
+users obtain those bytes from their upstream releases with
+[`download_raw_datasets.sh`](scripts/data/download_raw_datasets.sh), then DVC
+checks dependencies and reproduces the graph locally.
 
 Canonical and intermediate data still participate in the DVC cache and are
-recorded in `dvc.lock`, but `push: false` prevents a normal `dvc push` from
-uploading those large rebuildable files. Final cleaned outputs and reports use
-the normal push policy. The local cache uses hardlinks to avoid a second local
-copy where the filesystem supports them.
+recorded in `dvc.lock`, but `push: false` prevents a normal maintainer
+`dvc push` from uploading those large rebuildable files. The local cache uses
+hardlinks to avoid a second local copy where the filesystem supports them.
 
 The maintained transformation order is:
 
@@ -142,11 +153,9 @@ InChIKeys. Structured reports record outcomes such as row counts, filtering
 reasons, overlap removals, and cohort sizes without duplicating DVC hashes or
 environment information already captured elsewhere.
 
-The Hugging Face collection currently available at
-[nmr-canonical-cleaned](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned)
-was produced by an earlier materialized recipe. Its measured counts remain
-documented as historical results in [Dataset Analysis](<contex/Dataset%20Analysis.md>);
-they must not be attributed to this DVC recipe until it has been run and audited.
+The public cleaned release is available at
+[nmr-canonical-cleaned](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
+Its files can be used directly without reproducing the raw-to-cleaned pipeline.
 
 ## Reproducing the dataset pipeline
 
@@ -159,40 +168,28 @@ source ~/.bashrc
 nmr-env main
 ```
 
-The main requirements include RDKit, PyArrow, DVC with S3 support, and the YAML
-dependency used by the pipeline generator. See
+The main requirements include RDKit, PyArrow, DVC, the Hugging Face CLI, and
+the YAML dependency used by the pipeline generator. DVC's S3 extra supports
+the optional private maintainer cache. See
 [scripts/envs_scr/README.md](scripts/envs_scr/README.md) to create or repair it.
 
-### 2. Configure Nebius credentials
-
-The endpoint, region, bucket, and default remote are committed in `.dvc/config`.
-Only credentials are local. For a new service-account key:
+### 2. Download the raw inputs
 
 ```bash
-aws configure set aws_access_key_id '<access-key-id>'
-aws configure set aws_secret_access_key '<secret-access-key>'
-aws configure set region eu-west1
-aws configure set endpoint_url https://storage.eu-west1.nebius.cloud
+scripts/data/download_raw_datasets.sh all
 ```
 
-Verify access without printing credentials:
+The script downloads fixed upstream revisions of ADMET, MST-NMR, NMRexp,
+NMRTrans, NMRGym, and the roughly 400 GB SimNMR-PubChem LMDB into the exact
+paths expected by `dvc.yaml`. It verifies the selected directories against the
+committed `.dvc` pointers by default. Downloads can also be requested
+individually; run it without arguments to see the available targets.
 
-```bash
-dvc remote list
-aws s3 ls s3://nmr-datasets
-```
+The raw licences and provenance remain those of the upstream projects. Review
+[sources.yaml](datasets/raw/sources.yaml) before downloading or redistributing
+them. Do not rename or copy raw files into the model submodules.
 
-### 3. Restore the raw inputs
-
-```bash
-dvc pull datasets/raw/*.dvc
-```
-
-The six `.dvc` targets restore ADMET, MST-NMR, NMRexp, NMRTrans, NMRGym, and
-the roughly 400 GB SimNMR-PubChem LMDB. Check their role and upstream release in
-`datasets/raw/sources.yaml` rather than renaming or copying them into submodules.
-
-### 4. Inspect configuration
+### 3. Inspect configuration
 
 ```bash
 dvc dag
@@ -209,7 +206,7 @@ scripts/data/generate_dvc_pipeline.sh
 The generator calls `dvc stage add` and validates the DAG. It does not execute
 any stage and does not create `dvc.lock`.
 
-### 5. Reproduce
+### 4. Reproduce
 
 Run the complete pipeline:
 
@@ -229,20 +226,40 @@ SimNMR corpus. Plan disk, time, and CPU capacity before starting it. DVC invokes
 the scripts with `--quiet`, so the combined log retains one progress bar per
 stage plus concise start/completion lines and real errors.
 
-### 6. Version and publish a successful run
+### 5. Review and release a successful run
 
 ```bash
-dvc push
 git status --short
 git add dvc.yaml dvc.lock params.yaml datasets/raw/*.dvc
 ```
 
-Review the processing reports, push their DVC objects, and commit the relevant
-code, documentation, and `dvc.lock` together. The lock file records the
-exact commands,
-parameters, dependencies, and output hashes. `dvc push` uploads the final
-cleaned collection and reports while respecting `push: false` for rebuildable
-canonical and intermediate outputs.
+Review the processing reports and commit the relevant code, documentation, and
+`dvc.lock` together. The lock file records exact commands, parameters,
+dependencies, and output hashes. Maintainers publish the reviewed cleaned
+directory to Hugging Face with:
+
+```bash
+hf upload niccogreek/nmr-canonical-cleaned datasets/cleaned . \
+  --repo-type dataset \
+  --exclude .gitignore \
+  --exclude "*_processor_compatibility.json"
+```
+
+Users who only need the released collection can instead run:
+
+```bash
+hf download niccogreek/nmr-canonical-cleaned \
+  --repo-type dataset \
+  --local-dir datasets/cleaned
+```
+
+### Private maintainer cache
+
+The committed DVC configuration points to the private Nebius cache. Authorized
+maintainers may configure machine-local AWS credentials and run `dvc push` or
+`dvc pull`; public users neither need nor receive those credentials. A DVC
+remote failure therefore does not prevent public reproduction from upstream
+raw releases, nor direct use of the Hugging Face cleaned release.
 
 More detail is in [datasets/README.md](datasets/README.md),
 [scripts/data/README.md](scripts/data/README.md), and
