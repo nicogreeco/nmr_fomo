@@ -95,7 +95,9 @@ inputs produced by different RDKit versions instead of labeling them as v2.
 
 For the 106-million-row SimNMR-PubChem conversion, `convert_nmrsolver.py`
 can run RDKit record conversion in separate processes while one parent process
-keeps LMDB reading and Parquet/JSONL writing ordered and bounded in memory:
+keeps LMDB reading and Parquet/JSONL writing ordered and bounded in memory.
+Serialized LMDB values are unpickled in the workers, which return Arrow-ready
+rows; the result is still one physical Parquet file:
 
 ```bash
 PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
@@ -103,12 +105,12 @@ PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrsolver.py \
   datasets/canonical/simnmr/all.parquet --workers 4
 ```
 
-Start with four workers and increase only after confirming available CPU, RAM,
-and storage throughput. Each worker task converts 256 records by default,
-which reduces process-pool scheduling overhead; adjust `--records-per-task`
-only after measuring the machine. `--max-in-flight` bounds queued source
-records (default: two tasks per worker). The generated record and
-rejection-report order remains source-key order.
+The DVC pipeline uses four workers and 256 records per task; local
+profiling found no benefit from eight workers for this parent-written single
+Parquet design. `--max-in-flight` bounds queued source records (default: two
+tasks per worker). The generated record and rejection-report order remains
+source-key order. Every converter also supports `--quiet` and `--no-progress`;
+quiet mode keeps the progress bar and real errors.
 
 NMRGym is a separate shift-only source. It reads its released pickle split
 files, writes a schema-v2 combined file, and represents unavailable proton

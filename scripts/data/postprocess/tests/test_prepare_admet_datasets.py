@@ -156,6 +156,48 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                     self.assertEqual(parquet_ids, [expected_id])
                     self.assertEqual(csv_ids, parquet_ids)
 
+    def test_excludes_cross_split_identity_from_cohorts_and_pretraining(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            input_path = root / "rich_train.parquet"
+            tdc_root = root / "tdc"
+            output_root = root / "admet"
+            train_output = root / "train_val.parquet"
+            self.write_canonical_fixture(input_path)
+            self.write_tdc_fixture(tdc_root)
+
+            (tdc_root / "ames" / "test.csv").write_text(
+                "Drug,Y\nCCO,0.0\nCCC,2.0\n",
+                encoding="utf-8",
+            )
+
+            report = prepare_admet_datasets(
+                input_path,
+                tdc_root,
+                output_root,
+                train_output,
+                batch_size=1,
+                show_progress=False,
+            )
+
+            self.assertEqual(
+                report["details"]["cross_split_molecules"]["ames"], 1
+            )
+            self.assertEqual(
+                parquet.read_table(output_root / "ames/train_val.parquet").num_rows,
+                0,
+            )
+            self.assertEqual(
+                parquet.read_table(output_root / "ames/test.parquet")[
+                    "record_id"
+                ].to_pylist(),
+                ["propane"],
+            )
+            self.assertEqual(
+                parquet.read_table(train_output)["record_id"].to_pylist(),
+                ["nitrogen"],
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

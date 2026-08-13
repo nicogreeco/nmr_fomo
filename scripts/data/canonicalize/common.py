@@ -461,11 +461,33 @@ def write_canonical_parquet(
     row_group_size: int = 50000,
     overwrite: bool = False,
 ) -> int:
-    """Write one physical Parquet file in bounded batches.
+    """Write validated canonical records to one bounded Parquet file."""
 
-    Row groups are internal to one Parquet file; they do not create shards or
-    split the dataset. A temporary file prevents a failed run from replacing a
-    completed output.
+    rows = (canonical_record_to_row(record) for record in records)
+    return write_canonical_rows(
+        rows,
+        output_path,
+        source_name=source_name,
+        converter_name=converter_name,
+        row_group_size=row_group_size,
+        overwrite=overwrite,
+    )
+
+
+def write_canonical_rows(
+    rows: Iterable[Mapping[str, object]],
+    output_path: str | Path,
+    *,
+    source_name: str,
+    converter_name: str,
+    row_group_size: int = 50000,
+    overwrite: bool = False,
+) -> int:
+    """Write Arrow-ready canonical rows to one bounded Parquet file.
+
+    Row groups remain internal to one physical file. Accepting rows directly
+    lets multiprocessing converters avoid sending large data classes back to
+    the parent process.
     """
 
     if row_group_size < 1:
@@ -512,20 +534,20 @@ def write_canonical_parquet(
     writer = parquet.ParquetWriter(temporary_output, schema, compression="zstd")
 
     record_count = 0
-    rows: list[dict[str, object]] = []
+    row_batch: list[dict[str, object]] = []
     try:
-        for record in records:
-            rows.append(canonical_record_to_row(record))
-            if len(rows) >= row_group_size:
-                table = pa.Table.from_pylist(rows, schema=schema)
+        for row in rows:
+            row_batch.append(dict(row))
+            if len(row_batch) >= row_group_size:
+                table = pa.Table.from_pylist(row_batch, schema=schema)
                 writer.write_table(table, row_group_size=row_group_size)
-                record_count += len(rows)
-                rows = []
+                record_count += len(row_batch)
+                row_batch = []
 
-        if rows:
-            table = pa.Table.from_pylist(rows, schema=schema)
+        if row_batch:
+            table = pa.Table.from_pylist(row_batch, schema=schema)
             writer.write_table(table, row_group_size=row_group_size)
-            record_count += len(rows)
+            record_count += len(row_batch)
     except Exception:
         writer.close()
         raise

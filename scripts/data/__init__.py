@@ -1,10 +1,4 @@
 """Reusable canonical NMR records, validation, and dataset readers."""
-
-from .dataset import (
-    CanonicalNMRDataset,
-    CanonicalParquetDataset,
-    JsonlCanonicalReader,
-)
 from .schema import (
     CANONICAL_MULTIPLICITIES,
     CanonicalRecord,
@@ -35,3 +29,28 @@ __all__ = [
     "normalize_multiplicity",
     "validate_canonical_record",
 ]
+
+
+def __getattr__(name: str):
+    """Load PyTorch-backed dataset readers only when they are requested."""
+
+    if name not in {
+        "CanonicalNMRDataset",
+        "CanonicalParquetDataset",
+        "JsonlCanonicalReader",
+    }:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    from .dataset import (
+        CanonicalNMRDataset,
+        CanonicalParquetDataset,
+        JsonlCanonicalReader,
+    )
+
+    readers = {
+        "CanonicalNMRDataset": CanonicalNMRDataset,
+        "CanonicalParquetDataset": CanonicalParquetDataset,
+        "JsonlCanonicalReader": JsonlCanonicalReader,
+    }
+    globals().update(readers)
+    return readers[name]

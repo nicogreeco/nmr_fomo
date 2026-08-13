@@ -81,6 +81,7 @@ class CalculateMolecularPropertiesTest(unittest.TestCase):
                 records_per_task=1,
                 workers=2,
                 progress_every=100,
+                show_progress=False,
             )
             output_path = default_output_path(input_path)
             rows = self.read_rows(output_path)
@@ -114,6 +115,32 @@ class CalculateMolecularPropertiesTest(unittest.TestCase):
         self.assertEqual(rows[3]["rdkit_status"], "invalid_smiles")
         self.assertEqual(rows[4]["rdkit_status"], "missing_smiles")
         self.assertEqual(rows[3]["tpsa"], "")
+
+    def test_parallel_output_is_byte_identical_to_sequential_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "fixture.parquet"
+            sequential_path = Path(directory) / "sequential.csv"
+            parallel_path = Path(directory) / "parallel.csv"
+            self.write_fixture(input_path)
+
+            export_molecular_properties(
+                input_path,
+                sequential_path,
+                batch_size=2,
+                records_per_task=1,
+                workers=1,
+                show_progress=False,
+            )
+            export_molecular_properties(
+                input_path,
+                parallel_path,
+                batch_size=2,
+                records_per_task=1,
+                workers=2,
+                show_progress=False,
+            )
+
+            self.assertEqual(sequential_path.read_bytes(), parallel_path.read_bytes())
 
     def test_existing_output_requires_overwrite(self):
         with tempfile.TemporaryDirectory() as directory:

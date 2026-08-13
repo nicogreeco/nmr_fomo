@@ -225,7 +225,9 @@ dvc repro analyze_cleaned_collection
 ```
 
 The full run includes conversion and filtering of the 106-million-record
-SimNMR corpus. Plan disk, time, and CPU capacity before starting it.
+SimNMR corpus. Plan disk, time, and CPU capacity before starting it. DVC invokes
+the scripts with `--quiet`, so the combined log retains one progress bar per
+stage plus concise start/completion lines and real errors.
 
 ### 6. Version and publish a successful run
 

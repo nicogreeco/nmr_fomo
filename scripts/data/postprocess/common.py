@@ -13,6 +13,7 @@ from data.canonicalize.common import (
     canonical_parquet_schema,
     normalize_modality_lists,
 )
+from data.console import progress_bar
 
 
 def open_canonical_parquet(
@@ -99,21 +100,6 @@ def prepare_parquet_output(
             "before starting another run"
         )
     return output, temporary
-
-
-def progress_bar(total: int, description: str, enabled: bool):
-    """Return a tqdm progress bar, or ``None`` when progress is disabled."""
-
-    if not enabled:
-        return None
-    try:
-        from tqdm import tqdm
-    except ModuleNotFoundError as error:
-        raise ModuleNotFoundError(
-            "progress bars require tqdm; install it in the post-processing "
-            "environment or pass --no-progress"
-        ) from error
-    return tqdm(total=total, desc=description, unit="records")
 
 
 def build_exact_smiles_index(

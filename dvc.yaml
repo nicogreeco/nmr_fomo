@@ -1,13 +1,15 @@
 stages:
   canonicalize_mst_train:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py 
-      datasets/raw/mst_nmr/train.lmdb datasets/canonical/mst_nmr/train.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/mst_nmr/train_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py
+      datasets/raw/mst_nmr/train.lmdb datasets/canonical/mst_nmr/train.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/mst_nmr/train_report.json --quiet
     deps:
     - datasets/raw/mst_nmr/train.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_mst_nmr.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -19,14 +21,16 @@ stages:
         push: false
     - datasets/canonical/mst_nmr/train_report.json
   canonicalize_mst_val:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py 
-      datasets/raw/mst_nmr/valid.lmdb datasets/canonical/mst_nmr/val.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/mst_nmr/val_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py
+      datasets/raw/mst_nmr/valid.lmdb datasets/canonical/mst_nmr/val.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/mst_nmr/val_report.json --quiet
     deps:
     - datasets/raw/mst_nmr/valid.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_mst_nmr.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -38,14 +42,16 @@ stages:
         push: false
     - datasets/canonical/mst_nmr/val_report.json
   canonicalize_mst_test:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py 
-      datasets/raw/mst_nmr/test.lmdb datasets/canonical/mst_nmr/test.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/mst_nmr/test_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_mst_nmr.py
+      datasets/raw/mst_nmr/test.lmdb datasets/canonical/mst_nmr/test.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/mst_nmr/test_report.json --quiet
     deps:
     - datasets/raw/mst_nmr/test.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_mst_nmr.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -57,14 +63,16 @@ stages:
         push: false
     - datasets/canonical/mst_nmr/test_report.json
   canonicalize_nmrexp_train:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py 
-      datasets/raw/nmrexp/train.lmdb datasets/canonical/nmrexp/train.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrexp/train_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py
+      datasets/raw/nmrexp/train.lmdb datasets/canonical/nmrexp/train.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrexp/train_report.json --quiet
     deps:
     - datasets/raw/nmrexp/train.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrexp.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -76,14 +84,16 @@ stages:
         push: false
     - datasets/canonical/nmrexp/train_report.json
   canonicalize_nmrexp_val:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py 
-      datasets/raw/nmrexp/valid.lmdb datasets/canonical/nmrexp/val.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrexp/val_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py
+      datasets/raw/nmrexp/valid.lmdb datasets/canonical/nmrexp/val.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrexp/val_report.json --quiet
     deps:
     - datasets/raw/nmrexp/valid.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrexp.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -95,14 +105,16 @@ stages:
         push: false
     - datasets/canonical/nmrexp/val_report.json
   canonicalize_nmrexp_test:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py 
-      datasets/raw/nmrexp/test.lmdb datasets/canonical/nmrexp/test.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrexp/test_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrexp.py
+      datasets/raw/nmrexp/test.lmdb datasets/canonical/nmrexp/test.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrexp/test_report.json --quiet
     deps:
     - datasets/raw/nmrexp/test.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrexp.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -115,14 +127,16 @@ stages:
     - datasets/canonical/nmrexp/test_report.json
   canonicalize_nmrtrans_train:
     cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrtrans.py
-      datasets/raw/nmrtrans/train.pkl.lz4 
-      datasets/canonical/nmrtrans/train.parquet --row-group-size 
-      ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrtrans/train_report.json
+      datasets/raw/nmrtrans/train.pkl.lz4
+      datasets/canonical/nmrtrans/train.parquet --row-group-size
+      ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrtrans/train_report.json --quiet
     deps:
     - datasets/raw/nmrtrans/train.pkl.lz4
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrtrans.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -135,13 +149,15 @@ stages:
     - datasets/canonical/nmrtrans/train_report.json
   canonicalize_nmrtrans_val:
     cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrtrans.py
-      datasets/raw/nmrtrans/val.pkl.lz4 datasets/canonical/nmrtrans/val.parquet 
-      --row-group-size ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrtrans/val_report.json
+      datasets/raw/nmrtrans/val.pkl.lz4 datasets/canonical/nmrtrans/val.parquet
+      --row-group-size ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrtrans/val_report.json --quiet
     deps:
     - datasets/raw/nmrtrans/val.pkl.lz4
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrtrans.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -154,14 +170,16 @@ stages:
     - datasets/canonical/nmrtrans/val_report.json
   canonicalize_nmrtrans_test:
     cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrtrans.py
-      datasets/raw/nmrtrans/test.pkl.lz4 
-      datasets/canonical/nmrtrans/test.parquet --row-group-size 
-      ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrtrans/test_report.json
+      datasets/raw/nmrtrans/test.pkl.lz4
+      datasets/canonical/nmrtrans/test.parquet --row-group-size
+      ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrtrans/test_report.json --quiet
     deps:
     - datasets/raw/nmrtrans/test.pkl.lz4
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrtrans.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -173,14 +191,16 @@ stages:
         push: false
     - datasets/canonical/nmrtrans/test_report.json
   canonicalize_nmrgym:
-    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py 
+    cmd: PYTHONPATH=scripts python scripts/data/canonicalize/convert_nmrgym.py
       datasets/raw/nmrgym datasets/canonical/nmrgym/all.parquet --row-group-size
-      ${canonicalize.row_group_size} --report-output 
-      datasets/canonical/nmrgym/all_report.json
+      ${canonicalize.row_group_size} --report-output
+      datasets/canonical/nmrgym/all_report.json --quiet
     deps:
     - datasets/raw/nmrgym
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrgym.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -192,17 +212,19 @@ stages:
         push: false
     - datasets/canonical/nmrgym/all_report.json
   canonicalize_simnmr:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/canonicalize/convert_nmrsolver.py 
-      datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb 
-      datasets/canonical/simnmr/all.parquet --row-group-size 
-      ${canonicalize.row_group_size} --workers ${canonicalize.simnmr_workers} 
+    cmd: PYTHONPATH=scripts python
+      scripts/data/canonicalize/convert_nmrsolver.py
+      datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb
+      datasets/canonical/simnmr/all.parquet --row-group-size
+      ${canonicalize.row_group_size} --workers ${canonicalize.simnmr_workers}
       --records-per-task ${canonicalize.simnmr_records_per_task} --report-output
-      datasets/canonical/simnmr/all_report.json
+      datasets/canonical/simnmr/all_report.json --quiet
     deps:
     - datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/canonicalize/convert_nmrsolver.py
+    - scripts/data/console.py
     - scripts/data/reporting.py
     - scripts/data/schema.py
     - scripts/data/validation.py
@@ -218,16 +240,16 @@ stages:
         push: false
     - datasets/canonical/simnmr/all_report.json
   merge_rich_train_val:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py 
-      datasets/canonical/mst_nmr/train.parquet 
-      datasets/canonical/mst_nmr/val.parquet 
-      datasets/canonical/nmrexp/train.parquet 
-      datasets/canonical/nmrexp/val.parquet 
-      datasets/canonical/nmrtrans/train.parquet 
-      datasets/canonical/nmrtrans/val.parquet --output 
-      datasets/intermediate/rich_train_val.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/intermediate/rich_train_val_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py
+      datasets/canonical/mst_nmr/train.parquet
+      datasets/canonical/mst_nmr/val.parquet
+      datasets/canonical/nmrexp/train.parquet
+      datasets/canonical/nmrexp/val.parquet
+      datasets/canonical/nmrtrans/train.parquet
+      datasets/canonical/nmrtrans/val.parquet --output
+      datasets/intermediate/rich_train_val.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/intermediate/rich_train_val_report.json --quiet
     deps:
     - datasets/canonical/mst_nmr/train.parquet
     - datasets/canonical/mst_nmr/val.parquet
@@ -235,7 +257,9 @@ stages:
     - datasets/canonical/nmrexp/val.parquet
     - datasets/canonical/nmrtrans/train.parquet
     - datasets/canonical/nmrtrans/val.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/merge_datasets.py
     - scripts/data/reporting.py
@@ -249,18 +273,20 @@ stages:
         push: false
     - datasets/intermediate/rich_train_val_report.json
   merge_rich_test:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py 
-      datasets/canonical/mst_nmr/test.parquet 
-      datasets/canonical/nmrexp/test.parquet 
-      datasets/canonical/nmrtrans/test.parquet --output 
-      datasets/intermediate/rich_test.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/intermediate/rich_test_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/merge_datasets.py
+      datasets/canonical/mst_nmr/test.parquet
+      datasets/canonical/nmrexp/test.parquet
+      datasets/canonical/nmrtrans/test.parquet --output
+      datasets/intermediate/rich_test.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/intermediate/rich_test_report.json --quiet
     deps:
     - datasets/canonical/mst_nmr/test.parquet
     - datasets/canonical/nmrexp/test.parquet
     - datasets/canonical/nmrtrans/test.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/merge_datasets.py
     - scripts/data/reporting.py
@@ -274,20 +300,22 @@ stages:
         push: false
     - datasets/intermediate/rich_test_report.json
   move_simnmr_overlaps_to_train:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/move_benchmark_overlaps_to_train.py 
-      datasets/intermediate/rich_test.parquet 
-      datasets/canonical/simnmr/all.parquet 
-      datasets/intermediate/rich_train_val.parquet --test-output 
-      datasets/intermediate/test_after_simnmr.parquet --train-output 
-      datasets/intermediate/train_val_extended.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/intermediate/move_simnmr_overlaps_to_train_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/move_benchmark_overlaps_to_train.py
+      datasets/intermediate/rich_test.parquet
+      datasets/canonical/simnmr/all.parquet
+      datasets/intermediate/rich_train_val.parquet --test-output
+      datasets/intermediate/test_after_simnmr.parquet --train-output
+      datasets/intermediate/train_val_extended.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/intermediate/move_simnmr_overlaps_to_train_report.json --quiet
     deps:
     - datasets/canonical/simnmr/all.parquet
     - datasets/intermediate/rich_test.parquet
     - datasets/intermediate/rich_train_val.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/move_benchmark_overlaps_to_train.py
     - scripts/data/reporting.py
@@ -303,19 +331,21 @@ stages:
     - datasets/intermediate/train_val_extended.parquet:
         push: false
   remove_benchmark_overlaps:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/remove_benchmark_overlaps.py 
-      datasets/intermediate/test_after_simnmr.parquet 
-      datasets/intermediate/train_val_extended.parquet 
-      datasets/canonical/nmrgym/all.parquet --output 
-      datasets/intermediate/test_benchmark_preclean.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/intermediate/remove_benchmark_overlaps_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/remove_benchmark_overlaps.py
+      datasets/intermediate/test_after_simnmr.parquet
+      datasets/intermediate/train_val_extended.parquet
+      datasets/canonical/nmrgym/all.parquet --output
+      datasets/intermediate/test_benchmark_preclean.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/intermediate/remove_benchmark_overlaps_report.json --quiet
     deps:
     - datasets/canonical/nmrgym/all.parquet
     - datasets/intermediate/test_after_simnmr.parquet
     - datasets/intermediate/train_val_extended.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/remove_benchmark_overlaps.py
     - scripts/data/reporting.py
@@ -329,15 +359,17 @@ stages:
     - datasets/intermediate/test_benchmark_preclean.parquet:
         push: false
   filter_train:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
-      datasets/intermediate/train_val_extended.parquet --output 
-      datasets/intermediate/train_val_filtered.parquet --removed-output 
-      datasets/intermediate/audits/train_val_removed.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/intermediate/train_val_filtered_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py
+      datasets/intermediate/train_val_extended.parquet --output
+      datasets/intermediate/train_val_filtered.parquet --removed-output
+      datasets/intermediate/audits/train_val_removed.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/intermediate/train_val_filtered_report.json --quiet
     deps:
     - datasets/intermediate/train_val_extended.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/filter_dataset.py
     - scripts/data/reporting.py
@@ -353,15 +385,17 @@ stages:
         push: false
     - datasets/intermediate/train_val_filtered_report.json
   filter_test:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
-      datasets/intermediate/test_benchmark_preclean.parquet --output 
-      datasets/cleaned/test_benchmark.parquet --removed-output 
-      datasets/intermediate/audits/test_benchmark_removed.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/cleaned/test_benchmark_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py
+      datasets/intermediate/test_benchmark_preclean.parquet --output
+      datasets/cleaned/test_benchmark.parquet --removed-output
+      datasets/intermediate/audits/test_benchmark_removed.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/cleaned/test_benchmark_report.json --quiet
     deps:
     - datasets/intermediate/test_benchmark_preclean.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/filter_dataset.py
     - scripts/data/reporting.py
@@ -376,15 +410,17 @@ stages:
     - datasets/intermediate/audits/test_benchmark_removed.parquet:
         push: false
   filter_simnmr:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
-      datasets/canonical/simnmr/all.parquet --output 
-      datasets/cleaned/simnmr.parquet --removed-output 
-      datasets/intermediate/audits/simnmr_removed.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/cleaned/simnmr_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py
+      datasets/canonical/simnmr/all.parquet --output
+      datasets/cleaned/simnmr.parquet --removed-output
+      datasets/intermediate/audits/simnmr_removed.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/cleaned/simnmr_report.json --quiet
     deps:
     - datasets/canonical/simnmr/all.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/filter_dataset.py
     - scripts/data/reporting.py
@@ -399,15 +435,17 @@ stages:
     - datasets/intermediate/audits/simnmr_removed.parquet:
         push: false
   filter_nmrgym:
-    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
-      datasets/canonical/nmrgym/all.parquet --output 
-      datasets/cleaned/nmrgym.parquet --removed-output 
-      datasets/intermediate/audits/nmrgym_removed.parquet --batch-size 
-      ${postprocess.batch_size} --report-output 
-      datasets/cleaned/nmrgym_report.json
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py
+      datasets/canonical/nmrgym/all.parquet --output
+      datasets/cleaned/nmrgym.parquet --removed-output
+      datasets/intermediate/audits/nmrgym_removed.parquet --batch-size
+      ${postprocess.batch_size} --report-output
+      datasets/cleaned/nmrgym_report.json --quiet
     deps:
     - datasets/canonical/nmrgym/all.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/filter_dataset.py
     - scripts/data/reporting.py
@@ -422,12 +460,12 @@ stages:
     - datasets/intermediate/audits/nmrgym_removed.parquet:
         push: false
   prepare_admet:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/prepare_admet_datasets.py 
-      datasets/intermediate/train_val_filtered.parquet --tdc-root 
-      datasets/raw/admet --output-root datasets/cleaned/admet --train-output 
-      datasets/cleaned/train_val.parquet --batch-size ${postprocess.batch_size} 
-      --report-output datasets/cleaned/admet/preparation_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/prepare_admet_datasets.py
+      datasets/intermediate/train_val_filtered.parquet --tdc-root
+      datasets/raw/admet --output-root datasets/cleaned/admet --train-output
+      datasets/cleaned/train_val.parquet --batch-size ${postprocess.batch_size}
+      --report-output datasets/cleaned/admet/preparation_report.json --quiet
     deps:
     - datasets/intermediate/train_val_filtered.parquet
     - datasets/raw/admet/ames/test.csv
@@ -436,7 +474,9 @@ stages:
     - datasets/raw/admet/ld50_zhu/train_val.csv
     - datasets/raw/admet/solubility_aqsoldb/test.csv
     - datasets/raw/admet/solubility_aqsoldb/train_val.csv
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/common.py
     - scripts/data/postprocess/prepare_admet_datasets.py
     - scripts/data/reporting.py
@@ -461,16 +501,19 @@ stages:
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
     - datasets/cleaned/train_val.parquet
   calculate_train_properties:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/calculate_mol_properties.py 
-      datasets/cleaned/train_val.parquet --output 
-      datasets/cleaned/train_val_mol_properties.csv --batch-size 
-      ${mol_properties.batch_size} --records-per-task 
-      ${mol_properties.records_per_task} --workers ${mol_properties.workers} 
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/calculate_mol_properties.py
+      datasets/cleaned/train_val.parquet --output
+      datasets/cleaned/train_val_mol_properties.csv --batch-size
+      ${mol_properties.batch_size} --records-per-task
+      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/train_val_mol_properties_report.json
+      --quiet
     deps:
     - datasets/cleaned/train_val.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/calculate_mol_properties.py
     - scripts/data/postprocess/common.py
     - scripts/data/reporting.py
@@ -485,16 +528,19 @@ stages:
     - datasets/cleaned/train_val_mol_properties.csv
     - datasets/cleaned/train_val_mol_properties_report.json
   calculate_test_properties:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/calculate_mol_properties.py 
-      datasets/cleaned/test_benchmark.parquet --output 
-      datasets/cleaned/test_benchmark_mol_properties.csv --batch-size 
-      ${mol_properties.batch_size} --records-per-task 
-      ${mol_properties.records_per_task} --workers ${mol_properties.workers} 
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/calculate_mol_properties.py
+      datasets/cleaned/test_benchmark.parquet --output
+      datasets/cleaned/test_benchmark_mol_properties.csv --batch-size
+      ${mol_properties.batch_size} --records-per-task
+      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/test_benchmark_mol_properties_report.json
+      --quiet
     deps:
     - datasets/cleaned/test_benchmark.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/calculate_mol_properties.py
     - scripts/data/postprocess/common.py
     - scripts/data/reporting.py
@@ -509,16 +555,18 @@ stages:
     - datasets/cleaned/test_benchmark_mol_properties.csv
     - datasets/cleaned/test_benchmark_mol_properties_report.json
   calculate_simnmr_properties:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/calculate_mol_properties.py 
-      datasets/cleaned/simnmr.parquet --output 
-      datasets/cleaned/simnmr_mol_properties.csv --batch-size 
-      ${mol_properties.batch_size} --records-per-task 
-      ${mol_properties.records_per_task} --workers ${mol_properties.workers} 
-      --report-output datasets/cleaned/simnmr_mol_properties_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/calculate_mol_properties.py
+      datasets/cleaned/simnmr.parquet --output
+      datasets/cleaned/simnmr_mol_properties.csv --batch-size
+      ${mol_properties.batch_size} --records-per-task
+      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
+      --report-output datasets/cleaned/simnmr_mol_properties_report.json --quiet
     deps:
     - datasets/cleaned/simnmr.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/calculate_mol_properties.py
     - scripts/data/postprocess/common.py
     - scripts/data/reporting.py
@@ -533,16 +581,18 @@ stages:
     - datasets/cleaned/simnmr_mol_properties.csv
     - datasets/cleaned/simnmr_mol_properties_report.json
   calculate_nmrgym_properties:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/calculate_mol_properties.py 
-      datasets/cleaned/nmrgym.parquet --output 
-      datasets/cleaned/nmrgym_mol_properties.csv --batch-size 
-      ${mol_properties.batch_size} --records-per-task 
-      ${mol_properties.records_per_task} --workers ${mol_properties.workers} 
-      --report-output datasets/cleaned/nmrgym_mol_properties_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/calculate_mol_properties.py
+      datasets/cleaned/nmrgym.parquet --output
+      datasets/cleaned/nmrgym_mol_properties.csv --batch-size
+      ${mol_properties.batch_size} --records-per-task
+      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
+      --report-output datasets/cleaned/nmrgym_mol_properties_report.json --quiet
     deps:
     - datasets/cleaned/nmrgym.parquet
+    - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
     - scripts/data/postprocess/calculate_mol_properties.py
     - scripts/data/postprocess/common.py
     - scripts/data/reporting.py
@@ -557,19 +607,19 @@ stages:
     - datasets/cleaned/nmrgym_mol_properties.csv
     - datasets/cleaned/nmrgym_mol_properties_report.json
   analyze_cleaned_collection:
-    cmd: PYTHONPATH=scripts python 
-      scripts/data/postprocess/analyze_cleaned_datasets.py --cleaned-root 
-      datasets/cleaned --sample-per-group ${analytics.sample_per_group} 
-      --report-output datasets/cleaned/analyze_main_report.json && 
-      PYTHONPATH=scripts python 
-      scripts/data/postprocess/analyze_cleaned_datasets.py --nmrsolver-parquet 
-      datasets/cleaned/simnmr.parquet --sample-per-group 
-      ${analytics.sample_per_group} --report-output 
-      datasets/cleaned/analyze_simnmr_report.json && PYTHONPATH=scripts python 
-      scripts/data/postprocess/analyze_cleaned_datasets.py --nmrgym-parquet 
-      datasets/cleaned/nmrgym.parquet --sample-per-group 
-      ${analytics.sample_per_group} --report-output 
-      datasets/cleaned/analyze_nmrgym_report.json
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/analyze_cleaned_datasets.py --cleaned-root
+      datasets/cleaned --sample-per-group ${analytics.sample_per_group}
+      --report-output datasets/cleaned/analyze_main_report.json --quiet &&
+      PYTHONPATH=scripts python
+      scripts/data/postprocess/analyze_cleaned_datasets.py --nmrsolver-parquet
+      datasets/cleaned/simnmr.parquet --sample-per-group
+      ${analytics.sample_per_group} --report-output
+      datasets/cleaned/analyze_simnmr_report.json --quiet && PYTHONPATH=scripts
+      python scripts/data/postprocess/analyze_cleaned_datasets.py
+      --nmrgym-parquet datasets/cleaned/nmrgym.parquet --sample-per-group
+      ${analytics.sample_per_group} --report-output
+      datasets/cleaned/analyze_nmrgym_report.json --quiet
     deps:
     - datasets/cleaned/admet/ames/test.csv
     - datasets/cleaned/admet/ames/test.parquet
@@ -591,6 +641,8 @@ stages:
     - datasets/cleaned/test_benchmark_mol_properties.csv
     - datasets/cleaned/train_val.parquet
     - datasets/cleaned/train_val_mol_properties.csv
+    - scripts/data/__init__.py
+    - scripts/data/console.py
     - scripts/data/postprocess/analyze_cleaned_datasets.py
     - scripts/data/reporting.py
     - scripts/envs_scr/requirements/nmr-main.txt

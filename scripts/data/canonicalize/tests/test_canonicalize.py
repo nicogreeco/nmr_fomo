@@ -3,6 +3,7 @@
 import importlib.util
 import io
 import json
+import pickle
 import tempfile
 import unittest
 from pathlib import Path
@@ -19,6 +20,7 @@ from data.canonicalize.convert_nmrgym import convert_record as convert_nmrgym_re
 from data.canonicalize.convert_nmrsolver import (
     ChemicalMetadataConversionError,
     ChemicalMetadataRejectionReport,
+    _convert_serialized_batch_in_worker,
     convert_record as convert_nmrsolver_record,
     iter_converted_records as iter_nmrsolver_records,
 )
@@ -270,6 +272,27 @@ class ConverterMappingTests(unittest.TestCase):
         self.assertEqual(report_row["record_id"], "nmrsolver-simnmr-pubchem:invalid")
         self.assertEqual(report_row["source_smiles"], invalid_record["smiles"])
         self.assertIn("canonical SMILES", report_row["reason"])
+
+    def test_nmrsolver_worker_unpickles_and_returns_arrow_ready_rows(self):
+        raw_record = {
+            "smiles": "CCO",
+            "nmr_predict": [18.0, 1.0],
+            "atom_index": [6, 1],
+            "equi_class": [1, 2],
+        }
+        results = _convert_serialized_batch_in_worker(
+            [(b"fixture", pickle.dumps(raw_record))],
+            "fixture.lmdb",
+        )
+
+        row, rejection_reason, report_record = results[0]
+        self.assertEqual(
+            row["record_id"],
+            "nmrsolver-simnmr-pubchem:fixture",
+        )
+        self.assertEqual(row["smiles_canonical"], "CCO")
+        self.assertIsNone(rejection_reason)
+        self.assertIsNone(report_record)
 
     def test_nmrsolver_parallel_conversion_preserves_order_and_rejections(self):
         invalid_record = {

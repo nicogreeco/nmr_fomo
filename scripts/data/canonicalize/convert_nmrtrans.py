@@ -33,6 +33,13 @@ from data.canonicalize.common import (
     write_canonical_parquet,
 )
 from data.schema import CanonicalRecord, normalize_multiplicity
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+    progress_iter,
+)
 from data.reporting import (
     default_report_path,
     prepare_report_output,
@@ -195,11 +202,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="allow replacement of an existing output file",
     )
+    add_console_arguments(parser)
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
+    configure_console(args.quiet)
+    print_stage_start("canonicalize NMRTrans")
     if args.input.is_file() and args.input.resolve() == args.output.resolve():
         raise ValueError("output must not overwrite the source dataset")
     report_path, report_temporary = prepare_report_output(
@@ -209,7 +219,11 @@ def main() -> None:
     )
 
     record_count = write_canonical_parquet(
-        iter_converted_records(args.input),
+        progress_iter(
+            iter_converted_records(args.input),
+            "Canonicalizing NMRTrans",
+            enabled=not args.no_progress,
+        ),
         args.output,
         source_name=SOURCE_NAME,
         converter_name="convert_nmrtrans.py",
@@ -223,7 +237,7 @@ def main() -> None:
         "counts": {"output_records": record_count},
     }
     write_processing_report(report, report_path, report_temporary)
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("canonicalize NMRTrans", report_path)
 
 
 if __name__ == "__main__":

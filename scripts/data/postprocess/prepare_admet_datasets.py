@@ -5,7 +5,8 @@ The small TDC property tables are read first and converted to RDKit full
 InChIKeys. The canonical NMR input is then streamed once while retaining only
 records matching those requested keys. Repeated agreeing labels are collapsed;
 molecules with discordant labels are excluded from the supervised cohort but
-remain excluded from pretraining to avoid label leakage.
+remain excluded from pretraining to avoid label leakage. Molecular identities
+found in both splits of one endpoint are handled in the same conservative way.
 
 Run this step after extending and filtering the rich train/validation dataset.
 All Parquet outputs therefore remain compliant with the common cleaning policy
@@ -23,6 +24,12 @@ from typing import Iterable
 
 from rdkit import Chem, RDLogger
 
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+)
 from data.postprocess.common import (
     open_canonical_parquet,
     prepare_parquet_output,
@@ -74,12 +81,14 @@ def load_property_releases(
 ) -> tuple[
     dict[tuple[str, str], dict[str, object]],
     set[str],
+    dict[str, set[str]],
 ]:
-    """Load the small ADMET files and collect the molecular keys to request."""
+    """Load ADMET files and identify molecular keys shared across splits."""
 
     releases: dict[tuple[str, str], dict[str, object]] = {}
     requested_keys: set[str] = set()
     endpoint_split_keys: dict[tuple[str, str], set[str]] = {}
+    cross_split_keys_by_endpoint: dict[str, set[str]] = {}
 
     for endpoint in ENDPOINTS:
         for split in SPLITS:
@@ -119,13 +128,17 @@ def load_property_releases(
             endpoint_split_keys[(endpoint, "train_val")]
             & endpoint_split_keys[(endpoint, "test")]
         )
+        cross_split_keys_by_endpoint[endpoint] = shared_keys
         if shared_keys:
-            raise ValueError(
-                f"{endpoint} has {len(shared_keys):,} molecular identities in "
-                "both train_val and test"
-            )
+            for split in SPLITS:
+                release = releases[(endpoint, split)]
+                release["keyed_rows"] = [
+                    (row, key)
+                    for row, key in release["keyed_rows"]
+                    if key not in shared_keys
+                ]
 
-    return releases, requested_keys
+    return releases, requested_keys, cross_split_keys_by_endpoint
 
 
 def index_requested_nmr_records(
@@ -311,10 +324,12 @@ def prepare_admet_datasets(
     cohort_root = Path(output_root)
     train_output = Path(train_output_path)
 
-    releases, requested_keys = load_property_releases(
-        property_root,
-        smiles_column,
-        label_column,
+    releases, requested_keys, cross_split_keys_by_endpoint = (
+        load_property_releases(
+            property_root,
+            smiles_column,
+            label_column,
+        )
     )
     input_file, record_ids_by_key, input_summary = index_requested_nmr_records(
         input_file_path,
@@ -373,7 +388,12 @@ def prepare_admet_datasets(
             "different paths"
         )
 
-    all_matched_record_ids: set[str] = set()
+    cross_split_keys = set().union(*cross_split_keys_by_endpoint.values())
+    all_matched_record_ids = {
+        record_id
+        for key in cross_split_keys
+        for record_id in record_ids_by_key.get(key, [])
+    }
     release_results: list[dict[str, object]] = []
     try:
         for endpoint in ENDPOINTS:
@@ -485,7 +505,13 @@ def prepare_admet_datasets(
                 "removed_pretraining_records": len(all_matched_record_ids),
                 "train_output_records": train_rows,
             },
-            "details": {"cohorts": release_results},
+            "details": {
+                "cohorts": release_results,
+                "cross_split_molecules": {
+                    endpoint: len(keys)
+                    for endpoint, keys in cross_split_keys_by_endpoint.items()
+                },
+            },
         }
         report_temporary.write_text(
             json.dumps(report, indent=2) + "\n",
@@ -524,12 +550,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="processing JSON (default: <output-root>/preparation_report.json)",
     )
     parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--no-progress", action="store_true")
+    add_console_arguments(parser)
     return parser
 
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    configure_console(args.quiet)
+    print_stage_start("prepare ADMET datasets")
     prepare_admet_datasets(
         args.input,
         args.tdc_root,
@@ -547,7 +575,7 @@ def main() -> None:
         if args.report_output is not None
         else args.output_root / "preparation_report.json"
     )
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("prepare ADMET datasets", report_path)
 
 
 if __name__ == "__main__":

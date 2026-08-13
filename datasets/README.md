@@ -79,9 +79,10 @@ dvc repro
 dvc push
 ```
 
-`dvc repro` materializes stale prerequisites automatically. `dvc push` uploads
-raw data previously added with `dvc add` and final pipeline outputs, while
-respecting every output-level `push: false`. After a successful reproduction,
+`dvc repro` materializes stale prerequisites automatically. Pipeline commands
+use quiet mode but retain one progress bar and real errors for each stage.
+`dvc push` uploads raw data previously added with `dvc add` and final pipeline
+outputs, while respecting every output-level `push: false`. After a successful reproduction,
 commit `dvc.lock` together with the relevant code, `dvc.yaml`, `params.yaml`,
 source pointers, manifest changes, and documentation.
 

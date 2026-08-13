@@ -68,7 +68,8 @@ Transformation commands use the same conventions where applicable:
 - `--batch-size` bounds each Arrow batch and defaults to 50,000 rows;
 - `--report-output` selects the processing JSON path;
 - `--overwrite` permits replacement only after temporary outputs are complete;
-- `--no-progress` disables progress output for commands that report progress.
+- `--quiet` suppresses non-essential warnings and intermediate messages but keeps the progress bar and errors;
+- `--no-progress` disables only the progress bar.
 
 Canonical Parquet outputs are written to hidden `.partial` files and promoted
 only after a successful close. The scripts preserve the input schema and add
@@ -82,9 +83,10 @@ ordinary cached DVC outputs: they record transformation results without
 repeating the command, Git revision, DVC hashes, or environment already
 captured by the pipeline. They are not configured as no-cache DVC metrics.
 
-`common.py` contains the small shared implementation for schema validation,
-compatible-RDKit checks, temporary output paths, progress bars, exact-SMILES
-indexing, and record-ID filtering. It is an internal module, not a command.
+`common.py` contains shared Parquet validation, temporary-output, exact-SMILES
+indexing, and record-ID filtering helpers. `scripts/data/console.py` provides the
+common CLI flags, warning suppression, and progress bars. Both are internal
+modules, not commands.
 
 ## `merge_datasets.py`
 
@@ -181,11 +183,14 @@ the large cleaned NMR input once and retains only requested matches in memory.
 It creates the endpoint `train_val` and `test` label/Parquet pairs and removes
 the union of all matched records from the pretraining output.
 
-Repeated property rows for one full InChIKey are handled during the same step:
+Repeated or cross-split property identities are handled during the same step:
 
-- agreeing numerical labels are collapsed to one label per NMR `record_id`;
-- discordant labels are excluded from the supervised cohort;
-- all matched identities, including discordant ones, remain excluded from the
+- agreeing numerical labels within a split are collapsed to one label per NMR
+  `record_id`;
+- discordant labels within a split are excluded from the supervised cohort;
+- a full InChIKey present in both train/validation and test is excluded from
+  both supervised cohorts;
+- all matched identities excluded by either rule remain excluded from the
   pretraining output to prevent label leakage.
 
 ```bash
@@ -212,12 +217,15 @@ small process pool.
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
   datasets/cleaned/train_val.parquet \
-  --workers 4
+  --workers 8
 ```
 
-Function and CLI defaults are identical: 50,000 rows per Arrow batch, 5,000
-records per worker task, and up to four workers. Increase `--workers` only
-after measuring memory and throughput on the target machine.
+Function, CLI, and `params.yaml` defaults are identical: 50,000 rows per Arrow
+batch, 1,000 records per worker task, and up to eight workers. A bounded queue
+keeps workers occupied across Arrow-batch boundaries, and workers serialize
+their result rows before returning them to the writer. Local profiling showed
+eight workers outperforming four, although RDKit calculation remains the main
+cost and machine-specific scaling should still be measured.
 
 The output contains exact molecular weight, Crippen logP, TPSA, HBA/HBD,
 rotatable bonds, fraction Csp3, aromatic heavy-atom fraction, nine binary

@@ -20,6 +20,13 @@ import pyarrow as pa
 from pyarrow import compute, parquet
 
 from data.canonicalize.common import normalize_modality_lists
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+    progress_bar,
+)
 from data.postprocess.common import open_canonical_parquet
 from data.reporting import (
     default_report_path,
@@ -298,6 +305,7 @@ def _write_outputs(
     removed_path: Path,
     removed_rows: list[dict[str, str | None]],
     batch_size: int,
+    show_progress: bool,
 ) -> int:
     """Write both outputs to temporary files and promote them on success."""
 
@@ -342,6 +350,11 @@ def _write_outputs(
     value_set = pa.array(sorted(removed_ids), type=pa.string())
     rows_written = 0
     writer = None
+    progress = progress_bar(
+        input_file.metadata.num_rows,
+        f"Filtering {input_path.name}",
+        show_progress,
+    )
 
     try:
         parquet.write_table(report_table, removed_temporary, compression="zstd")
@@ -355,10 +368,14 @@ def _write_outputs(
             remove_mask = compute.is_in(table["record_id"], value_set=value_set)
             filtered = table.filter(compute.invert(remove_mask))
             if filtered.num_rows == 0:
+                if progress is not None:
+                    progress.update(batch.num_rows)
                 continue
             filtered = normalize_modality_lists(filtered)
             writer.write_table(filtered, row_group_size=filtered.num_rows)
             rows_written += filtered.num_rows
+            if progress is not None:
+                progress.update(batch.num_rows)
         writer.close()
         writer = None
 
@@ -376,6 +393,9 @@ def _write_outputs(
         cleaned_temporary.unlink(missing_ok=True)
         removed_temporary.unlink(missing_ok=True)
         raise
+    finally:
+        if progress is not None:
+            progress.close()
 
     return rows_written
 
@@ -387,6 +407,7 @@ def clean_parquet(
     *,
     batch_size: int = 50_000,
     overwrite: bool = False,
+    show_progress: bool = True,
 ) -> dict[str, object]:
     """Create a cleaned canonical Parquet and its minimal removal report."""
 
@@ -426,6 +447,7 @@ def clean_parquet(
         removed_path,
         removed_rows,
         batch_size,
+        show_progress,
     )
 
     input_rows = input_file.metadata.num_rows
@@ -485,11 +507,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="replace existing cleaned and removal-report files",
     )
+    add_console_arguments(parser)
     return parser
 
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    configure_console(args.quiet)
+    print_stage_start("filter canonical dataset")
     default_cleaned, default_removed = default_output_paths(args.input)
     cleaned_output = args.output or default_cleaned
     removed_output = args.removed_output or default_removed
@@ -504,9 +529,10 @@ def main() -> None:
         args.removed_output,
         batch_size=args.batch_size,
         overwrite=args.overwrite,
+        show_progress=not args.no_progress,
     )
     write_processing_report(result, report_path, report_temporary)
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("filter canonical dataset", report_path)
 
 
 if __name__ == "__main__":

@@ -23,6 +23,13 @@ import polars as pl
 from matplotlib.lines import Line2D
 from matplotlib.ticker import PercentFormatter
 
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+    progress_bar,
+)
 from data.reporting import prepare_report_output, write_processing_report
 
 MAIN_DATASETS = ("train_val", "test_benchmark")
@@ -126,6 +133,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="replace an existing processing report",
     )
+    add_console_arguments(parser)
     return parser.parse_args()
 
 
@@ -884,8 +892,11 @@ def analyze_main_dataset(
     dataset_name: str,
     analytics_dir: Path,
     sample_per_group: int,
+    *,
+    quiet: bool = False,
 ) -> pl.DataFrame:
-    print(f"Analyzing {dataset_name}", flush=True)
+    if not quiet:
+        print(f"Analyzing {dataset_name}", flush=True)
     dataset_analytics_dir = analytics_dir / dataset_name
     dataset_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = main_records(parquet_path)
@@ -920,6 +931,8 @@ def analyze_main_dataset(
 def analyze_nmrsolver_dataset(
     parquet_path: Path,
     sample_per_group: int,
+    *,
+    quiet: bool = False,
 ) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
@@ -929,7 +942,8 @@ def analyze_nmrsolver_dataset(
     analytics_dir = parquet_path.parent / "analytics" / "simnmr"
     analytics_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Analyzing NMR-Solver dataset: {parquet_path}", flush=True)
+    if not quiet:
+        print(f"Analyzing NMR-Solver dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
     inventory = nmrsolver_inventory(records)
     inventory.write_csv(
@@ -957,13 +971,16 @@ def analyze_nmrsolver_dataset(
         # the plotting prefix before collecting, while summaries use all rows.
         first_rows_sample_only=True,
     )
-    print(f"Wrote NMR-Solver analytics to {analytics_dir}", flush=True)
+    if not quiet:
+        print(f"Wrote NMR-Solver analytics to {analytics_dir}", flush=True)
     return analytics_dir, int(inventory["records"].sum())
 
 
 def analyze_nmrgym_dataset(
     parquet_path: Path,
     sample_per_group: int,
+    *,
+    quiet: bool = False,
 ) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
@@ -973,7 +990,8 @@ def analyze_nmrgym_dataset(
     analytics_dir = parquet_path.parent / "analytics" / "nmrgym"
     analytics_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Analyzing NMRGym dataset: {parquet_path}", flush=True)
+    if not quiet:
+        print(f"Analyzing NMRGym dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
     inventory = inventory_by_source(records, "nmrgym")
     inventory.write_csv(
@@ -999,7 +1017,8 @@ def analyze_nmrgym_dataset(
         shift_only=True,
         first_rows_sample_only=True,
     )
-    print(f"Wrote NMRGym analytics to {analytics_dir}", flush=True)
+    if not quiet:
+        print(f"Wrote NMRGym analytics to {analytics_dir}", flush=True)
     total_records = inventory.filter(pl.col("source") == "ALL")["records"].item()
     return analytics_dir, int(total_records)
 
@@ -1115,8 +1134,11 @@ def analyze_admet(
     cleaned_root: Path,
     analytics_dir: Path,
     sample_per_group: int,
+    *,
+    quiet: bool = False,
 ) -> None:
-    print("Analyzing ADMET cohorts", flush=True)
+    if not quiet:
+        print("Analyzing ADMET cohorts", flush=True)
     admet_analytics_dir = analytics_dir / "admet"
     admet_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = admet_records(cleaned_root)
@@ -1147,13 +1169,12 @@ def analyze_admet(
 
 def main() -> None:
     args = parse_args()
+    configure_console(args.quiet)
+    print_stage_start("analyze cleaned datasets")
     if args.sample_per_group < 1:
         raise ValueError("--sample-per-group must be at least 1")
 
-    if (
-        args.nmrsolver_parquet is not None
-        and args.nmrgym_parquet is not None
-    ):
+    if args.nmrsolver_parquet is not None and args.nmrgym_parquet is not None:
         raise ValueError(
             "--nmrsolver-parquet and --nmrgym-parquet are mutually exclusive"
         )
@@ -1171,10 +1192,20 @@ def main() -> None:
             [args.nmrsolver_parquet, properties_path],
             overwrite=args.overwrite,
         )
-        analytics_dir, record_count = analyze_nmrsolver_dataset(
-            args.nmrsolver_parquet,
-            args.sample_per_group,
+        progress = progress_bar(
+            1, "Analyzing SimNMR", not args.no_progress, unit="datasets"
         )
+        try:
+            analytics_dir, record_count = analyze_nmrsolver_dataset(
+                args.nmrsolver_parquet,
+                args.sample_per_group,
+                quiet=args.quiet,
+            )
+            if progress is not None:
+                progress.update(1)
+        finally:
+            if progress is not None:
+                progress.close()
         report = {
             "stage": "analyze_cleaned_datasets",
             "inputs": {
@@ -1185,6 +1216,7 @@ def main() -> None:
             "counts": {"input_records": record_count},
         }
         write_processing_report(report, report_path, report_temporary)
+        print_stage_complete("analyze cleaned datasets", report_path)
         return
 
     if args.nmrgym_parquet is not None:
@@ -1200,10 +1232,20 @@ def main() -> None:
             [args.nmrgym_parquet, properties_path],
             overwrite=args.overwrite,
         )
-        analytics_dir, record_count = analyze_nmrgym_dataset(
-            args.nmrgym_parquet,
-            args.sample_per_group,
+        progress = progress_bar(
+            1, "Analyzing NMRGym", not args.no_progress, unit="datasets"
         )
+        try:
+            analytics_dir, record_count = analyze_nmrgym_dataset(
+                args.nmrgym_parquet,
+                args.sample_per_group,
+                quiet=args.quiet,
+            )
+            if progress is not None:
+                progress.update(1)
+        finally:
+            if progress is not None:
+                progress.close()
         report = {
             "stage": "analyze_cleaned_datasets",
             "inputs": {
@@ -1214,16 +1256,14 @@ def main() -> None:
             "counts": {"input_records": record_count},
         }
         write_processing_report(report, report_path, report_temporary)
+        print_stage_complete("analyze cleaned datasets", report_path)
         return
 
     cleaned_root = args.cleaned_root
     analytics_dir = args.analytics_dir or cleaned_root / "analytics"
     analytics_dir.mkdir(parents=True, exist_ok=True)
-
     main_dataset_paths = {
-        "train_val": (
-            args.train_val_parquet or cleaned_root / "train_val.parquet"
-        ),
+        "train_val": args.train_val_parquet or cleaned_root / "train_val.parquet",
         "test_benchmark": (
             args.test_benchmark_parquet
             or cleaned_root / "test_benchmark.parquet"
@@ -1240,22 +1280,47 @@ def main() -> None:
         ],
         overwrite=args.overwrite,
     )
-    inventories = [
-        analyze_main_dataset(
-            main_dataset_paths[dataset_name],
-            dataset_name,
-            analytics_dir,
-            args.sample_per_group,
-        )
-        for dataset_name in MAIN_DATASETS
-    ]
-    collection_analytics_dir = analytics_dir / "collection"
-    collection_analytics_dir.mkdir(parents=True, exist_ok=True)
-    pl.concat(inventories).write_csv(
-        collection_analytics_dir / "source_inventory.csv"
+
+    total_steps = len(MAIN_DATASETS) + (0 if args.skip_admet else 1)
+    progress = progress_bar(
+        total_steps,
+        "Analyzing collection",
+        not args.no_progress,
+        unit="datasets",
     )
-    if not args.skip_admet:
-        analyze_admet(cleaned_root, analytics_dir, args.sample_per_group)
+    inventories = []
+    try:
+        for dataset_name in MAIN_DATASETS:
+            inventories.append(
+                analyze_main_dataset(
+                    main_dataset_paths[dataset_name],
+                    dataset_name,
+                    analytics_dir,
+                    args.sample_per_group,
+                    quiet=args.quiet,
+                )
+            )
+            if progress is not None:
+                progress.update(1)
+
+        collection_analytics_dir = analytics_dir / "collection"
+        collection_analytics_dir.mkdir(parents=True, exist_ok=True)
+        pl.concat(inventories).write_csv(
+            collection_analytics_dir / "source_inventory.csv"
+        )
+        if not args.skip_admet:
+            analyze_admet(
+                cleaned_root,
+                analytics_dir,
+                args.sample_per_group,
+                quiet=args.quiet,
+            )
+            if progress is not None:
+                progress.update(1)
+    finally:
+        if progress is not None:
+            progress.close()
+
     total_by_dataset = {
         dataset_name: int(
             inventory.filter(pl.col("source") == "ALL")["records"].item()
@@ -1281,13 +1346,15 @@ def main() -> None:
                 f"{dataset_name}_records": count
                 for dataset_name, count in total_by_dataset.items()
             },
-            "admet_cohorts": 0
-            if args.skip_admet
-            else len(ADMET_ENDPOINTS) * len(ADMET_SPLITS),
+            "admet_cohorts": (
+                0
+                if args.skip_admet
+                else len(ADMET_ENDPOINTS) * len(ADMET_SPLITS)
+            ),
         },
     }
     write_processing_report(report, report_path, report_temporary)
-    print(f"Wrote cleaned-dataset analytics to {analytics_dir}")
+    print_stage_complete("analyze cleaned datasets", report_path)
 
 
 if __name__ == "__main__":

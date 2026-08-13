@@ -21,6 +21,12 @@ from data.postprocess.common import (
     record_ids_for_smiles,
     write_filtered_parquet,
 )
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+)
 from data.reporting import (
     default_report_path,
     prepare_report_output,
@@ -153,12 +159,14 @@ def build_argument_parser() -> argparse.ArgumentParser:
         help="processing JSON (default: <output>_report.json)",
     )
     parser.add_argument("--overwrite", action="store_true")
-    parser.add_argument("--no-progress", action="store_true")
+    add_console_arguments(parser)
     return parser
 
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    configure_console(args.quiet)
+    print_stage_start("remove benchmark overlaps")
     report_path, report_temporary = prepare_report_output(
         args.report_output or default_report_path(args.output),
         [args.input, *args.comparisons, args.output],
@@ -173,7 +181,7 @@ def main() -> None:
         show_progress=not args.no_progress,
     )
     write_processing_report(result, report_path, report_temporary)
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("remove benchmark overlaps", report_path)
 
 
 if __name__ == "__main__":

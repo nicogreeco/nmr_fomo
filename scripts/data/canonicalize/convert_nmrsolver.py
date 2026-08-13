@@ -16,6 +16,7 @@ Example:
 
 import argparse
 import json
+import pickle
 from collections.abc import Iterator, Mapping
 from concurrent.futures import Future, ProcessPoolExecutor
 from multiprocessing import get_context
@@ -25,31 +26,32 @@ from typing import Any, TextIO
 from data.canonicalize.common import (
     ConversionError,
     chemical_metadata_from_smiles,
+    canonical_record_to_row,
     checked_canonical_record,
     finite_float,
     iter_lmdb_records,
     lmdb_key_text,
     require_mapping,
-    write_canonical_parquet,
+    write_canonical_rows,
 )
-from data.schema import CanonicalRecord
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+    progress_bar,
+)
 from data.reporting import (
     default_report_path,
     prepare_report_output,
     write_processing_report,
 )
+from data.schema import CanonicalRecord, ensure_record
 
 
 SOURCE_NAME = "SimNMR-PubChem"
 HYDROGEN_ATOMIC_NUMBER = 1
 CARBON_ATOMIC_NUMBER = 6
-_WORKER_RECORD_FIELDS = (
-    "smiles",
-    "canonical_smiles",
-    "nmr_predict",
-    "atom_index",
-    "equi_class",
-)
 
 
 class ChemicalMetadataConversionError(ConversionError):
@@ -259,156 +261,16 @@ def resolve_input(input_path: str | Path) -> Path:
     )
 
 
-def _record_for_worker(raw_record: Mapping[str, Any]) -> dict[str, object]:
-    """Keep only source fields needed to convert one record in a worker."""
-
-    return {
-        field_name: raw_record[field_name]
-        for field_name in _WORKER_RECORD_FIELDS
-        if field_name in raw_record
-    }
-
-
 def _record_for_rejection_report(
     raw_record: Mapping[str, Any],
 ) -> dict[str, object]:
-    """Keep only the source SMILES fields needed by the parent-side report."""
+    """Keep only source SMILES fields needed by the rejection audit."""
 
     return {
         field_name: raw_record[field_name]
         for field_name in ("smiles", "canonical_smiles")
         if field_name in raw_record
     }
-
-
-def _convert_record_in_worker(
-    raw_record: Mapping[str, Any],
-    record_id: str,
-    location: str,
-) -> CanonicalRecord:
-    """Run one independent record conversion in a spawned worker process."""
-
-    return convert_record(raw_record, record_id, location)
-
-
-def _convert_record_batch_in_worker(
-    records: list[tuple[Mapping[str, Any], str, str]],
-) -> list[tuple[CanonicalRecord | None, str | None]]:
-    """Convert one bounded batch and keep metadata failures in-band.
-
-    A metadata failure is an expected NMR-Solver exception: the parent needs
-    to write it to the ordered rejection report while allowing the other rows
-    in the same task to reach Parquet. Any other conversion error still fails
-    the task and stops the run with its source location.
-    """
-
-    results: list[tuple[CanonicalRecord | None, str | None]] = []
-    for raw_record, record_id, location in records:
-        try:
-            results.append((
-                _convert_record_in_worker(raw_record, record_id, location),
-                None,
-            ))
-        except ChemicalMetadataConversionError as error:
-            results.append((None, str(error)))
-    return results
-
-
-def _iter_parallel_converted_records(
-    source_records: Iterator[tuple[bytes, Mapping[str, Any]]],
-    lmdb_path: Path,
-    rejection_report: ChemicalMetadataRejectionReport | None,
-    workers: int,
-    max_in_flight: int,
-    records_per_task: int,
-) -> Iterator[CanonicalRecord]:
-    """Convert records concurrently while yielding source-key order.
-
-    LMDB reading, Parquet writing, and rejection-report writing stay in the
-    parent process. Independent record conversion, including RDKit work, runs
-    in child processes in bounded batches to avoid one process-pool task per
-    record. Results are retired in submission order so the generated Parquet
-    and JSONL files remain deterministic.
-    """
-
-    pending: list[
-        tuple[
-            Future[list[tuple[CanonicalRecord | None, str | None]]],
-            list[tuple[str, Mapping[str, Any]]],
-        ]
-    ] = []
-    pending_record_count = 0
-    source_exhausted = False
-
-    # Spawn prevents child processes from inheriting the parent's LMDB state.
-    with ProcessPoolExecutor(
-        max_workers=workers,
-        mp_context=get_context("spawn"),
-    ) as executor:
-        while pending or not source_exhausted:
-            while (
-                not source_exhausted
-                and pending_record_count < max_in_flight
-            ):
-                available_slots = max_in_flight - pending_record_count
-                task_size = min(records_per_task, available_slots)
-                worker_records: list[tuple[Mapping[str, Any], str, str]] = []
-                report_records: list[tuple[str, Mapping[str, Any]]] = []
-                while len(worker_records) < task_size:
-                    try:
-                        key, raw_record = next(source_records)
-                    except StopIteration:
-                        source_exhausted = True
-                        break
-
-                    key_name = lmdb_key_text(key)
-                    record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
-                    location = f"{lmdb_path} key {key_name}"
-                    worker_records.append(
-                        (_record_for_worker(raw_record), record_id, location)
-                    )
-                    report_records.append(
-                        (record_id, _record_for_rejection_report(raw_record))
-                    )
-
-                if not worker_records:
-                    continue
-                future = executor.submit(
-                    _convert_record_batch_in_worker,
-                    worker_records,
-                )
-                pending.append((future, report_records))
-                pending_record_count += len(worker_records)
-
-            if not pending:
-                continue
-
-            future, report_records = pending.pop(0)
-            results = future.result()
-            pending_record_count -= len(report_records)
-            if len(results) != len(report_records):
-                raise RuntimeError(
-                    "NMR-Solver worker returned a different number of results "
-                    "than submitted records"
-                )
-            for (record, rejection_reason), (record_id, report_record) in zip(
-                results, report_records
-            ):
-                if rejection_reason is not None:
-                    if rejection_report is None:
-                        raise ChemicalMetadataConversionError(rejection_reason)
-                    rejection_report.write(
-                        record_id,
-                        report_record,
-                        rejection_reason,
-                    )
-                    continue
-                if record is None:
-                    raise RuntimeError(
-                        "NMR-Solver worker returned neither a record nor a "
-                        "rejection reason"
-                    )
-                yield record
 
 
 def iter_converted_records(
@@ -419,7 +281,7 @@ def iter_converted_records(
     max_in_flight: int | None = None,
     records_per_task: int = 1,
 ) -> Iterator[CanonicalRecord]:
-    """Yield valid records and report source structures RDKit cannot process."""
+    """Yield canonical records through the stable programmatic API."""
 
     if workers < 1:
         raise ValueError("workers must be at least 1")
@@ -431,14 +293,22 @@ def iter_converted_records(
     lmdb_path = resolve_input(input_path)
     source_records = iter(iter_lmdb_records(lmdb_path, readahead=True))
     if workers > 1:
-        yield from _iter_parallel_converted_records(
-            source_records,
+        serialized_records = (
+            (key, pickle.dumps(raw_record, protocol=pickle.HIGHEST_PROTOCOL))
+            for key, raw_record in source_records
+        )
+        rows = _iter_parallel_converted_rows(
+            serialized_records,
             lmdb_path,
             rejection_report,
             workers,
             max_in_flight or workers * records_per_task * 2,
             records_per_task,
+            False,
+            None,
         )
+        for row in rows:
+            yield ensure_record(row)
         return
 
     for key, raw_record in source_records:
@@ -453,15 +323,217 @@ def iter_converted_records(
             rejection_report.write(record_id, raw_record, str(error))
 
 
-def _records_with_progress(
-    records: Iterator[CanonicalRecord], progress_every: int
-) -> Iterator[CanonicalRecord]:
-    """Print a small progress message while preserving streaming behavior."""
+def _iter_serialized_lmdb_records(path: Path) -> Iterator[tuple[bytes, bytes]]:
+    """Yield LMDB keys and still-pickled values in source order."""
 
-    for record_count, record in enumerate(records, start=1):
-        yield record
-        if record_count % progress_every == 0:
-            print(f"converted {record_count:,} records", flush=True)
+    try:
+        import lmdb
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "reading SimNMR requires lmdb; install it in the conversion environment"
+        ) from error
+
+    environment = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=True,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with environment.begin() as transaction:
+            for key, value in transaction.cursor():
+                yield bytes(key), bytes(value)
+    finally:
+        environment.close()
+
+
+def _lmdb_entry_count(path: Path) -> int:
+    """Return the number of source records for an exact progress total."""
+
+    try:
+        import lmdb
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            "reading SimNMR requires lmdb; install it in the conversion environment"
+        ) from error
+
+    environment = lmdb.open(
+        str(path),
+        subdir=False,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False,
+        max_readers=256,
+    )
+    try:
+        with environment.begin() as transaction:
+            return int(transaction.stat()["entries"])
+    finally:
+        environment.close()
+
+
+def _convert_serialized_batch_in_worker(
+    records: list[tuple[bytes, bytes]],
+    lmdb_path_text: str,
+) -> list[
+    tuple[dict[str, object] | None, str | None, dict[str, object] | None]
+]:
+    """Unpickle, convert, and prepare Arrow rows inside one worker."""
+
+    results = []
+    for key, serialized_record in records:
+        key_name = lmdb_key_text(key)
+        record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
+        location = f"{lmdb_path_text} key {key_name}"
+        try:
+            raw_record = pickle.loads(serialized_record)
+        except Exception as error:
+            raise ConversionError(f"could not unpickle {location}") from error
+        raw_record = require_mapping(raw_record, location)
+
+        try:
+            canonical_record = convert_record(raw_record, record_id, location)
+        except ChemicalMetadataConversionError as error:
+            results.append((
+                None,
+                str(error),
+                _record_for_rejection_report(raw_record),
+            ))
+        else:
+            results.append((canonical_record_to_row(canonical_record), None, None))
+    return results
+
+
+def _iter_parallel_converted_rows(
+    source_records: Iterator[tuple[bytes, bytes]],
+    lmdb_path: Path,
+    rejection_report: ChemicalMetadataRejectionReport | None,
+    workers: int,
+    max_in_flight: int,
+    records_per_task: int,
+    quiet: bool,
+    progress,
+) -> Iterator[dict[str, object]]:
+    """Convert serialized LMDB values concurrently in deterministic order."""
+
+    pending: list[tuple[Future[list], list[bytes]]] = []
+    pending_record_count = 0
+    source_exhausted = False
+    with ProcessPoolExecutor(
+        max_workers=workers,
+        mp_context=get_context("spawn"),
+        initializer=configure_console,
+        initargs=(quiet,),
+    ) as executor:
+        while pending or not source_exhausted:
+            while not source_exhausted and pending_record_count < max_in_flight:
+                task_size = min(
+                    records_per_task,
+                    max_in_flight - pending_record_count,
+                )
+                task_records = []
+                task_keys = []
+                while len(task_records) < task_size:
+                    try:
+                        key, serialized_record = next(source_records)
+                    except StopIteration:
+                        source_exhausted = True
+                        break
+                    task_records.append((key, serialized_record))
+                    task_keys.append(key)
+
+                if task_records:
+                    future = executor.submit(
+                        _convert_serialized_batch_in_worker,
+                        task_records,
+                        str(lmdb_path),
+                    )
+                    pending.append((future, task_keys))
+                    pending_record_count += len(task_records)
+
+            if not pending:
+                continue
+
+            future, task_keys = pending.pop(0)
+            results = future.result()
+            pending_record_count -= len(task_keys)
+            if len(results) != len(task_keys):
+                raise RuntimeError(
+                    "SimNMR worker returned a different number of results than submitted"
+                )
+
+            for key, (row, reason, report_record) in zip(task_keys, results):
+                if progress is not None:
+                    progress.update(1)
+                if reason is not None:
+                    if rejection_report is None or report_record is None:
+                        raise ChemicalMetadataConversionError(reason)
+                    key_name = lmdb_key_text(key)
+                    rejection_report.write(
+                        f"nmrsolver-simnmr-pubchem:{key_name}",
+                        report_record,
+                        reason,
+                    )
+                elif row is None:
+                    raise RuntimeError(
+                        "SimNMR worker returned neither a row nor a rejection reason"
+                    )
+                else:
+                    yield row
+
+
+def iter_converted_rows(
+    input_path: str | Path,
+    rejection_report: ChemicalMetadataRejectionReport | None = None,
+    *,
+    workers: int = 1,
+    max_in_flight: int | None = None,
+    records_per_task: int = 256,
+    quiet: bool = False,
+    progress=None,
+) -> Iterator[dict[str, object]]:
+    """Yield Arrow-ready rows, using serialized worker input when parallel."""
+
+    if workers < 1:
+        raise ValueError("workers must be at least 1")
+    if records_per_task < 1:
+        raise ValueError("records_per_task must be at least 1")
+    if max_in_flight is not None and max_in_flight < workers:
+        raise ValueError("max_in_flight must be at least workers")
+
+    lmdb_path = resolve_input(input_path)
+    if workers > 1:
+        yield from _iter_parallel_converted_rows(
+            iter(_iter_serialized_lmdb_records(lmdb_path)),
+            lmdb_path,
+            rejection_report,
+            workers,
+            max_in_flight or workers * records_per_task * 2,
+            records_per_task,
+            quiet,
+            progress,
+        )
+        return
+
+    for key, raw_record in iter_lmdb_records(lmdb_path, readahead=True):
+        key_name = lmdb_key_text(key)
+        record_id = f"nmrsolver-simnmr-pubchem:{key_name}"
+        location = f"{lmdb_path} key {key_name}"
+        try:
+            yield canonical_record_to_row(
+                convert_record(raw_record, record_id, location)
+            )
+        except ChemicalMetadataConversionError as error:
+            if rejection_report is None:
+                raise
+            rejection_report.write(record_id, raw_record, str(error))
+        finally:
+            if progress is not None:
+                progress.update(1)
 
 
 def parse_args() -> argparse.Namespace:
@@ -482,7 +554,10 @@ def parse_args() -> argparse.Namespace:
         "--progress-every",
         type=int,
         default=1000000,
-        help="print progress every N records; use 0 to disable (default: 1000000)",
+        help=(
+            "minimum records between progress refreshes; 0 selects automatic "
+            "refreshing (default: 1000000)"
+        ),
     )
     parser.add_argument(
         "--workers",
@@ -528,6 +603,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="processing JSON (default: beside the canonical Parquet)",
     )
+    add_console_arguments(parser)
     return parser.parse_args()
 
 
@@ -541,6 +617,8 @@ def default_rejection_report_path(output_path: Path) -> Path:
 
 def main() -> None:
     args = parse_args()
+    configure_console(args.quiet)
+    print_stage_start("canonicalize SimNMR-PubChem")
     lmdb_path = resolve_input(args.input)
     if lmdb_path.resolve() == args.output.resolve():
         raise ValueError("output must not overwrite the source dataset")
@@ -580,24 +658,33 @@ def main() -> None:
 
     with partial_report_path.open("x", encoding="utf-8") as report_file:
         rejection_report = ChemicalMetadataRejectionReport(report_file)
-        records = iter_converted_records(
-            lmdb_path,
-            rejection_report,
-            workers=args.workers,
-            max_in_flight=args.max_in_flight,
-            records_per_task=args.records_per_task,
+        progress = progress_bar(
+            _lmdb_entry_count(lmdb_path),
+            "Canonicalizing SimNMR",
+            not args.no_progress,
+            min_iterations=args.progress_every or None,
         )
-        if args.progress_every:
-            records = _records_with_progress(records, args.progress_every)
-
-        record_count = write_canonical_parquet(
-            records,
-            args.output,
-            source_name=SOURCE_NAME,
-            converter_name="convert_nmrsolver.py",
-            row_group_size=args.row_group_size,
-            overwrite=args.overwrite,
-        )
+        try:
+            rows = iter_converted_rows(
+                lmdb_path,
+                rejection_report,
+                workers=args.workers,
+                max_in_flight=args.max_in_flight,
+                records_per_task=args.records_per_task,
+                quiet=args.quiet,
+                progress=progress,
+            )
+            record_count = write_canonical_rows(
+                rows,
+                args.output,
+                source_name=SOURCE_NAME,
+                converter_name="convert_nmrsolver.py",
+                row_group_size=args.row_group_size,
+                overwrite=args.overwrite,
+            )
+        finally:
+            if progress is not None:
+                progress.close()
 
     partial_report_path.replace(rejection_report_path)
     report = {
@@ -613,7 +700,7 @@ def main() -> None:
         },
     }
     write_processing_report(report, report_path, report_temporary)
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("canonicalize SimNMR-PubChem", report_path)
 
 
 if __name__ == "__main__":

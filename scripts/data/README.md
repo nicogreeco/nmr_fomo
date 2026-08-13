@@ -74,7 +74,11 @@ dvc push
 
 `dvc repro` includes the full SimNMR conversion and is intentionally not run
 by the generator. A targeted command such as `dvc repro filter_test` also runs
-whatever upstream stages are missing or stale. After a successful run,
+whatever upstream stages are missing or stale. Maintained stage commands use
+`--quiet`: each script shows a start line, one progress bar, a completion line,
+and real errors, while suppressing non-essential library warnings. Run an
+individual command without `--quiet` when detailed intermediate messages are
+useful; `--no-progress` disables only its bar. After a successful run,
 `dvc.lock` pins commands, parameters, dependencies, and output hashes and must
 be committed with the code changes that produced it.
 

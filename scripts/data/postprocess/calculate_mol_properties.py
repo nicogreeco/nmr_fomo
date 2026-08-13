@@ -18,17 +18,19 @@ contains positions 1--166 as ``maccs_keys_166_bits``.
 
 Example:
     PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \\
-        datasets/cleaned/train_val.parquet --workers 4
+        datasets/cleaned/train_val.parquet --workers 8
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import io
 import os
+from collections import deque
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterator
 
 from rdkit import Chem, DataStructs, RDLogger
 from rdkit.Chem import (
@@ -39,6 +41,13 @@ from rdkit.Chem import (
     rdMolDescriptors,
 )
 
+from data.console import (
+    add_console_arguments,
+    configure_console,
+    print_stage_complete,
+    print_stage_start,
+    progress_bar,
+)
 from data.postprocess.common import open_canonical_parquet
 from data.reporting import (
     default_report_path,
@@ -203,9 +212,25 @@ def calculate_row(record_id: str, smiles: object) -> dict[str, object]:
 
 
 def calculate_chunk(records: list[tuple[str, object]]) -> list[dict[str, object]]:
-    """Worker entry point that calculates a small ordered group of records."""
+    """Calculate a small ordered group of records."""
 
     return [calculate_row(record_id, smiles) for record_id, smiles in records]
+
+
+def calculate_chunk_csv(
+    records: list[tuple[str, object]],
+) -> tuple[str, int, dict[str, int]]:
+    """Calculate and serialize one ordered task inside a worker process."""
+
+    rows = calculate_chunk(records)
+    status_counts: dict[str, int] = {}
+    for row in rows:
+        status = str(row["rdkit_status"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+    buffer = io.StringIO(newline="")
+    csv.DictWriter(buffer, fieldnames=CSV_FIELDS).writerows(rows)
+    return buffer.getvalue(), len(rows), status_counts
 
 
 def iter_chunks(
@@ -237,21 +262,48 @@ def iter_chunks(
         yield current_chunk
 
 
-def _write_rows(
-    writer: csv.DictWriter,
-    row_groups: Iterable[list[dict[str, object]]],
-    status_counts: dict[str, int],
-) -> int:
-    """Write result groups immediately and count their explicit RDKit statuses."""
+def _merge_status_counts(
+    target: dict[str, int], source: dict[str, int]
+) -> None:
+    for status, count in source.items():
+        target[status] = target.get(status, 0) + count
 
-    row_count = 0
-    for rows in row_groups:
-        writer.writerows(rows)
-        row_count += len(rows)
-        for row in rows:
-            status = str(row["rdkit_status"])
-            status_counts[status] = status_counts.get(status, 0) + 1
+
+def _write_csv_result(
+    output_handle,
+    result: tuple[str, int, dict[str, int]],
+    status_counts: dict[str, int],
+    progress,
+) -> int:
+    csv_text, row_count, chunk_statuses = result
+    output_handle.write(csv_text)
+    _merge_status_counts(status_counts, chunk_statuses)
+    if progress is not None:
+        progress.update(row_count)
     return row_count
+
+
+def _iter_parquet_chunks(
+    parquet_file,
+    *,
+    batch_size: int,
+    records_per_task: int,
+) -> Iterator[list[tuple[str, object]]]:
+    """Stream Arrow batches as ordered, bounded worker tasks."""
+
+    processed_rows = 0
+    for arrow_batch in parquet_file.iter_batches(
+        batch_size=batch_size,
+        columns=["record_id", "smiles_canonical"],
+        use_threads=True,
+    ):
+        yield from iter_chunks(
+            arrow_batch.column("record_id").to_pylist(),
+            arrow_batch.column("smiles_canonical").to_pylist(),
+            records_per_task,
+            processed_rows,
+        )
+        processed_rows += arrow_batch.num_rows
 
 
 def export_molecular_properties(
@@ -259,17 +311,18 @@ def export_molecular_properties(
     output_path: str | Path | None = None,
     *,
     batch_size: int = 50_000,
-    records_per_task: int = 5_000,
+    records_per_task: int = 1_000,
     workers: int | None = None,
     progress_every: int = 250_000,
     show_progress: bool = True,
+    quiet: bool = False,
     overwrite: bool = False,
 ) -> dict[str, object]:
     """Stream a canonical Parquet file into a CSV of RDKit properties.
 
     ``workers=1`` processes batches in the parent process. Higher values use
-    a process pool; at most one Arrow batch and its submitted task results are
-    retained at a time.
+    a process pool with a bounded cross-batch task queue, so workers remain
+    occupied while memory use stays bounded.
     """
 
     if batch_size < 1:
@@ -298,7 +351,7 @@ def export_molecular_properties(
         raise ValueError("CSV output must not replace the input Parquet file")
 
     if workers is None:
-        workers = min(4, os.cpu_count() or 1)
+        workers = min(8, os.cpu_count() or 1)
     if workers < 1:
         raise ValueError("workers must be at least 1")
 
@@ -310,48 +363,63 @@ def export_molecular_properties(
             "before starting another run"
         )
 
+    input_rows = parquet_file.metadata.num_rows
     rows_written = 0
     status_counts: dict[str, int] = {}
-    next_progress = progress_every
+    progress = progress_bar(
+        input_rows,
+        f"Calculating {input_file_path.name}",
+        show_progress,
+        min_iterations=progress_every,
+    )
     try:
         with temporary_path.open("w", newline="", encoding="utf-8") as output_handle:
-            writer = csv.DictWriter(output_handle, fieldnames=CSV_FIELDS)
-            writer.writeheader()
-
-            executor = (
-                ProcessPoolExecutor(max_workers=workers) if workers > 1 else None
+            csv.DictWriter(output_handle, fieldnames=CSV_FIELDS).writeheader()
+            chunks = _iter_parquet_chunks(
+                parquet_file,
+                batch_size=batch_size,
+                records_per_task=records_per_task,
             )
-            try:
-                for arrow_batch in parquet_file.iter_batches(
-                    batch_size=batch_size,
-                    columns=["record_id", "smiles_canonical"],
-                    use_threads=True,
-                ):
-                    chunks = list(
-                        iter_chunks(
-                            arrow_batch.column("record_id").to_pylist(),
-                            arrow_batch.column("smiles_canonical").to_pylist(),
-                            records_per_task,
-                            rows_written,
-                        )
-                    )
-                    if executor is None:
-                        row_groups = (calculate_chunk(chunk) for chunk in chunks)
-                    else:
-                        row_groups = executor.map(calculate_chunk, chunks)
-                    rows_written += _write_rows(writer, row_groups, status_counts)
 
-                    while show_progress and rows_written >= next_progress:
-                        print(f"Processed {rows_written:,} records")
-                        next_progress += progress_every
-            finally:
-                if executor is not None:
-                    executor.shutdown(wait=True, cancel_futures=True)
+            if workers == 1:
+                for chunk in chunks:
+                    rows_written += _write_csv_result(
+                        output_handle,
+                        calculate_chunk_csv(chunk),
+                        status_counts,
+                        progress,
+                    )
+            else:
+                max_pending_tasks = workers * 2
+                pending = deque()
+                with ProcessPoolExecutor(
+                    max_workers=workers,
+                    initializer=configure_console,
+                    initargs=(quiet,),
+                ) as executor:
+                    for chunk in chunks:
+                        pending.append(executor.submit(calculate_chunk_csv, chunk))
+                        if len(pending) >= max_pending_tasks:
+                            rows_written += _write_csv_result(
+                                output_handle,
+                                pending.popleft().result(),
+                                status_counts,
+                                progress,
+                            )
+                    while pending:
+                        rows_written += _write_csv_result(
+                            output_handle,
+                            pending.popleft().result(),
+                            status_counts,
+                            progress,
+                        )
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
+    finally:
+        if progress is not None:
+            progress.close()
 
-    input_rows = parquet_file.metadata.num_rows
     if rows_written != input_rows:
         temporary_path.unlink(missing_ok=True)
         raise RuntimeError(
@@ -390,34 +458,30 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--records-per-task",
         type=int,
-        default=5000,
-        help="records sent to one worker task at once (default: 5000)",
+        default=1000,
+        help="records sent to one worker task at once (default: 1000)",
     )
     parser.add_argument(
         "--workers",
         type=int,
-        default=min(4, os.cpu_count() or 1),
+        default=min(8, os.cpu_count() or 1),
         help=(
             "RDKit worker processes; use 1 to disable multiprocessing "
-            "(default: up to 4)"
+            "(default: up to 8)"
         ),
     )
     parser.add_argument(
         "--progress-every",
         type=int,
         default=250_000,
-        help="print progress after this many records (default: 250000)",
-    )
-    parser.add_argument(
-        "--no-progress",
-        action="store_true",
-        help="disable periodic progress messages",
+        help="minimum records between progress refreshes (default: 250000)",
     )
     parser.add_argument(
         "--report-output",
         type=Path,
         help="processing JSON (default: beside the output CSV)",
     )
+    add_console_arguments(parser)
     parser.add_argument(
         "--overwrite",
         action="store_true",
@@ -428,6 +492,8 @@ def build_argument_parser() -> argparse.ArgumentParser:
 
 def main() -> None:
     args = build_argument_parser().parse_args()
+    configure_console(args.quiet)
+    print_stage_start("calculate molecular properties")
     output = args.output or default_output_path(args.input)
     report_path, report_temporary = prepare_report_output(
         args.report_output or default_report_path(output),
@@ -442,10 +508,11 @@ def main() -> None:
         workers=args.workers,
         progress_every=args.progress_every,
         show_progress=not args.no_progress,
+        quiet=args.quiet,
         overwrite=args.overwrite,
     )
     write_processing_report(result, report_path, report_temporary)
-    print(f"Wrote processing report to {report_path}")
+    print_stage_complete("calculate molecular properties", report_path)
 
 
 if __name__ == "__main__":

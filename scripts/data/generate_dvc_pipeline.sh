@@ -23,6 +23,8 @@ if ! command -v python >/dev/null 2>&1; then
 fi
 
 canonical_shared_deps=(
+    scripts/data/__init__.py
+    scripts/data/console.py
     scripts/data/canonicalize/common.py
     scripts/data/schema.py
     scripts/data/validation.py
@@ -30,6 +32,8 @@ canonical_shared_deps=(
     scripts/envs_scr/requirements/nmr-main.txt
 )
 postprocess_shared_deps=(
+    scripts/data/__init__.py
+    scripts/data/console.py
     scripts/data/postprocess/common.py
     scripts/data/canonicalize/common.py
     scripts/data/schema.py
@@ -63,6 +67,7 @@ add_canonical_stage() {
     command="PYTHONPATH=scripts python ${converter} ${input_path} ${output_path}"
     command+=" --row-group-size \${canonicalize.row_group_size}"
     command+=" --report-output ${report_path}"
+    command+=" --quiet"
 
     dvc stage add --force --name "${stage_name}" \
         --deps "${input_path}" \
@@ -141,6 +146,7 @@ simnmr_command+=" --row-group-size \${canonicalize.row_group_size}"
 simnmr_command+=" --workers \${canonicalize.simnmr_workers}"
 simnmr_command+=" --records-per-task \${canonicalize.simnmr_records_per_task}"
 simnmr_command+=" --report-output ${simnmr_report}"
+simnmr_command+=" --quiet"
 dvc stage add --force --name canonicalize_simnmr \
     --deps datasets/raw/simnmr_pubchem/metadata/PubChem_merged_id.lmdb \
     --deps scripts/data/canonicalize/convert_nmrsolver.py \
@@ -178,6 +184,7 @@ add_merge_stage() {
     command+=" --output ${output_path}"
     command+=" --batch-size \${postprocess.batch_size}"
     command+=" --report-output ${report_path}"
+    command+=" --quiet"
 
     dvc "${stage_args[@]}" "${command}"
     local_only_outputs+=("${output_path}")
@@ -212,6 +219,7 @@ move_command+=" --test-output ${move_test_output}"
 move_command+=" --train-output ${move_train_output}"
 move_command+=" --batch-size \${postprocess.batch_size}"
 move_command+=" --report-output ${move_report}"
+move_command+=" --quiet"
 dvc stage add --force --name move_simnmr_overlaps_to_train \
     --deps datasets/intermediate/rich_test.parquet \
     --deps datasets/canonical/simnmr/all.parquet \
@@ -235,6 +243,7 @@ disjoint_command+=" datasets/canonical/nmrgym/all.parquet"
 disjoint_command+=" --output ${disjoint_output}"
 disjoint_command+=" --batch-size \${postprocess.batch_size}"
 disjoint_command+=" --report-output ${disjoint_report}"
+disjoint_command+=" --quiet"
 dvc stage add --force --name remove_benchmark_overlaps \
     --deps datasets/intermediate/test_after_simnmr.parquet \
     --deps datasets/intermediate/train_val_extended.parquet \
@@ -263,6 +272,7 @@ add_filter_stage() {
     command+=" --removed-output ${removed_path}"
     command+=" --batch-size \${postprocess.batch_size}"
     command+=" --report-output ${report_path}"
+    command+=" --quiet"
 
     dvc stage add --force --name "${stage_name}" \
         --deps "${input_path}" \
@@ -341,6 +351,7 @@ prepare_admet_command+=" --output-root datasets/cleaned/admet"
 prepare_admet_command+=" --train-output datasets/cleaned/train_val.parquet"
 prepare_admet_command+=" --batch-size \${postprocess.batch_size}"
 prepare_admet_command+=" --report-output ${admet_report}"
+prepare_admet_command+=" --quiet"
 dvc "${prepare_admet_args[@]}" "${prepare_admet_command}"
 
 add_molecular_properties_stage() {
@@ -359,6 +370,7 @@ add_molecular_properties_stage() {
     command+=" --records-per-task \${mol_properties.records_per_task}"
     command+=" --workers \${mol_properties.workers}"
     command+=" --report-output ${report_path}"
+    command+=" --quiet"
 
     dvc stage add --force --name "calculate_${stage_label}_properties" \
         --deps "${input_path}" \
@@ -400,6 +412,8 @@ nmrgym_analytics_report=datasets/cleaned/analyze_nmrgym_report.json
 analytics_args=(
     stage add --force --name analyze_cleaned_collection
     --deps scripts/data/postprocess/analyze_cleaned_datasets.py
+    --deps scripts/data/__init__.py
+    --deps scripts/data/console.py
     --deps scripts/data/reporting.py
     --deps scripts/envs_scr/requirements/nmr-main.txt
     --params analytics.sample_per_group
@@ -416,16 +430,19 @@ analytics_command+=" scripts/data/postprocess/analyze_cleaned_datasets.py"
 analytics_command+=" --cleaned-root datasets/cleaned"
 analytics_command+=" --sample-per-group \${analytics.sample_per_group}"
 analytics_command+=" --report-output ${main_analytics_report}"
+analytics_command+=" --quiet"
 analytics_command+=" && PYTHONPATH=scripts python"
 analytics_command+=" scripts/data/postprocess/analyze_cleaned_datasets.py"
 analytics_command+=" --nmrsolver-parquet datasets/cleaned/simnmr.parquet"
 analytics_command+=" --sample-per-group \${analytics.sample_per_group}"
 analytics_command+=" --report-output ${simnmr_analytics_report}"
+analytics_command+=" --quiet"
 analytics_command+=" && PYTHONPATH=scripts python"
 analytics_command+=" scripts/data/postprocess/analyze_cleaned_datasets.py"
 analytics_command+=" --nmrgym-parquet datasets/cleaned/nmrgym.parquet"
 analytics_command+=" --sample-per-group \${analytics.sample_per_group}"
 analytics_command+=" --report-output ${nmrgym_analytics_report}"
+analytics_command+=" --quiet"
 dvc "${analytics_args[@]}" "${analytics_command}"
 
 # dvc stage add has no flag for the output-level push field. Apply that one
@@ -467,6 +484,13 @@ if missing:
 
 with yaml_path.open("w", encoding="utf-8") as handle:
     yaml.dump(document, handle)
+
+# ruamel may leave spaces at folded-line boundaries; keep generated YAML clean.
+text = yaml_path.read_text(encoding="utf-8")
+yaml_path.write_text(
+    "\n".join(line.rstrip() for line in text.splitlines()) + "\n",
+    encoding="utf-8",
+)
 PY
 
 dvc dag --dot >/dev/null
