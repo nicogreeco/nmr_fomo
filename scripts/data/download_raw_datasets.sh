@@ -15,6 +15,11 @@ SIMNMR_REVISION="d915caf02834759858afccfccbb7cff1a377bbc7"
 ZENODO_URL="https://zenodo.org/records/19122815/files/data.zip?download=1"
 ZENODO_MD5="b27be622059908c9f07b6e9ba3ff641f"
 ADMET_URL="https://dataverse.harvard.edu/api/access/datafile/4426004"
+ADMET_FALLBACK_URL="https://zenodo.org/api/records/20180944/files/tdc_admet_group_2026-03-24.tar.gz/content"
+ADMET_FALLBACK_SHA256="8ac217bd8c316d04d15ab2ef5173ef6e9a084e156dfcd16c0ac21e2ed6e4590b"
+
+STEP_INDEX=0
+STEP_TOTAL=0
 
 show_help() {
     cat <<'EOF'
@@ -59,6 +64,19 @@ check_size() {
     [[ "$actual" == "$expected" ]] || die "$path has $actual bytes; expected $expected"
 }
 
+announce_step() {
+    local count="$1"
+    local message="$2"
+    local first=$((STEP_INDEX + 1))
+
+    STEP_INDEX=$((STEP_INDEX + count))
+    if (( count == 1 )); then
+        printf '\n[%d/%d] %s\n' "$first" "$STEP_TOTAL" "$message"
+    else
+        printf '\n[%d-%d/%d] %s\n' "$first" "$STEP_INDEX" "$STEP_TOTAL" "$message"
+    fi
+}
+
 download_hf_files() {
     local repo="$1"
     local revision="$2"
@@ -70,7 +88,7 @@ download_hf_files() {
     staging="$(mktemp -d)"
     trap 'rm -rf -- "$staging"' RETURN
 
-    printf 'Downloading %s...\n' "$(basename "$target")"
+    printf 'Retrieving %s (%d files)...\n' "$(basename "$target")" "$#"
     local filename
     for filename in "$@"; do
         hf download "$repo" "$filename" \
@@ -103,7 +121,7 @@ download_zenodo_sources() {
     archive="$staging/data.zip"
     trap 'rm -rf -- "$staging"' RETURN
 
-    printf 'Downloading the NMRPeak Zenodo release...\n'
+    printf 'Retrieving the shared NMRPeak Zenodo archive...\n'
     curl --fail --location --retry 3 --output "$archive" "$ZENODO_URL"
     printf '%s  %s\n' "$ZENODO_MD5" "$archive" | md5sum --check --status \
         || die "the Zenodo archive checksum does not match release 19122815"
@@ -134,22 +152,41 @@ download_admet() {
     local target="$RAW_ROOT/admet"
     require_new_target "$target"
 
-    local archive staging extracted source_dir csv_count
+    local archive archive_format staging extracted source_dir csv_count
     staging="$(mktemp -d)"
     archive="$staging/admet_group.zip"
+    archive_format="zip"
     extracted="$staging/extracted"
     trap 'rm -rf -- "$staging"' RETURN
 
-    printf 'Downloading the TDC ADMET benchmark group...\n'
-    curl --fail --location --retry 3 --output "$archive" "$ADMET_URL"
-    if [[ ! -s "$archive" ]] || ! unzip -tq "$archive" >/dev/null 2>&1; then
-        die "Harvard Dataverse did not return the ADMET ZIP; retry later or download TDC file 4426004 manually"
+    printf 'Retrieving the TDC ADMET benchmark group from the official PyTDC endpoint...\n'
+    local http_status
+    http_status="$(curl --fail --location --retry 3 --progress-bar \
+        --output "$archive" --write-out '%{http_code}' "$ADMET_URL")"
+    if [[ "$http_status" == 202 ]]; then
+        printf 'Dataverse returned an AWS WAF challenge; using the DVC-matching public snapshot.\n'
+        archive="$staging/admet_group.tar.gz"
+        archive_format="tar.gz"
+        curl --fail --location --retry 3 --progress-bar \
+            --output "$archive" "$ADMET_FALLBACK_URL"
+        printf '%s  %s\n' "$ADMET_FALLBACK_SHA256" "$archive" | sha256sum --check --status \
+            || die "the ADMET fallback archive checksum does not match"
+    else
+        printf 'Received HTTP %s; validating archive...\n' "$http_status"
+        if [[ ! -s "$archive" ]] || ! unzip -tq "$archive" >/dev/null 2>&1; then
+            die "Harvard Dataverse did not return a valid ADMET ZIP"
+        fi
     fi
 
     mkdir -p "$extracted"
-    unzip -q "$archive" -d "$extracted"
+    if [[ "$archive_format" == "zip" ]]; then
+        unzip -q "$archive" -d "$extracted"
+    else
+        tar --extract --gzip --file "$archive" --directory "$extracted"
+    fi
     source_dir="$(find "$extracted" -type d -name admet_group -print -quit)"
     [[ -n "$source_dir" ]] || die "the ADMET archive does not contain an admet_group directory"
+    rm -f -- "$source_dir/.DS_Store"
     csv_count="$(find "$source_dir" -type f -name '*.csv' | wc -l)"
     [[ "$csv_count" == 44 ]] || die "the ADMET archive contains $csv_count CSV files; expected 44"
 
@@ -268,9 +305,20 @@ main() {
 
     local want_mst="${selected[mst_nmr]:-0}"
     local want_nmrexp="${selected[nmrexp]:-0}"
+    local selected_names=()
+    for target in admet mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
+        [[ "${selected[$target]:-0}" == 0 ]] || selected_names+=("$target")
+    done
+    STEP_TOTAL="${#selected_names[@]}"
+    printf 'Selected %d dataset(s): %s\n' "$STEP_TOTAL" "${selected_names[*]}"
+
     if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 || "${selected[admet]:-0}" == 1 ]]; then
         require_command curl
         require_command unzip
+    fi
+    if [[ "${selected[admet]:-0}" == 1 ]]; then
+        require_command sha256sum
+        require_command tar
     fi
     if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 ]]; then
         require_command md5sum
@@ -283,20 +331,42 @@ main() {
     fi
 
     if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 ]]; then
+        if [[ "$want_mst" == 1 && "$want_nmrexp" == 1 ]]; then
+            announce_step 2 "Downloading mst_nmr and nmrexp from one shared release"
+        elif [[ "$want_mst" == 1 ]]; then
+            announce_step 1 "Downloading mst_nmr"
+        else
+            announce_step 1 "Downloading nmrexp"
+        fi
         download_zenodo_sources "$want_mst" "$want_nmrexp"
     fi
-    [[ "${selected[admet]:-0}" == 0 ]] || download_admet
-    [[ "${selected[nmrgym]:-0}" == 0 ]] || download_hf_files \
-        "$NMRGYM_REPO" "$NMRGYM_REVISION" "$RAW_ROOT/nmrgym" \
-        NMRGym_train_balanced_dedup.pkl \
-        NMRGym_val_balanced_dedup.pkl \
-        NMRGym_test_balanced_dedup.pkl
-    [[ "${selected[nmrtrans]:-0}" == 0 ]] || download_hf_files \
-        "$NMRTRANS_REPO" "$NMRTRANS_REVISION" "$RAW_ROOT/nmrtrans" \
-        train.pkl.lz4 val.pkl.lz4 test.pkl.lz4
-    [[ "${selected[simnmr_pubchem]:-0}" == 0 ]] || download_simnmr
+    if [[ "${selected[admet]:-0}" == 1 ]]; then
+        announce_step 1 "Downloading admet"
+        download_admet
+    fi
+    if [[ "${selected[nmrgym]:-0}" == 1 ]]; then
+        announce_step 1 "Downloading nmrgym"
+        download_hf_files \
+            "$NMRGYM_REPO" "$NMRGYM_REVISION" "$RAW_ROOT/nmrgym" \
+            NMRGym_train_balanced_dedup.pkl \
+            NMRGym_val_balanced_dedup.pkl \
+            NMRGym_test_balanced_dedup.pkl
+    fi
+    if [[ "${selected[nmrtrans]:-0}" == 1 ]]; then
+        announce_step 1 "Downloading nmrtrans"
+        download_hf_files \
+            "$NMRTRANS_REPO" "$NMRTRANS_REVISION" "$RAW_ROOT/nmrtrans" \
+            train.pkl.lz4 val.pkl.lz4 test.pkl.lz4
+    fi
+    if [[ "${selected[simnmr_pubchem]:-0}" == 1 ]]; then
+        announce_step 1 "Downloading simnmr_pubchem"
+        download_simnmr
+    fi
+
+    printf '\nCompleted %d selected dataset download(s).\n' "$STEP_TOTAL"
 
     if [[ "$verify" == 1 ]]; then
+        printf 'Verifying selected datasets against DVC pointers...\n'
         local pointers=()
         for target in admet mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
             [[ "${selected[$target]:-0}" == 0 ]] || pointers+=("datasets/raw/$target.dvc")
