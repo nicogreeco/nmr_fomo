@@ -1,4 +1,4 @@
-"""Shared result container for the four embedding wrappers."""
+"""Shared result container for the embedding wrappers."""
 
 from dataclasses import dataclass, field
 from typing import Any

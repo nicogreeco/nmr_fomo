@@ -15,6 +15,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 def example_record():
     return CanonicalRecord(
         record_id="example-1",
+        smiles="CCO",
+        smiles_canonical="CCO",
+        atoms=("C", "C", "O"),
         h_nmr_peaks=(
             ProtonPeak(
                 shift=1.20,
@@ -116,6 +119,45 @@ class EmbedderSmokeTests(unittest.TestCase):
         self.assertIs(result.metadata["learned"], False)
         self.assertEqual(result.metadata["representation"], "fixed_featurizer")
         self.assertIsNone(result.checkpoint)
+
+    def test_unimol2_model_size_names(self):
+        from model_benchmarks.embedders.unimol2 import normalize_model_size
+
+        self.assertEqual(normalize_model_size("84M"), "84M")
+        self.assertEqual(normalize_model_size("84m"), "84M")
+        self.assertEqual(normalize_model_size("164M"), "164M")
+        with self.assertRaisesRegex(ValueError, "84M.*164M"):
+            normalize_model_size("310M")
+
+    def test_unimol2_checkpoint(self):
+        if os.environ.get("NMR_BENCHMARK_RUN_UNIMOL2_SMOKE") != "1":
+            self.skipTest(
+                "set NMR_BENCHMARK_RUN_UNIMOL2_SMOKE=1 for a local checkpoint"
+            )
+        require_modules(self, "torch", "rdkit", "unimol_tools")
+        import torch
+
+        checkpoint_value = os.environ.get("NMR_BENCHMARK_UNIMOL2_CHECKPOINT")
+        if not checkpoint_value:
+            self.skipTest("set NMR_BENCHMARK_UNIMOL2_CHECKPOINT")
+        checkpoint_path = Path(checkpoint_value).expanduser()
+        if not checkpoint_path.is_file():
+            self.skipTest(f"UniMol2 checkpoint not found: {checkpoint_path}")
+
+        model_size = os.environ.get("NMR_BENCHMARK_UNIMOL2_SIZE", "84M")
+        batch = build_processor("unimol2")([example_record()])
+        result = build_embedder(
+            "unimol2",
+            checkpoint_path=checkpoint_path,
+            device="cpu",
+            model_size=model_size,
+        ).encode(batch)
+
+        self.assertEqual(result.record_ids, ["example-1"])
+        self.assertEqual(tuple(result.embeddings.shape), (1, 768))
+        self.assertTrue(torch.isfinite(result.embeddings).all().item())
+        self.assertEqual(result.metadata["model_size"], model_size.upper())
+        self.assertEqual(result.metadata["modality"], "molecule")
 
 
 if __name__ == "__main__":

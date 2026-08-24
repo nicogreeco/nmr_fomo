@@ -15,6 +15,9 @@ def example_record(
 ):
     return CanonicalRecord(
         record_id=record_id,
+        smiles="CCO",
+        smiles_canonical="CCO",
+        atoms=("C", "C", "O"),
         h_nmr_peaks=(
             ProtonPeak(
                 shift=1.20,
@@ -95,6 +98,54 @@ class ProcessorSmokeTests(unittest.TestCase):
         self.assertEqual(batch.record_ids, ["example-1"])
         self.assertEqual(batch.inputs["h_shifts"], [(1.2, 1.2)])
         self.assertEqual(batch.inputs["c_shifts"], [(42.0,)])
+
+    def test_unimol2_processor_accepts_structure_only_batches(self):
+        if importlib.util.find_spec("unimol_tools") is None:
+            self.skipTest("unimol_tools is not installed")
+
+        from model_benchmarks.processors.unimol2 import FEATURE_NAMES
+
+        processor = build_processor("unimol2")
+        records = [
+            CanonicalRecord(
+                record_id="ethanol",
+                smiles_canonical="CCO",
+            ),
+            CanonicalRecord(
+                record_id="benzene",
+                smiles_canonical="c1ccccc1",
+            ),
+        ]
+        batch = processor(records)
+
+        self.assertEqual(batch.record_ids, ["ethanol", "benzene"])
+        self.assertEqual(set(batch.inputs), set(FEATURE_NAMES))
+        self.assertTrue(
+            all(value.shape[0] == 2 for value in batch.inputs.values())
+        )
+        self.assertEqual(batch.metadata["modality"], "molecule")
+
+    def test_unimol2_rejects_missing_invalid_or_overlong_structures(self):
+        if importlib.util.find_spec("unimol_tools") is None:
+            self.skipTest("unimol_tools is not installed")
+
+        processor = build_processor("unimol2")
+        missing = CanonicalRecord(record_id="missing")
+        invalid = CanonicalRecord(
+            record_id="invalid",
+            smiles_canonical="not-a-smiles",
+        )
+        overlong = CanonicalRecord(
+            record_id="overlong",
+            smiles_canonical="C" * 129,
+        )
+
+        with self.assertRaisesRegex(IncompatibleRecordError, "non-empty"):
+            processor.prepare_record(missing)
+        with self.assertRaisesRegex(IncompatibleRecordError, "could not parse"):
+            processor.prepare_record(invalid)
+        with self.assertRaisesRegex(IncompatibleRecordError, "128 heavy atoms"):
+            processor.prepare_record(overlong)
 
 
 if __name__ == "__main__":

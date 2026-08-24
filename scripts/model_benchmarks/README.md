@@ -1,7 +1,7 @@
 # Existing-model benchmarks
 
-This package adapts canonical NMR records to the four existing model families
-used for latent-space comparison.
+This package adapts canonical records to the four NMR model families and the
+structure-only UniMol2 baseline used for latent-space comparison.
 
 Inputs come from the DVC-managed canonical or cleaned collection. This package
 does not belong to the raw-to-cleaned DAG and must never convert, filter, split,
@@ -35,7 +35,8 @@ for batch in loader:
     break
 ```
 
-Only combined `1H + 13C` input is supported. Run one model family per process
-in its corresponding environment. The cleaned benchmark may also contain
-single-modality NMRexp rows; extraction must therefore use the documented
-incompatibility handling when processing the complete file.
+The NMR paths support combined `1H + 13C` input. UniMol2 instead reads
+`smiles_canonical`; its default batch size is one, and `--model-size` selects
+`84M` or `164M`. Run one model family per process in its corresponding
+environment. Use the documented incompatibility handling for records missing
+the fields required by the selected path.

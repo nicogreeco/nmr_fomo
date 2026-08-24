@@ -6,7 +6,7 @@ filesystem.
 
 Run the setup commands below from the repository root.
 
-They create four independent environments:
+They create five independent environments:
 
 | Directory | Python | Purpose |
 | --- | --- | --- |
@@ -14,6 +14,7 @@ They create four independent environments:
 | `ultranmr_venv` | 3.11 | UltraNMR |
 | `nmrtrans_venv` | 3.10 | NMRTrans |
 | `nmrpeak_venv` | 3.10 | NMRPeak and pinned Uni-Core |
+| `unimol2_venv` | 3.11 | UniMol2 molecular embeddings |
 
 PyArrow is installed in every environment. It streams canonical Parquet input
 and writes embedding batches incrementally, including when a benchmark runs
@@ -51,7 +52,7 @@ To force a backend:
 
 Do not force one backend for all environments unless every pinned PyTorch
 version publishes wheels for it. The default `auto` is safer because UltraNMR,
-NMRPeak, and NMRTrans use different PyTorch releases.
+NMRPeak, NMRTrans, and UniMol2 may use different PyTorch releases.
 
 ## Install or repair one environment
 
@@ -60,7 +61,7 @@ NMRPeak, and NMRTrans use different PyTorch releases.
   --only ultranmr
 ```
 
-Valid names are `main`, `ultranmr`, `nmrtrans`, `nmrpeak`, and `shell`.
+Valid names are `main`, `ultranmr`, `nmrtrans`, `nmrpeak`, `unimol2`, and `shell`.
 
 Existing valid environments are reused and updated. Invalid directories are
 never deleted automatically: move them aside and rerun the script.
@@ -81,6 +82,7 @@ nmr-env main
 nmr-env ultranmr
 nmr-env nmrtrans
 nmr-env nmrpeak
+nmr-env unimol2
 nmr-env off
 nmr-env list
 ```
@@ -115,6 +117,9 @@ helper:
   `ace6fae1c8479a9751f2bb1e1d6e4047427bc134`. Its optional fused CUDA
   extensions remain disabled, matching the simple NMRPeak installation path and
   avoiding a hard dependency on a local `nvcc` toolkit.
+- UniMol2 installs `unimol_tools==0.1.6`. Its official model weights are
+  downloaded on first use; set `UNIMOL_WEIGHT_DIR` to place that cache on a
+  specific local or shared path.
 - Installed package inventories are written under `VENV_ROOT/manifests/`.
 - Re-run the main-environment setup after data-pipeline requirement changes;
   existing valid environments are updated in place.

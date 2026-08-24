@@ -1,4 +1,4 @@
-"""Small lazy constructors for the four supported model families."""
+"""Small lazy constructors for the supported model families."""
 
 
 def _model_name(name: str) -> str:
@@ -25,9 +25,13 @@ def build_processor(model_name: str, **options):
         from .processors.nmrsolver import NMRSolverProcessor
 
         return NMRSolverProcessor(**options)
+    if name in {"unimol2", "uni-mol2"}:
+        from .processors.unimol2 import UniMol2Processor
+
+        return UniMol2Processor(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, or nmrsolver"
+        "ultranmr, nmrsolver, or unimol2"
     )
 
 
@@ -51,9 +55,13 @@ def build_embedder(model_name: str, **options):
         from .embedders.nmrsolver import NMRSolverEmbedder
 
         return NMRSolverEmbedder(**options)
+    if name in {"unimol2", "uni-mol2"}:
+        from .embedders.unimol2 import UniMol2Embedder
+
+        return UniMol2Embedder(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, or nmrsolver"
+        "ultranmr, nmrsolver, or unimol2"
     )
 
 

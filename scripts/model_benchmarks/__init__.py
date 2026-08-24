@@ -1,4 +1,4 @@
-"""Processors and embedders for benchmarking existing NMR models."""
+"""Processors and embedders for NMR and molecular model comparisons."""
 
 from .factory import build_embedder, build_processor
 

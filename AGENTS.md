@@ -73,13 +73,13 @@ Il filtro comune è un passaggio derivato e non modifica mai le fonti canoniche.
 
 La deduplicazione è prudente: solo stessa struttura canonica e liste di shift H/C esattamente uguali, senza arrotondamenti. Record della stessa molecola ma con spettri differenti restano: possono rappresentare repliche, condizioni sperimentali o vista simulata/esperimentale.
 
-La raccolta pubblicata e già materializzata contiene:
+La raccolta pubblicata e già materializzata con la pipeline DVC contiene:
 
 | Componente | Record | Ruolo |
 |---|---:|---|
-| Rich train/validation | 1.837.226 | pretraining ricco, disgiunto dagli ADMET |
-| Rich benchmark test | 179.239 | disgiunto dal rich train e da NMRGym nella ricetta storica |
-| SimNMR-PubChem | 105.509.616 | grande pool shift-only |
+| Rich train/validation | 1.945.688 | pretraining ricco dopo trasferimento SimNMR, filtro e disgiunzione ADMET |
+| Rich benchmark test | 87.897 | disgiunto da rich train esteso, SimNMR e NMRGym per `smiles_canonical` esatto |
+| SimNMR-PubChem | 105.509.616 | grande pool shift-only simulato |
 | NMRGym | 265.095 | fonte shift-only sperimentale separata |
 
 La pipeline DVC mantenuta usa exact `smiles_canonical` per tutti gli overlap
@@ -88,17 +88,17 @@ sono in SimNMR; poi rimuove dal test residuo le molecole presenti nel train
 esteso o in NMRGym. Dopo il filtro comune, prepara ADMET dal train pulito usando
 full InChIKey, risolve le label ripetute e rimuove i match dal pretraining.
 Proprietà molecolari e analytics vengono generate soltanto sui file finali.
-Non attribuire nuovi conteggi a questa ricetta prima di averla eseguita.
 
 I raw source sono centralizzati in `datasets/raw/`, identificati da pointer
 `.dvc` e conservati nel remote Nebius. `dvc.yaml` definisce il DAG esplicito,
 `params.yaml` i parametri condivisi e `datasets/raw/sources.yaml` la provenance
 umana. I Parquet canonici, gli intermedi e gli audit di rimozione sono output
 ricostruibili con `push: false`; dataset finali, coorti ADMET, sidecar di
-proprietà, analytics e report strutturati usano il normale push. Dopo la prima
-run completa, `dvc.lock` e i report sono l'autorità per hash e conteggi. La
-pipeline è definita ma non è ancora stata materializzata end-to-end: i conteggi
-sopra appartengono alla release storica pubblicata.
+proprietà, analytics e report strutturati usano il normale push. La pipeline è
+stata materializzata end-to-end: i finali correnti contengono 1.945.688 record
+rich train/validation, 87.897 benchmark, 105.509.616 SimNMR e 265.095 NMRGym.
+`dvc.lock` e i report sono l'autorità per hash e conteggi; le cifre di release
+precedenti nelle note sono solo confronti storici esplicitamente etichettati.
 
 Nel pool ricco, MST-NMR e NMRTrans sono completamente appaiati H+C; NMRexp è l’unica fonte con record monomodali. Le distribuzioni tra train/validation e benchmark risultano simili, pur con differenze chimiche tra le sorgenti.
 
@@ -129,15 +129,11 @@ Le coorti selezionate sono:
 
 | Endpoint | Train/validation | Test | Tipo |
 |---|---:|---:|---|
-| AqSolDB solubility | 3.413 | 682 | regressione |
-| LD50 Zhu | 2.498 | 515 | regressione |
-| Ames | 2.305 | 409 | classificazione |
+| AqSolDB solubility | 3.777 | 770 | regressione |
+| LD50 Zhu | 2.748 | 574 | regressione |
+| Ames | 2.527 | 455 | classificazione |
 
 Il matching usa full InChIKey RDKit, non soltanto connectivity key, per non unire silenziosamente stereoisomeri. I record abbinati alle proprietà vengono rimossi dal pretraining ricco. Le etichette duplicate discordanti LD50 sono escluse anziché mediate; le repliche coerenti vengono consolidate. CSV delle etichette e Parquet degli spettri condividono lo stesso insieme di `record_id` unici.
-
-#### Piano di lavoro
-
-Il piano di tirocinio dura tre mesi: onboarding cloud; pipeline dati; modello e pretraining scalabile; valutazione con probe e transfer learning; packaging finale. I deliverable sono modello pre-addestrato, dataset/data card, cookbook ML con otto moduli, report e presentazione. Il criterio scientifico è dimostrare oppure confutare un vantaggio delle rappresentazioni spettrali per la predizione di proprietà; quello ingegneristico è la riproducibilità completa da un checkout pulito.
 
 ---
 
@@ -148,7 +144,6 @@ Il piano di tirocinio dura tre mesi: onboarding cloud; pipeline dati; modello e 
   directory ownership, DVC policies, and reproduction.
 - `dvc.yaml`, `params.yaml`, and `datasets/raw/sources.yaml` define the runnable
   data graph, tunable values, and source provenance.
-- `contex/Internship – NMR Project Plan.md` defines project goals, phases, and deliverables.
 - `contex/NMR foundations and AI.md` covers NMR fundamentals and the broader AI research context.
 - `contex/Datasets.md` explains the dataset landscape, schema rationale,
   multiplicity harmonization, canonical pipeline, and training strategy.

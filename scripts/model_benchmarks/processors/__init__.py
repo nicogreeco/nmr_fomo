@@ -1,4 +1,4 @@
-"""Shared batch container for the four model-specific processors."""
+"""Shared batch container for the model-specific processors."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field

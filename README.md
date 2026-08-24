@@ -1,14 +1,13 @@
 # NMR FoMo
 
-This is the private working repository for the NMR foundation-model project
-described in [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>).
-It contains the project notes, the canonical NMR-data code, data-preparation
-tools, and a small bridge for comparing this future model with published NMR
-encoders.
+This is the private working repository for an NMR foundation-model project.
+It contains the project notes, canonical NMR-data code, reproducible
+DVC data-preparation pipeline, and a small bridge for comparing a future model
+with published NMR encoders.
 
 The central goal is to learn useful representations from combined `1H + 13C`
-NMR spectra. The project plan is the source of truth for scope, milestones, and
-deliverables; this README only explains how the repository is arranged.
+NMR spectra. This README explains the repository layout; `contex/` contains the
+scientific rationale, data design, and benchmarking notes.
 
 ## Clone
 
@@ -44,14 +43,17 @@ the new model itself.
 | `models/NMR-Solver` | NMR-Solver | fixed Gaussian-spectrum featurizer |
 | `models/UltraNMR` | UltraNMR | shift-only encoder baseline |
 
+UniMol2 is the structure-only learned comparison. It is installed from
+`unimol_tools` in its own environment and does not add a repository submodule.
+
 Each checkpoint, dataset release, and model asset must be downloaded according
 to the instructions and licence in that model's own upstream README. They are
 large local assets and are deliberately not versioned here.
 
 ## Environments and local assets
 
-The four published projects have incompatible dependencies, so the project
-uses one Python environment per model family. Set them up on the VM's local
+The model families have incompatible dependencies, so the project uses
+separate Python environments. Set them up on the VM's local
 disk, while keeping code and large assets on the shared filesystem:
 
 ```bash
@@ -60,8 +62,8 @@ disk, while keeping code and large assets on the shared filesystem:
 ./scripts/envs_scr/setup_gpu_envs.sh /path/on/local/disk/nmr
 ```
 
-After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`, or
-`nmr-env ultranmr`. See [scripts/envs_scr/README.md](scripts/envs_scr/README.md)
+After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`,
+`nmr-env ultranmr`, or `nmr-env unimol2`. See [scripts/envs_scr/README.md](scripts/envs_scr/README.md)
 for the exact environment setup and repair commands.
 
 ## Repository map
@@ -136,7 +138,7 @@ for the pipeline and scripts.
 
 ## How to navigate the project
 
-Start with the [Internship – NMR Project Plan](<contex/Internship%20%E2%80%93%20NMR%20Project%20Plan.md>), then use `contex/` as the project diary:
+Use `contex/` for the project notes and design rationale:
 
 - [NMR foundations and AI](<contex/NMR%20foundations%20and%20AI.md>) and
   [DL Methods](<contex/NMR/DL%20Methods/>) collect the literature context.

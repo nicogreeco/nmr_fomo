@@ -11,7 +11,7 @@ scripts/
 ├── data/                 canonical data code and preparation utilities
 │   ├── canonicalize/    source-specific conversion programs
 │   └── postprocess/     derived merges, audits, and benchmark preparation
-├── model_benchmarks/     processors and embedders for existing NMR models
+├── model_benchmarks/     processors and embedders for model comparisons
 ├── envs_scr/             environment setup notes and requirement lists
 ├── test_notebook.ipynb    exploratory notebook
 ├── data/generate_dvc_pipeline.sh  root dvc.yaml generator
@@ -68,7 +68,7 @@ PYTHONPATH=scripts python scripts/extract_embeddings.py \
 ```
 
 Use the Python environment for the selected model family. Imports are lazy, so
-loading `data` or `model_benchmarks` does not import all four model repositories.
+loading `data` or `model_benchmarks` does not import every model dependency.
 
 ## Where to make changes
 

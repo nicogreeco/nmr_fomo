@@ -11,7 +11,18 @@ from data.validation import IncompatibleRecordError
 from .factory import build_embedder, build_processor
 
 
-MODEL_NAMES = ("nmrpeak", "nmrtrans", "ultranmr", "nmrsolver")
+MODEL_NAMES = (
+    "nmrpeak",
+    "nmrtrans",
+    "ultranmr",
+    "nmrsolver",
+    "unimol2",
+    "uni-mol2",
+)
+
+
+def default_batch_size(model_name: str) -> int:
+    return 1 if model_name in {"unimol2", "uni-mol2"} else 32
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -31,12 +42,19 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--model", required=True, choices=MODEL_NAMES)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--device", default="cpu")
-    parser.add_argument("--batch-size", type=int, default=32)
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        help="records per model batch (default: 1 for UniMol2, otherwise 32)",
+    )
+    parser.add_argument(
+        "--model-size", choices=("84M", "164M"), help="UniMol2 size"
+    )
     parser.add_argument(
         "--mode",
         choices=("canonical", "native"),
         default="canonical",
-        help="multiplicity mode (a no-op for UltraNMR and NMR-Solver)",
+        help="multiplicity mode (a no-op for shift-only and molecular models)",
     )
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument(
@@ -62,6 +80,13 @@ def parse_arguments() -> argparse.Namespace:
     arguments.input = arguments.input_option or arguments.legacy_input
     if arguments.input is None:
         parser.error("--input is required")
+    if arguments.batch_size is None:
+        arguments.batch_size = default_batch_size(arguments.model)
+    if arguments.model in {"unimol2", "uni-mol2"}:
+        if arguments.model_size is None:
+            arguments.model_size = "84M"
+    elif arguments.model_size is not None:
+        parser.error("--model-size is only valid with UniMol2")
     return arguments
 
 
@@ -149,6 +174,8 @@ def main() -> None:
     embedder_options = {"device": arguments.device}
     if arguments.checkpoint is not None:
         embedder_options["checkpoint_path"] = arguments.checkpoint
+    if arguments.model in {"unimol2", "uni-mol2"}:
+        embedder_options["model_size"] = arguments.model_size
     embedder = build_embedder(arguments.model, **embedder_options)
 
     rejections = []
@@ -233,12 +260,15 @@ def main() -> None:
             "checkpoint": str(getattr(embedder, "checkpoint_path", "")) or None,
             "dimension": dimension,
             "pooling": embedder.pooling,
-            "modality": "1H+13C",
+            "modality": getattr(embedder, "modality", "1H+13C"),
             "processor_mode": arguments.mode,
             "input_record_limit": arguments.max_records,
             "accepted_count": accepted_count,
             "rejected_count": len(rejections),
         }
+        if hasattr(embedder, "model_size"):
+            metadata["model_size"] = embedder.model_size
+
         if last_result is not None:
             metadata.update(last_result.metadata)
             metadata["checkpoint"] = last_result.checkpoint

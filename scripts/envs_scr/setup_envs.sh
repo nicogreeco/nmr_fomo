@@ -18,7 +18,7 @@ Arguments:
 Options:
   --project-root PATH      Project root containing models/ (default: script parent).
   --only NAME              Install only one environment:
-                           main, ultranmr, nmrtrans, nmrpeak, shell, or all (default).
+                           main, ultranmr, nmrtrans, nmrpeak, unimol2, shell, or all.
   --torch-backend NAME     uv PyTorch backend. Defaults to cpu on the CPU script
                            and auto on the GPU script.
   --no-shell-helper        Do not install the nmr-env helper in ~/.bashrc.
@@ -100,8 +100,8 @@ while (($#)); do
 done
 
 case "$ONLY" in
-    all|main|ultranmr|nmrtrans|nmrpeak|shell) ;;
-    *) die "--only must be main, ultranmr, nmrtrans, nmrpeak, shell, or all." ;;
+    all|main|ultranmr|nmrtrans|nmrpeak|unimol2|shell) ;;
+    *) die "--only must be main, ultranmr, nmrtrans, nmrpeak, unimol2, shell, or all." ;;
 esac
 
 if [[ "$ONLY" == "shell" && "$INSTALL_SHELL_HELPER" != "1" ]]; then
@@ -153,6 +153,7 @@ MAIN_ENV="${VENV_ROOT}/nmr_venv"
 ULTRANMR_ENV="${VENV_ROOT}/ultranmr_venv"
 NMRTRANS_ENV="${VENV_ROOT}/nmrtrans_venv"
 NMRPEAK_ENV="${VENV_ROOT}/nmrpeak_venv"
+UNIMOL2_ENV="${VENV_ROOT}/unimol2_venv"
 SOURCE_ROOT="${VENV_ROOT}/.bootstrap-sources"
 MANIFEST_ROOT="${VENV_ROOT}/manifests"
 
@@ -251,6 +252,7 @@ nmr-env() {
         ultranmr) env_dir="${NMR_VENV_ROOT}/ultranmr_venv" ;;
         nmrtrans) env_dir="${NMR_VENV_ROOT}/nmrtrans_venv" ;;
         nmrpeak)  env_dir="${NMR_VENV_ROOT}/nmrpeak_venv" ;;
+        unimol2)  env_dir="${NMR_VENV_ROOT}/unimol2_venv" ;;
         off)
             if declare -F deactivate >/dev/null 2>&1; then
                 deactivate
@@ -262,10 +264,11 @@ nmr-env() {
             printf 'ultranmr  %s\n' "${NMR_VENV_ROOT}/ultranmr_venv"
             printf 'nmrtrans  %s\n' "${NMR_VENV_ROOT}/nmrtrans_venv"
             printf 'nmrpeak   %s\n' "${NMR_VENV_ROOT}/nmrpeak_venv"
+            printf 'unimol2   %s\n' "${NMR_VENV_ROOT}/unimol2_venv"
             return 0
             ;;
         *)
-            printf 'Usage: nmr-env {main|ultranmr|nmrtrans|nmrpeak|off|list}\n' >&2
+            printf 'Usage: nmr-env {main|ultranmr|nmrtrans|nmrpeak|unimol2|off|list}\n' >&2
             return 2
             ;;
     esac
@@ -403,6 +406,20 @@ install_nmrpeak() {
     record_manifest "nmrpeak_venv" "$python"
 }
 
+install_unimol2() {
+    ensure_venv "$UNIMOL2_ENV" "3.11"
+    local python="${UNIMOL2_ENV}/bin/python"
+    install_torch "$python" "torch==2.6.0"
+    "$UV_BIN" pip install \
+        --python "$python" \
+        --torch-backend "$TORCH_BACKEND" \
+        "unimol_tools==0.1.6"
+    install_parquet_support "$python"
+    "$python" -c 'import importlib.metadata, pyarrow, rdkit, torch, unimol_tools; assert importlib.metadata.version("unimol_tools") == "0.1.6"'
+    verify_torch "$python" "unimol2_venv"
+    record_manifest "unimol2_venv" "$python"
+}
+
 note "Project root: ${PROJECT_ROOT}"
 note "Environment root: ${VENV_ROOT}"
 note "PyTorch backend: ${TORCH_BACKEND}"
@@ -420,6 +437,9 @@ if [[ "$ONLY" == "all" || "$ONLY" == "nmrpeak" ]]; then
     install_nmrpeak
 fi
 
+if [[ "$ONLY" == "all" || "$ONLY" == "unimol2" ]]; then
+    install_unimol2
+fi
 if [[ "$INSTALL_SHELL_HELPER" == "1" ]]; then
     install_shell_helper
 fi
@@ -427,11 +447,12 @@ fi
 note "Setup completed."
 if [[ "$INSTALL_SHELL_HELPER" == "1" ]]; then
     printf '\nOpen a new shell or run: source %q\n' "${HOME}/.bashrc"
-    printf 'Then activate with: nmr-env {main|ultranmr|nmrtrans|nmrpeak}\n'
+    printf 'Then activate with: nmr-env {main|ultranmr|nmrtrans|nmrpeak|unimol2}\n'
 else
     printf '\nActivation commands:\n'
     printf '  source %q\n' "${MAIN_ENV}/bin/activate"
     printf '  source %q\n' "${ULTRANMR_ENV}/bin/activate"
     printf '  source %q\n' "${NMRTRANS_ENV}/bin/activate"
     printf '  source %q\n' "${NMRPEAK_ENV}/bin/activate"
+    printf '  source %q\n' "${UNIMOL2_ENV}/bin/activate"
 fi
