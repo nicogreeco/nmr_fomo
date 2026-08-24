@@ -2,7 +2,7 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-DEFAULT_PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd -P)"
+DEFAULT_PROJECT_ROOT="$(cd -- "${SCRIPT_DIR}/../.." && pwd -P)"
 
 usage() {
     cat <<'EOF'
@@ -16,7 +16,7 @@ Arguments:
   VENV_ROOT                Local directory that will contain all environments.
 
 Options:
-  --project-root PATH      Project root containing models/ (default: script parent).
+  --project-root PATH      Project root containing models/ (default: repository root).
   --only NAME              Install only one environment:
                            main, ultranmr, nmrtrans, nmrpeak, unimol2, shell, or all.
   --torch-backend NAME     uv PyTorch backend. Defaults to cpu on the CPU script

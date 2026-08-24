@@ -13,6 +13,8 @@ __pycache__
 /runs/
 /dataset_overlap_audit/
 /datasets_old
+/scripts/model_benchmarks/serverless
+/embeddings
 
 *.png
 *.parquet

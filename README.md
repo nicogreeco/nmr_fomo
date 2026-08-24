@@ -45,6 +45,8 @@ the new model itself.
 
 UniMol2 is the structure-only learned comparison. It is installed from
 `unimol_tools` in its own environment and does not add a repository submodule.
+Morgan ECFP4 is the fixed structure-only control and is generated directly from
+`smiles_canonical` with RDKit (radius 2, 2,048 bits).
 
 Each checkpoint, dataset release, and model asset must be downloaded according
 to the instructions and licence in that model's own upstream README. They are
