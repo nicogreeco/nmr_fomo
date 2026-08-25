@@ -29,9 +29,13 @@ def build_processor(model_name: str, **options):
         from .processors.unimol2 import UniMol2Processor
 
         return UniMol2Processor(**options)
+    if name == "morgan":
+        from .processors.morgan import MorganProcessor
+
+        return MorganProcessor(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, nmrsolver, or unimol2"
+        "ultranmr, nmrsolver, unimol2, or morgan"
     )
 
 
@@ -59,9 +63,13 @@ def build_embedder(model_name: str, **options):
         from .embedders.unimol2 import UniMol2Embedder
 
         return UniMol2Embedder(**options)
+    if name == "morgan":
+        from .embedders.morgan import MorganEmbedder
+
+        return MorganEmbedder(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, nmrsolver, or unimol2"
+        "ultranmr, nmrsolver, unimol2, or morgan"
     )
 
 

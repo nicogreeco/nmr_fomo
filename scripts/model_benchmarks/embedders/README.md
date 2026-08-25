@@ -13,13 +13,16 @@ The representations are fixed for this project:
 | UltraNMR | 768 | Official embedding/Transformer path with validity-masked mean pooling |
 | NMR-Solver | 256 | Official combined H+C Gaussian `set2vec` fixed featurizer |
 | UniMol2 84M/164M | 768 | Final molecular CLS token from `smiles_canonical` |
+| Morgan ECFP4 | 2048 | Binary radius-2 fingerprint from `smiles_canonical` |
 
 NMR-Solver is not a learned encoder. NMRTrans PMA is diagnostic only because
 the released pooled result changes with padding; the model's mask behavior is
 not corrected in this project.
 
-UniMol2 is a molecule-based comparison rather than an NMR encoder. The default
-batch size is one; larger batches retain the official upstream behavior.
+UniMol2 is a molecule-based learned comparison rather than an NMR encoder. The
+default batch size is one; larger batches retain the official upstream
+behavior. Morgan is the fixed molecule-based comparison and contains no learned
+weights.
 
 Keep repository imports inside the model-specific path so the shared packages
 remain importable in every model environment.

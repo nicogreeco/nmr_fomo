@@ -17,8 +17,9 @@ these errors and skip incompatible records while writing a rejection report.
 
 `mode="canonical"` uses normalized multiplicity. `mode="native"` uses the raw
 annotation where useful for NMRPeak and NMRTrans. The setting is a documented
-no-op for UltraNMR, NMR-Solver, and the structure-only UniMol2 processor.
-UniMol2 generates its conformer at loading time from `smiles_canonical`.
+no-op for UltraNMR, NMR-Solver, UniMol2, and Morgan. UniMol2 generates its
+conformer at loading time; Morgan generates ECFP4 directly from
+`smiles_canonical`.
 
 Edit the named model file when its required fields or official preprocessing
 path changes. Do not put source-dataset parsing, checkpoint loading, or pooling

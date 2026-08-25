@@ -27,6 +27,7 @@ from data.console import (
     print_stage_start,
     progress_bar,
 )
+from data.limits import MAX_J_VALUES_PER_PEAK, MAX_PEAKS_PER_MODALITY
 from data.postprocess.common import open_canonical_parquet
 from data.reporting import (
     default_report_path,
@@ -40,8 +41,6 @@ H_SHIFT_MIN = -5.0
 H_SHIFT_MAX = 20.0
 C_SHIFT_MIN = -50.0
 C_SHIFT_MAX = 300.0
-MAX_PEAKS_PER_MODALITY = 60
-MAX_J_VALUES_PER_PEAK = 6
 
 FILTER_REASONS = (
     "no_nmr_peaks",

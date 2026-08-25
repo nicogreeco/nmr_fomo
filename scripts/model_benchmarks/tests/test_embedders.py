@@ -120,6 +120,23 @@ class EmbedderSmokeTests(unittest.TestCase):
         self.assertEqual(result.metadata["representation"], "fixed_featurizer")
         self.assertIsNone(result.checkpoint)
 
+    def test_morgan_fixed_2048_bit_fingerprint(self):
+        require_modules(self, "torch", "rdkit")
+        import torch
+
+        batch = build_processor("morgan")([example_record()])
+        result = build_embedder("morgan", device="cpu").encode(batch)
+
+        self.assertEqual(result.record_ids, ["example-1"])
+        self.assertEqual(tuple(result.embeddings.shape), (1, 2048))
+        self.assertEqual(set(result.embeddings.unique().tolist()), {0.0, 1.0})
+        self.assertEqual(result.metadata["radius"], 2)
+        self.assertEqual(result.metadata["n_bits"], 2048)
+        self.assertEqual(result.metadata["modality"], "molecule")
+        self.assertIs(result.metadata["learned"], False)
+        self.assertIsNone(result.checkpoint)
+        self.assertEqual(result.embeddings.dtype, torch.float32)
+
     def test_unimol2_model_size_names(self):
         from model_benchmarks.embedders.unimol2 import normalize_model_size
 

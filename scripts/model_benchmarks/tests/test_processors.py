@@ -99,6 +99,29 @@ class ProcessorSmokeTests(unittest.TestCase):
         self.assertEqual(batch.inputs["h_shifts"], [(1.2, 1.2)])
         self.assertEqual(batch.inputs["c_shifts"], [(42.0,)])
 
+    def test_morgan_processor_uses_canonical_smiles(self):
+        record = replace(example_record(), smiles="invalid source smiles")
+        batch = build_processor("morgan")([record])
+
+        self.assertEqual(batch.record_ids, ["example-1"])
+        self.assertEqual(len(batch.inputs["fingerprints"][0]), 2048)
+        self.assertEqual(set(batch.inputs["fingerprints"][0]), {0, 1})
+        self.assertEqual(batch.metadata["radius"], 2)
+        self.assertEqual(batch.metadata["modality"], "molecule")
+
+    def test_morgan_rejects_missing_or_invalid_canonical_smiles(self):
+        processor = build_processor("morgan")
+
+        with self.assertRaisesRegex(IncompatibleRecordError, "non-empty"):
+            processor.prepare_record(CanonicalRecord(record_id="missing"))
+        with self.assertRaisesRegex(IncompatibleRecordError, "could not parse"):
+            processor.prepare_record(
+                CanonicalRecord(
+                    record_id="invalid",
+                    smiles_canonical="not-a-smiles",
+                )
+            )
+
     def test_unimol2_processor_accepts_structure_only_batches(self):
         if importlib.util.find_spec("unimol_tools") is None:
             self.skipTest("unimol_tools is not installed")

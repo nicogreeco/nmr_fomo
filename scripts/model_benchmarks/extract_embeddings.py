@@ -18,6 +18,7 @@ MODEL_NAMES = (
     "nmrsolver",
     "unimol2",
     "uni-mol2",
+    "morgan",
 )
 
 
