@@ -52,3 +52,35 @@ class FourierFeatures(nn.Module):
 
     def num_features(self):
         return self.b.shape[1] if self.funcs != 'both' else 2 * self.b.shape[1]
+
+
+class RBFExpansion(nn.Module):
+    """Expand each scalar into Gaussian radial-basis-function features.
+
+    The centers are fixed and linearly spaced between ``x_min`` and ``x_max``.
+    An input with shape ``(...,)`` is returned with shape ``(..., n)``.
+    Integer inputs are converted to floating point before computing the
+    expansion.
+    """
+
+    def __init__(self, x_min, x_max, n, sigma):
+        super().__init__()
+
+        if x_min > x_max:
+            raise ValueError("x_min must be less than or equal to x_max")
+        if n <= 0:
+            raise ValueError("n must be positive")
+        if sigma <= 0:
+            raise ValueError("sigma must be positive")
+
+        self.register_buffer(
+            "centers",
+            torch.linspace(float(x_min), float(x_max), steps=n),
+        )
+        self.sigma = float(sigma)
+
+    def forward(self, x):
+        x = torch.as_tensor(x, device=self.centers.device)
+        x = x.to(dtype=self.centers.dtype)
+        distances = x.unsqueeze(-1) - self.centers
+        return torch.exp(-0.5 * (distances / self.sigma) ** 2)
