@@ -10,5 +10,12 @@ mol_properties:
   records_per_task: 1000
   workers: 8
 
+foundation_splits:
+  seed: 42
+  batch_size: 50000
+  simnmr_validation_records: 50000
+  rich_validation_records: 50000
+  nmrgym_validation_records: 10000
+
 analytics:
   sample_per_group: 20000

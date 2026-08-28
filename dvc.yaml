@@ -645,3 +645,61 @@ stages:
     - datasets/cleaned/analyze_main_report.json
     - datasets/cleaned/analyze_nmrgym_report.json
     - datasets/cleaned/analyze_simnmr_report.json
+  split_foundation_datasets:
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/split_foundation_datasets.py --cleaned-root
+      datasets/cleaned --output-root datasets/train_splits --seed
+      ${foundation_splits.seed} --batch-size ${foundation_splits.batch_size}
+      --simnmr-validation-records ${foundation_splits.simnmr_validation_records}
+      --rich-validation-records ${foundation_splits.rich_validation_records}
+      --nmrgym-validation-records ${foundation_splits.nmrgym_validation_records}
+      --report-output datasets/train_splits/split_report.json --overwrite
+      --quiet
+    deps:
+    - datasets/cleaned/nmrgym.parquet
+    - datasets/cleaned/nmrgym_mol_properties.parquet
+    - datasets/cleaned/simnmr.parquet
+    - datasets/cleaned/simnmr_mol_properties.parquet
+    - datasets/cleaned/train_val.parquet
+    - datasets/cleaned/train_val_mol_properties.parquet
+    - scripts/data/__init__.py
+    - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
+    - scripts/data/postprocess/common.py
+    - scripts/data/postprocess/split_foundation_datasets.py
+    - scripts/data/reporting.py
+    - scripts/data/schema.py
+    - scripts/data/validation.py
+    - scripts/envs_scr/requirements/nmr-main.txt
+    params:
+    - foundation_splits.batch_size
+    - foundation_splits.nmrgym_validation_records
+    - foundation_splits.rich_validation_records
+    - foundation_splits.seed
+    - foundation_splits.simnmr_validation_records
+    outs:
+    - datasets/train_splits/nmrgym_train.parquet:
+        cache: false
+    - datasets/train_splits/nmrgym_train_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/nmrgym_val.parquet:
+        cache: false
+    - datasets/train_splits/nmrgym_val_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/rich_train.parquet:
+        cache: false
+    - datasets/train_splits/rich_train_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/rich_val.parquet:
+        cache: false
+    - datasets/train_splits/rich_val_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/simnmr_train.parquet:
+        cache: false
+    - datasets/train_splits/simnmr_train_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/simnmr_val.parquet:
+        cache: false
+    - datasets/train_splits/simnmr_val_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/split_report.json
