@@ -11,7 +11,7 @@ the canonical pipeline.
 | `raw/` | Original inputs: ADMET, MST-NMR, NMRexp, NMRTrans, NMRGym, SimNMR-PubChem | Source directories pinned by `.dvc` files; downloadable from public upstream releases |
 | `canonical/` | One schema-v2 Parquet per source split used by the pipeline | Cached and locked, `push: false` |
 | `intermediate/` | Rich merges, overlap-transfer outputs, pre-clean benchmark, filtered train, and removal audits | Cached and locked, `push: false` |
-| `cleaned/` | Final train/test, SimNMR, NMRGym, ADMET cohorts, molecular-property CSVs, and analytics | Locked by DVC and released publicly on Hugging Face |
+| `cleaned/` | Final train/test, SimNMR, NMRGym, ADMET cohorts, molecular-property Parquets, and analytics | Locked by DVC and released publicly on Hugging Face |
 
 `datasets_old/` is an ignored local archive and is not a dependency of the DVC
 DAG. Do not use it as an implicit input or copy its counts into reports for a
@@ -66,7 +66,7 @@ cleaned/
 ├── test_benchmark.parquet
 ├── simnmr.parquet
 ├── nmrgym.parquet
-├── {train_val,test_benchmark,simnmr,nmrgym}_mol_properties.csv
+├── {train_val,test_benchmark,simnmr,nmrgym}_mol_properties.parquet
 ├── *_report.json
 ├── admet/
 │   ├── preparation_report.json

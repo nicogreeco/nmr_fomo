@@ -358,7 +358,7 @@ add_molecular_properties_stage() {
     local stage_label="$1"
     local dataset_name="$2"
     local input_path="datasets/cleaned/${dataset_name}.parquet"
-    local output_path="datasets/cleaned/${dataset_name}_mol_properties.csv"
+    local output_path="datasets/cleaned/${dataset_name}_mol_properties.parquet"
     local report_path="datasets/cleaned/${dataset_name}_mol_properties_report.json"
     local command
 
@@ -366,7 +366,6 @@ add_molecular_properties_stage() {
     command+=" scripts/data/postprocess/calculate_mol_properties.py"
     command+=" ${input_path}"
     command+=" --output ${output_path}"
-    command+=" --batch-size \${mol_properties.batch_size}"
     command+=" --records-per-task \${mol_properties.records_per_task}"
     command+=" --workers \${mol_properties.workers}"
     command+=" --report-output ${report_path}"
@@ -376,7 +375,6 @@ add_molecular_properties_stage() {
         --deps "${input_path}" \
         --deps scripts/data/postprocess/calculate_mol_properties.py \
         "${postprocess_dep_args[@]}" \
-        --params mol_properties.batch_size \
         --params mol_properties.records_per_task \
         --params mol_properties.workers \
         --outs "${output_path}" \
@@ -394,10 +392,10 @@ analytics_deps=(
     datasets/cleaned/test_benchmark.parquet
     datasets/cleaned/simnmr.parquet
     datasets/cleaned/nmrgym.parquet
-    datasets/cleaned/train_val_mol_properties.csv
-    datasets/cleaned/test_benchmark_mol_properties.csv
-    datasets/cleaned/simnmr_mol_properties.csv
-    datasets/cleaned/nmrgym_mol_properties.csv
+    datasets/cleaned/train_val_mol_properties.parquet
+    datasets/cleaned/test_benchmark_mol_properties.parquet
+    datasets/cleaned/simnmr_mol_properties.parquet
+    datasets/cleaned/nmrgym_mol_properties.parquet
 )
 for endpoint in solubility_aqsoldb ld50_zhu ames; do
     for split in train_val test; do

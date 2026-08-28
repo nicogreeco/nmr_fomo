@@ -90,11 +90,14 @@ directory ownership, and clean-checkout procedure are documented in
 [`datasets/README.md`](../../datasets/README.md).
 
 The post-processing commands, including benchmark disjoining, common
-filtering, ADMET preparation, same-order RDKit molecular-property CSV
+filtering, ADMET preparation, same-order RDKit molecular-property Parquet
 generation, and final analytics modes, are documented in
-[`postprocess/README.md`](postprocess/README.md). Those CSV descriptors and
-fingerprints are derived sidecars; they are not canonical schema fields or
-filter acceptance criteria.
+[`postprocess/README.md`](postprocess/README.md). Those descriptors and fingerprints are derived sidecars; they are not canonical
+schema fields or filter acceptance criteria.
+
+The data package deliberately stops at canonical records and derived files.
+The training-only pairing, row-group sharding, Morgan expansion, and padded
+model batch are documented in [`../model/README.md`](../model/README.md).
 
 NMR-to-NMR overlap uses exact `smiles_canonical` equality. Full RDKit
 InChIKeys are reserved for matching external ADMET property structures.

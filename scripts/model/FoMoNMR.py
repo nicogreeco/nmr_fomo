@@ -1,0 +1,439 @@
+from dataclasses import dataclass
+
+import lightning as L
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from .embedding import NmrEmbedder
+from .losses import (
+    focal_cross_entropy,
+    gaussian_soft_cross_entropy,
+    symmetric_fingerprint_pairs,
+    tanimoto_to_bins,
+)
+from .processor import MULTIPLICITY_TO_ID
+from .utils.corruption import (
+    apply_global_shift,
+    apply_local_jitter,
+    mask_annotations,
+    select_masked_peak,
+)
+
+
+@dataclass
+class ModelConfig:
+    stage: str = "pretrain"
+
+    d_model: int = 512
+    fourier_strategy: str = "log_spaced"
+    num_fourier_freqs: int = 256
+    num_multiplicities: int | None = None
+    j_min: float = 0.0
+    j_max: float = 20.0
+    num_rbf_centers: int = 32
+    rbf_sigma: float = 2.0
+
+    nhead: int = 8
+    num_encoder_layers: int = 12
+    dim_feedforward: int = 2048
+    dropout: float = 0.1
+
+    h_min: float = -5.5
+    h_max: float = 20.0
+    h_bin_size: float = 0.02
+    c_min: float = -40.0
+    c_max: float = 300.0
+    c_bin_size: float = 0.2
+
+    fp_sim_bin_size: float = 0.05
+    fp_focal_gamma: float = 5.0
+
+    global_shift_probability: float = 0.2
+    h_global_shift_max: float = 0.01
+    c_global_shift_max: float = 0.1
+    local_jitter_probability: float = 0.5
+    h_jitter_sigma: float = 0.05
+    c_jitter_sigma: float = 0.5
+    modality_dropout_probability: float = 0.1
+    annotation_mask_probability: float = 0.15
+    h_soft_label_sigma: float = 0.05
+    c_soft_label_sigma: float = 0.5
+
+    lambda_fp: float = 0.1
+    lambda_annotation: float = 0.2
+
+    lr: float = 1e-4
+    weight_decay: float = 0.0
+
+
+class FoMoNMR(L.LightningModule):
+    def __init__(self, config=None):
+        super().__init__()
+        self.config = config or ModelConfig()
+
+        self.embedding = NmrEmbedder(
+            d_model=self.config.d_model,
+            fourier_strategy=self.config.fourier_strategy,
+            h_x_min=self.config.h_min,
+            h_x_max=self.config.h_max,
+            h_resolution=self.config.h_bin_size,
+            c_x_min=self.config.c_min,
+            c_x_max=self.config.c_max,
+            c_resolution=self.config.c_bin_size,
+            num_fourier_freqs=self.config.num_fourier_freqs,
+            num_multiplicities=self.config.num_multiplicities,
+            j_min=self.config.j_min,
+            j_max=self.config.j_max,
+            num_rbf_centers=self.config.num_rbf_centers,
+            rbf_sigma=self.config.rbf_sigma,
+        )
+
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.config.d_model,
+            nhead=self.config.nhead,
+            dim_feedforward=self.config.dim_feedforward,
+            dropout=self.config.dropout,
+            activation="gelu",
+            batch_first=True,
+        )
+        self.transformer_encoder = nn.TransformerEncoder(
+            encoder_layer,
+            num_layers=self.config.num_encoder_layers,
+        )
+
+        h_num_bins = round(
+            (self.config.h_max - self.config.h_min) / self.config.h_bin_size
+        ) + 1
+        c_num_bins = round(
+            (self.config.c_max - self.config.c_min) / self.config.c_bin_size
+        ) + 1
+        self.h_classification_head = nn.Linear(self.config.d_model, h_num_bins)
+        self.c_classification_head = nn.Linear(self.config.d_model, c_num_bins)
+
+        self.fp_sim_num_bins = int(1.0 / self.config.fp_sim_bin_size) + 1
+        self.fp_sim_classifier = nn.Sequential(
+            nn.Linear(2 * self.config.d_model, self.config.d_model),
+            nn.ReLU(),
+            nn.Dropout(self.config.dropout),
+            nn.Linear(self.config.d_model, self.config.d_model),
+            nn.ReLU(),
+            nn.Dropout(self.config.dropout),
+            nn.Linear(self.config.d_model, self.fp_sim_num_bins),
+        )
+
+        self.i_regression_head = nn.Linear(self.config.d_model, 1)
+        self.m_classification_head = nn.Linear(
+            self.config.d_model,
+            len(MULTIPLICITY_TO_ID),
+        )
+        self.w_regression_head = nn.Linear(self.config.d_model, 1)
+        self.j_count_head = nn.Linear(self.config.d_model, 7)
+        self.j_value_head = nn.Linear(self.config.d_model, 6)
+
+        if self.config.stage == "pretrain":
+            h_embedder = self.embedding.h_embedder
+            rich_modules = (
+                h_embedder.integration_embedder,
+                h_embedder.multiplicity_embedder,
+                h_embedder.j_embedder,
+                h_embedder.width_embedder,
+                h_embedder.rich_mlp,
+                self.i_regression_head,
+                self.m_classification_head,
+                self.w_regression_head,
+                self.j_count_head,
+                self.j_value_head,
+            )
+            for module in rich_modules:
+                module.requires_grad_(False)
+
+    def forward(
+        self,
+        batch,
+        h_shift_prediction_mask=None,
+        c_shift_prediction_mask=None,
+    ):
+        peak_embeddings, valid_peak_mask = self.embedding(
+            batch,
+            h_shift_prediction_mask=h_shift_prediction_mask,
+            c_shift_prediction_mask=c_shift_prediction_mask,
+        )
+        peak_states = self.transformer_encoder(
+            peak_embeddings,
+            src_key_padding_mask=~valid_peak_mask,
+        )
+
+        mask = valid_peak_mask.unsqueeze(-1)
+        pooled = (peak_states * mask).sum(dim=1)
+        pooled = pooled / mask.sum(dim=1).clamp_min(1)
+        return pooled, peak_states, valid_peak_mask
+
+    def corrupt_batch(self, batch):
+        corrupted = {
+            "h": {name: value.clone() for name, value in batch["h"].items()},
+            "c": {name: value.clone() for name, value in batch["c"].items()},
+        }
+        h = corrupted["h"]
+        c = corrupted["c"]
+
+        h["shift"] = apply_global_shift(
+            h["shift"],
+            h["peak_mask"],
+            self.config.h_min,
+            self.config.h_max,
+            self.config.h_global_shift_max,
+            self.config.global_shift_probability,
+        )
+        h_shift_targets = h["shift"].clone()
+
+        c["shift"] = apply_global_shift(
+            c["shift"],
+            c["peak_mask"],
+            self.config.c_min,
+            self.config.c_max,
+            self.config.c_global_shift_max,
+            self.config.global_shift_probability,
+        )
+        c_shift_targets = c["shift"].clone()
+
+        has_h = h["peak_mask"].any(dim=1)
+        has_c = c["peak_mask"].any(dim=1)
+        drop_modality = (
+            torch.rand_like(has_h, dtype=torch.float32)
+            < self.config.modality_dropout_probability
+        ) & has_h & has_c
+        drop_h = drop_modality & (
+            torch.rand_like(has_h, dtype=torch.float32) < 0.5
+        )
+        drop_c = drop_modality & ~drop_h
+
+        h["peak_mask"][drop_h] = False
+        h["availability"][drop_h] = False
+        h["j_mask"][drop_h] = False
+        c["peak_mask"][drop_c] = False
+
+        h_shift_mask = select_masked_peak(h["peak_mask"])
+        c_shift_mask = select_masked_peak(c["peak_mask"])
+
+        h["shift"] = apply_local_jitter(
+            h["shift"],
+            h["peak_mask"],
+            h_shift_mask,
+            self.config.local_jitter_probability,
+            self.config.h_jitter_sigma,
+            self.config.h_min,
+            self.config.h_max,
+        )
+        c["shift"] = apply_local_jitter(
+            c["shift"],
+            c["peak_mask"],
+            c_shift_mask,
+            self.config.local_jitter_probability,
+            self.config.c_jitter_sigma,
+            self.config.c_min,
+            self.config.c_max,
+        )
+
+        if self.config.stage == "pretrain":
+            h["availability"].fill_(False)
+            h["j_mask"].fill_(False)
+            annotation_mask = torch.zeros_like(h["availability"])
+        else:
+            annotation_mask = mask_annotations(
+                h,
+                self.config.annotation_mask_probability,
+            )
+
+        corruption = {
+            "h_shift_mask": h_shift_mask,
+            "c_shift_mask": c_shift_mask,
+            "h_shift_targets": h_shift_targets,
+            "c_shift_targets": c_shift_targets,
+            "annotation_mask": annotation_mask,
+        }
+        return corrupted, corruption
+
+    def compute_losses(self, outputs, clean_batch, corruption):
+        pooled, peak_states, _ = outputs
+        zero = pooled.sum() * 0.0
+
+        h_peak_count = clean_batch["h"]["shift"].shape[1]
+        h_states = peak_states[:, :h_peak_count]
+        c_states = peak_states[:, h_peak_count:]
+
+        h_shift_mask = corruption["h_shift_mask"]
+        h_shift_loss = zero
+        if h_shift_mask.any():
+            h_logits = self.h_classification_head(h_states[h_shift_mask])
+            h_targets = corruption["h_shift_targets"][h_shift_mask]
+            h_bin_centers = self.config.h_min + torch.arange(
+                self.h_classification_head.out_features,
+                device=h_logits.device,
+            ) * self.config.h_bin_size
+            h_shift_loss = gaussian_soft_cross_entropy(
+                h_logits,
+                h_targets,
+                h_bin_centers,
+                self.config.h_soft_label_sigma,
+            )
+
+        c_shift_mask = corruption["c_shift_mask"]
+        c_shift_loss = zero
+        if c_shift_mask.any():
+            c_logits = self.c_classification_head(c_states[c_shift_mask])
+            c_targets = corruption["c_shift_targets"][c_shift_mask]
+            c_bin_centers = self.config.c_min + torch.arange(
+                self.c_classification_head.out_features,
+                device=c_logits.device,
+            ) * self.config.c_bin_size
+            c_shift_loss = gaussian_soft_cross_entropy(
+                c_logits,
+                c_targets,
+                c_bin_centers,
+                self.config.c_soft_label_sigma,
+            )
+
+        shift_losses = []
+        if h_shift_mask.any():
+            shift_losses.append(h_shift_loss)
+        if c_shift_mask.any():
+            shift_losses.append(c_shift_loss)
+        shift_loss = torch.stack(shift_losses).mean() if shift_losses else zero
+
+        pair_features, similarities = symmetric_fingerprint_pairs(
+            pooled,
+            clean_batch["fingerprints"],
+        )
+        fingerprint_loss = zero
+        if similarities.numel() > 0:
+            fp_logits = self.fp_sim_classifier(pair_features)
+            fp_targets = tanimoto_to_bins(
+                similarities,
+                self.config.fp_sim_bin_size,
+                self.fp_sim_num_bins,
+            )
+            fingerprint_loss = focal_cross_entropy(
+                fp_logits,
+                fp_targets,
+                self.config.fp_focal_gamma,
+            )
+
+        integration_loss = zero
+        multiplicity_loss = zero
+        width_loss = zero
+        j_loss = zero
+        j_count_loss = zero
+        j_value_loss = zero
+        annotation_loss = zero
+
+        if self.config.stage == "posttrain":
+            h = clean_batch["h"]
+            annotation_mask = corruption["annotation_mask"]
+            annotation_losses = []
+
+            integration_mask = annotation_mask[:, :, 0]
+            if integration_mask.any():
+                prediction = self.i_regression_head(
+                    h_states[integration_mask]
+                ).squeeze(-1)
+                target = torch.log1p(h["integration"][integration_mask])
+                integration_loss = F.smooth_l1_loss(prediction, target)
+                annotation_losses.append(integration_loss)
+
+            multiplicity_mask = annotation_mask[:, :, 1]
+            if multiplicity_mask.any():
+                logits = self.m_classification_head(h_states[multiplicity_mask])
+                target = h["multiplicity"][multiplicity_mask]
+                multiplicity_loss = F.cross_entropy(logits, target)
+                annotation_losses.append(multiplicity_loss)
+
+            width_mask = annotation_mask[:, :, 3]
+            if width_mask.any():
+                prediction = self.w_regression_head(
+                    h_states[width_mask]
+                ).squeeze(-1)
+                target = h["range_half_span"][width_mask]
+                width_loss = F.smooth_l1_loss(prediction, target)
+                annotation_losses.append(width_loss)
+
+            masked_j = annotation_mask[:, :, 2]
+            if masked_j.any():
+                selected_states = h_states[masked_j]
+                valid_j = h["j_mask"][masked_j]
+                target_counts = valid_j.sum(dim=1)
+
+                count_logits = self.j_count_head(selected_states)
+                j_count_loss = F.cross_entropy(count_logits, target_counts)
+
+                predicted_values = self.j_value_head(selected_states)
+                target_values = h["j_values"][masked_j].masked_fill(
+                    ~valid_j,
+                    float("inf"),
+                )
+                target_values = target_values.sort(dim=1).values
+                value_slots = (
+                    torch.arange(6, device=predicted_values.device).unsqueeze(0)
+                    < target_counts.unsqueeze(1)
+                )
+
+                if value_slots.any():
+                    j_value_loss = F.smooth_l1_loss(
+                        predicted_values[value_slots],
+                        target_values[value_slots],
+                    )
+                    j_loss = (j_count_loss + j_value_loss) / 2
+                else:
+                    j_loss = j_count_loss
+                annotation_losses.append(j_loss)
+
+            if annotation_losses:
+                annotation_loss = torch.stack(annotation_losses).mean()
+
+        total_loss = shift_loss + self.config.lambda_fp * fingerprint_loss
+        if self.config.stage == "posttrain":
+            total_loss += self.config.lambda_annotation * annotation_loss
+
+        return {
+            "loss": total_loss,
+            "shift": shift_loss,
+            "shift_h": h_shift_loss,
+            "shift_c": c_shift_loss,
+            "fingerprint": fingerprint_loss,
+            "annotation": annotation_loss,
+            "integration": integration_loss,
+            "multiplicity": multiplicity_loss,
+            "width": width_loss,
+            "j": j_loss,
+            "j_count": j_count_loss,
+            "j_value": j_value_loss,
+        }
+
+    def training_step(self, batch, batch_idx):
+        corrupted, corruption = self.corrupt_batch(batch)
+        outputs = self(
+            corrupted,
+            h_shift_prediction_mask=corruption["h_shift_mask"],
+            c_shift_prediction_mask=corruption["c_shift_mask"],
+        )
+        return self.compute_losses(outputs, batch, corruption)["loss"]
+
+    def validation_step(self, batch, batch_idx):
+        corrupted, corruption = self.corrupt_batch(batch)
+        outputs = self(
+            corrupted,
+            h_shift_prediction_mask=corruption["h_shift_mask"],
+            c_shift_prediction_mask=corruption["c_shift_mask"],
+        )
+        return self.compute_losses(outputs, batch, corruption)
+
+    def configure_optimizers(self):
+        trainable_parameters = [
+            parameter for parameter in self.parameters() if parameter.requires_grad
+        ]
+        return torch.optim.Adam(
+            trainable_parameters,
+            lr=self.config.lr,
+            weight_decay=self.config.weight_decay,
+            eps=1e-6,
+        )

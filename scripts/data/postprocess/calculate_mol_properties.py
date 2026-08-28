@@ -1,20 +1,17 @@
 #!/usr/bin/env python3
 """Export RDKit molecular properties from a canonical Parquet dataset.
 
-The input is streamed in Arrow batches and only ``record_id`` and
-``smiles_canonical`` are read. Each batch is divided into small tasks for a
-process pool, while the resulting rows are written to CSV immediately. This
-keeps memory bounded for large canonical datasets.
+The output is a typed Parquet sidecar with exactly one row for every input
+record. Input order and physical row-group boundaries are preserved so the NMR
+file and its molecular sidecar can be streamed together during training.
 
-The CSV contains one row per input record. Invalid or missing SMILES are not
-silently dropped: their descriptor fields are empty and ``rdkit_status`` plus
-``rdkit_error`` explain why.
+Invalid or missing SMILES are never silently dropped. Their descriptor and
+fingerprint fields are null, while rdkit_status and rdkit_error retain the
+reason the structure could not be processed.
 
-Morgan ECFP4 fingerprints use radius 2 and 2,048 bits. They are stored as
-RDKit binary fingerprint bytes encoded as hexadecimal (512 characters), which
-is reversible and substantially smaller than a 2,048-character bit string.
-RDKit's MACCS vector has 167 positions because bit 0 is unused; the output
-contains positions 1--166 as ``maccs_keys_166_bits``.
+Morgan ECFP4 fingerprints use radius 2 and 2,048 bits. They are stored as 256
+raw bytes in a fixed-size binary column. Expanding the bits is intentionally
+left to the model collator, avoiding a 2,048-value representation on disk.
 
 Example:
     PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \\
@@ -24,14 +21,14 @@ Example:
 from __future__ import annotations
 
 import argparse
-import csv
-import io
 import os
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
+import pyarrow as pa
+import pyarrow.parquet as parquet
 from rdkit import Chem, DataStructs, RDLogger
 from rdkit.Chem import (
     Crippen,
@@ -56,13 +53,17 @@ from data.reporting import (
 )
 
 
-# Invalid source structures are represented explicitly in the CSV. Suppress
+# Invalid source structures are represented explicitly in the output. Suppress
 # RDKit's per-record stderr output so a very large run remains readable.
 RDLogger.DisableLog("rdApp.error")
 RDLogger.DisableLog("rdApp.warning")
 
+MOLECULAR_PROPERTIES_SCHEMA_VERSION = "1"
 MORGAN_RADIUS = 2
 MORGAN_FP_SIZE = 2048
+MORGAN_FP_BYTES = MORGAN_FP_SIZE // 8
+MORGAN_FIELD = "morgan_ecfp4_2048"
+LEGACY_MORGAN_HEX_FIELD = "morgan_ecfp4_2048_hex"
 MACCS_OUTPUT_BITS = 166
 
 FUNCTIONAL_GROUP_SMARTS = {
@@ -90,6 +91,7 @@ MORGAN_GENERATOR = rdFingerprintGenerator.GetMorganGenerator(
     fpSize=MORGAN_FP_SIZE,
 )
 
+INTEGER_PROPERTY_FIELDS = ["hba", "hbd", "rotatable_bonds"]
 PROPERTY_FIELDS = [
     "exact_molecular_weight",
     "calculated_logp",
@@ -101,30 +103,62 @@ PROPERTY_FIELDS = [
     "aromatic_atom_fraction",
 ]
 
-CSV_FIELDS = [
-    "record_id",
-    "smiles_canonical",
-    "rdkit_status",
-    "rdkit_error",
-    *PROPERTY_FIELDS,
-    *FUNCTIONAL_GROUP_SMARTS,
-    "morgan_ecfp4_2048_hex",
+
+def molecular_properties_schema() -> pa.Schema:
+    """Return the stable Arrow schema shared by calculation and migration."""
+
+    fields = [
+        pa.field("record_id", pa.string(), nullable=False),
+        pa.field("smiles_canonical", pa.string()),
+        pa.field("rdkit_status", pa.string(), nullable=False),
+        pa.field("rdkit_error", pa.string()),
+    ]
+    for name in PROPERTY_FIELDS:
+        field_type = pa.int32() if name in INTEGER_PROPERTY_FIELDS else pa.float64()
+        fields.append(pa.field(name, field_type))
+    fields.extend(pa.field(name, pa.int8()) for name in FUNCTIONAL_GROUP_SMARTS)
+    fields.extend(
+        [
+            pa.field(MORGAN_FIELD, pa.binary(MORGAN_FP_BYTES)),
+            pa.field("maccs_keys_166_bits", pa.string()),
+        ]
+    )
+    return pa.schema(
+        fields,
+        metadata={
+            b"molecular_properties_schema_version": (
+                MOLECULAR_PROPERTIES_SCHEMA_VERSION.encode("utf-8")
+            ),
+            b"morgan_radius": str(MORGAN_RADIUS).encode("ascii"),
+            b"morgan_num_bits": str(MORGAN_FP_SIZE).encode("ascii"),
+            b"morgan_encoding": b"rdkit_binary_text",
+        },
+    )
+
+
+MOLECULAR_PROPERTY_FIELDS = molecular_properties_schema().names
+LEGACY_CSV_FIELDS = [
+    *MOLECULAR_PROPERTY_FIELDS[:-2],
+    LEGACY_MORGAN_HEX_FIELD,
     "maccs_keys_166_bits",
 ]
+# Retain the old public name for the one-time migration helper and downstream
+# notebooks that may still inspect the legacy CSV header.
+CSV_FIELDS = LEGACY_CSV_FIELDS
 
 
 def default_output_path(input_path: Path) -> Path:
-    """Return the same-directory CSV name requested for one Parquet input."""
+    """Return the same-directory molecular-property Parquet path."""
 
     if input_path.suffix.lower() != ".parquet":
         raise ValueError(f"input must have a .parquet suffix: {input_path}")
-    return input_path.with_name(f"{input_path.stem}_mol_properties.csv")
+    return input_path.with_name(f"{input_path.stem}_mol_properties.parquet")
 
 
 def empty_property_values() -> dict[str, object]:
-    """Return blank descriptor and fingerprint values for an unusable SMILES."""
+    """Return null descriptor and fingerprint values for an unusable SMILES."""
 
-    return {field: None for field in CSV_FIELDS[4:]}
+    return {field: None for field in MOLECULAR_PROPERTY_FIELDS[4:]}
 
 
 def unusable_row(
@@ -177,6 +211,15 @@ def calculate_row(record_id: str, smiles: object) -> dict[str, object]:
             aromatic_heavy_atoms / len(heavy_atoms) if heavy_atoms else None
         )
 
+        morgan_bytes = DataStructs.BitVectToBinaryText(
+            MORGAN_GENERATOR.GetFingerprint(molecule)
+        )
+        if len(morgan_bytes) != MORGAN_FP_BYTES:
+            raise RuntimeError(
+                f"unexpected Morgan byte length {len(morgan_bytes)}; "
+                f"expected {MORGAN_FP_BYTES}"
+            )
+
         maccs_bits = DataStructs.BitVectToText(MACCSkeys.GenMACCSKeys(molecule))
         if len(maccs_bits) != MACCS_OUTPUT_BITS + 1:
             raise RuntimeError(
@@ -197,11 +240,7 @@ def calculate_row(record_id: str, smiles: object) -> dict[str, object]:
             "rotatable_bonds": rdMolDescriptors.CalcNumRotatableBonds(molecule),
             "fraction_csp3": rdMolDescriptors.CalcFractionCSP3(molecule),
             "aromatic_atom_fraction": aromatic_atom_fraction,
-            # Recover the original 2,048-bit RDKit vector with:
-            # DataStructs.CreateFromBinaryText(bytes.fromhex(morgan_hex)).
-            "morgan_ecfp4_2048_hex": DataStructs.BitVectToBinaryText(
-                MORGAN_GENERATOR.GetFingerprint(molecule)
-            ).hex(),
+            MORGAN_FIELD: morgan_bytes,
             "maccs_keys_166_bits": maccs_bits[1:],
         }
         for name, pattern in FUNCTIONAL_GROUP_PATTERNS.items():
@@ -217,29 +256,13 @@ def calculate_chunk(records: list[tuple[str, object]]) -> list[dict[str, object]
     return [calculate_row(record_id, smiles) for record_id, smiles in records]
 
 
-def calculate_chunk_csv(
-    records: list[tuple[str, object]],
-) -> tuple[str, int, dict[str, int]]:
-    """Calculate and serialize one ordered task inside a worker process."""
-
-    rows = calculate_chunk(records)
-    status_counts: dict[str, int] = {}
-    for row in rows:
-        status = str(row["rdkit_status"])
-        status_counts[status] = status_counts.get(status, 0) + 1
-
-    buffer = io.StringIO(newline="")
-    csv.DictWriter(buffer, fieldnames=CSV_FIELDS).writerows(rows)
-    return buffer.getvalue(), len(rows), status_counts
-
-
 def iter_chunks(
     record_ids: list[object],
     smiles_values: list[object],
     records_per_task: int,
     first_row_index: int,
 ) -> Iterator[list[tuple[str, object]]]:
-    """Split one Arrow batch into bounded process-pool tasks in input order."""
+    """Split one row group into bounded process-pool tasks in input order."""
 
     if len(record_ids) != len(smiles_values):
         raise RuntimeError(
@@ -269,48 +292,64 @@ def _merge_status_counts(
         target[status] = target.get(status, 0) + count
 
 
-def _write_csv_result(
-    output_handle,
-    result: tuple[str, int, dict[str, int]],
-    status_counts: dict[str, int],
-    progress,
-) -> int:
-    csv_text, row_count, chunk_statuses = result
-    output_handle.write(csv_text)
-    _merge_status_counts(status_counts, chunk_statuses)
-    if progress is not None:
-        progress.update(row_count)
-    return row_count
+def _status_counts(rows: Iterable[dict[str, object]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for row in rows:
+        status = str(row["rdkit_status"])
+        counts[status] = counts.get(status, 0) + 1
+    return counts
 
 
-def _iter_parquet_chunks(
-    parquet_file,
-    *,
-    batch_size: int,
-    records_per_task: int,
-) -> Iterator[list[tuple[str, object]]]:
-    """Stream Arrow batches as ordered, bounded worker tasks."""
+def _calculate_row_group(
+    chunks: Iterable[list[tuple[str, object]]],
+    executor: ProcessPoolExecutor | None,
+    max_pending_tasks: int,
+) -> list[dict[str, object]]:
+    """Calculate one row group while preserving task submission order."""
 
-    processed_rows = 0
-    for arrow_batch in parquet_file.iter_batches(
-        batch_size=batch_size,
-        columns=["record_id", "smiles_canonical"],
-        use_threads=True,
-    ):
-        yield from iter_chunks(
-            arrow_batch.column("record_id").to_pylist(),
-            arrow_batch.column("smiles_canonical").to_pylist(),
-            records_per_task,
-            processed_rows,
+    rows: list[dict[str, object]] = []
+    if executor is None:
+        for chunk in chunks:
+            rows.extend(calculate_chunk(chunk))
+        return rows
+
+    pending = deque()
+    for chunk in chunks:
+        pending.append(executor.submit(calculate_chunk, chunk))
+        if len(pending) >= max_pending_tasks:
+            rows.extend(pending.popleft().result())
+    while pending:
+        rows.extend(pending.popleft().result())
+    return rows
+
+
+def validate_aligned_row_groups(
+    nmr_file,
+    molecular_path: str | Path,
+) -> None:
+    """Check that a molecular sidecar retained the source row-group layout."""
+
+    molecular_file = parquet.ParquetFile(molecular_path)
+    if molecular_file.metadata.num_rows != nmr_file.metadata.num_rows:
+        raise RuntimeError("molecular-property row count does not match the input")
+    if molecular_file.num_row_groups != nmr_file.num_row_groups:
+        raise RuntimeError(
+            "molecular-property row-group count does not match the input"
         )
-        processed_rows += arrow_batch.num_rows
+    for index in range(nmr_file.num_row_groups):
+        input_rows = nmr_file.metadata.row_group(index).num_rows
+        output_rows = molecular_file.metadata.row_group(index).num_rows
+        if input_rows != output_rows:
+            raise RuntimeError(
+                f"molecular-property row group {index} has {output_rows} rows; "
+                f"expected {input_rows}"
+            )
 
 
 def export_molecular_properties(
     input_path: str | Path,
     output_path: str | Path | None = None,
     *,
-    batch_size: int = 50_000,
     records_per_task: int = 1_000,
     workers: int | None = None,
     progress_every: int = 250_000,
@@ -318,15 +357,8 @@ def export_molecular_properties(
     quiet: bool = False,
     overwrite: bool = False,
 ) -> dict[str, object]:
-    """Stream a canonical Parquet file into a CSV of RDKit properties.
+    """Calculate a row-group-aligned molecular-property Parquet sidecar."""
 
-    ``workers=1`` processes batches in the parent process. Higher values use
-    a process pool with a bounded cross-batch task queue, so workers remain
-    occupied while memory use stays bounded.
-    """
-
-    if batch_size < 1:
-        raise ValueError("batch_size must be at least 1")
     if records_per_task < 1:
         raise ValueError("records_per_task must be at least 1")
     if progress_every < 1:
@@ -339,16 +371,16 @@ def export_molecular_properties(
         if output_path is None
         else Path(output_path)
     )
-    if output_file_path.suffix.lower() != ".csv":
+    if output_file_path.suffix.lower() != ".parquet":
         raise ValueError(
-            f"molecular-property output must be a .csv file: {output_file_path}"
+            f"molecular-property output must be a .parquet file: {output_file_path}"
         )
     if output_file_path.exists() and not overwrite:
         raise FileExistsError(
             f"refusing to overwrite {output_file_path}; pass --overwrite to replace it"
         )
     if output_file_path.resolve() == input_file_path.resolve():
-        raise ValueError("CSV output must not replace the input Parquet file")
+        raise ValueError("molecular-property output must not replace the NMR input")
 
     if workers is None:
         workers = min(8, os.cpu_count() or 1)
@@ -366,57 +398,70 @@ def export_molecular_properties(
     input_rows = parquet_file.metadata.num_rows
     rows_written = 0
     status_counts: dict[str, int] = {}
+    schema = molecular_properties_schema()
     progress = progress_bar(
         input_rows,
         f"Calculating {input_file_path.name}",
         show_progress,
         min_iterations=progress_every,
     )
+    executor = None
     try:
-        with temporary_path.open("w", newline="", encoding="utf-8") as output_handle:
-            csv.DictWriter(output_handle, fieldnames=CSV_FIELDS).writeheader()
-            chunks = _iter_parquet_chunks(
-                parquet_file,
-                batch_size=batch_size,
-                records_per_task=records_per_task,
+        if workers > 1:
+            executor = ProcessPoolExecutor(
+                max_workers=workers,
+                initializer=configure_console,
+                initargs=(quiet,),
             )
 
-            if workers == 1:
-                for chunk in chunks:
-                    rows_written += _write_csv_result(
-                        output_handle,
-                        calculate_chunk_csv(chunk),
-                        status_counts,
-                        progress,
+        with parquet.ParquetWriter(
+            temporary_path,
+            schema,
+            compression="zstd",
+            use_dictionary=["rdkit_status"],
+            write_statistics=True,
+        ) as writer:
+            first_row_index = 0
+            for row_group_index in range(parquet_file.num_row_groups):
+                input_table = parquet_file.read_row_group(
+                    row_group_index,
+                    columns=["record_id", "smiles_canonical"],
+                    use_threads=True,
+                )
+                chunks = iter_chunks(
+                    input_table.column("record_id").to_pylist(),
+                    input_table.column("smiles_canonical").to_pylist(),
+                    records_per_task,
+                    first_row_index,
+                )
+                rows = _calculate_row_group(
+                    chunks,
+                    executor,
+                    max_pending_tasks=max(1, workers * 2),
+                )
+                if len(rows) != input_table.num_rows:
+                    raise RuntimeError(
+                        f"row group {row_group_index} produced {len(rows)} rows; "
+                        f"expected {input_table.num_rows}"
                     )
-            else:
-                max_pending_tasks = workers * 2
-                pending = deque()
-                with ProcessPoolExecutor(
-                    max_workers=workers,
-                    initializer=configure_console,
-                    initargs=(quiet,),
-                ) as executor:
-                    for chunk in chunks:
-                        pending.append(executor.submit(calculate_chunk_csv, chunk))
-                        if len(pending) >= max_pending_tasks:
-                            rows_written += _write_csv_result(
-                                output_handle,
-                                pending.popleft().result(),
-                                status_counts,
-                                progress,
-                            )
-                    while pending:
-                        rows_written += _write_csv_result(
-                            output_handle,
-                            pending.popleft().result(),
-                            status_counts,
-                            progress,
-                        )
+
+                output_table = pa.Table.from_pylist(rows, schema=schema)
+                writer.write_table(
+                    output_table,
+                    row_group_size=input_table.num_rows,
+                )
+                group_counts = _status_counts(rows)
+                _merge_status_counts(status_counts, group_counts)
+                rows_written += len(rows)
+                first_row_index += input_table.num_rows
+                if progress is not None:
+                    progress.update(len(rows))
     except Exception:
         temporary_path.unlink(missing_ok=True)
         raise
     finally:
+        if executor is not None:
+            executor.shutdown(wait=True, cancel_futures=True)
         if progress is not None:
             progress.close()
 
@@ -425,6 +470,12 @@ def export_molecular_properties(
         raise RuntimeError(
             "molecular-property row count does not match the input dataset"
         )
+    try:
+        validate_aligned_row_groups(parquet_file, temporary_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
     temporary_path.replace(output_file_path)
     return {
         "stage": "calculate_mol_properties",
@@ -433,8 +484,16 @@ def export_molecular_properties(
         "counts": {
             "input_records": input_rows,
             "output_records": rows_written,
+            "row_groups": parquet_file.num_row_groups,
         },
-        "details": {"rdkit_status": dict(sorted(status_counts.items()))},
+        "details": {
+            "rdkit_status": dict(sorted(status_counts.items())),
+            "morgan": {
+                "radius": MORGAN_RADIUS,
+                "num_bits": MORGAN_FP_SIZE,
+                "storage_bytes": MORGAN_FP_BYTES,
+            },
+        },
     }
 
 
@@ -445,21 +504,15 @@ def build_argument_parser() -> argparse.ArgumentParser:
         "--output",
         type=Path,
         help=(
-            "output CSV path (default: input name with _mol_properties.csv in "
-            "the same directory)"
+            "output Parquet path (default: input name with "
+            "_mol_properties.parquet in the same directory)"
         ),
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=50000,
-        help="Parquet rows read per bounded batch (default: 50000)",
     )
     parser.add_argument(
         "--records-per-task",
         type=int,
         default=1000,
-        help="records sent to one worker task at once (default: 1000)",
+        help="records sent to one RDKit worker task at once (default: 1000)",
     )
     parser.add_argument(
         "--workers",
@@ -479,13 +532,13 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--report-output",
         type=Path,
-        help="processing JSON (default: beside the output CSV)",
+        help="processing JSON (default: beside the output Parquet)",
     )
     add_console_arguments(parser)
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="replace an existing output CSV after a successful run",
+        help="replace an existing output Parquet after a successful run",
     )
     return parser
 
@@ -503,7 +556,6 @@ def main() -> None:
     result = export_molecular_properties(
         args.input,
         args.output,
-        batch_size=args.batch_size,
         records_per_task=args.records_per_task,
         workers=args.workers,
         progress_every=args.progress_every,

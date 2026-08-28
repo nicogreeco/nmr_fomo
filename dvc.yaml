@@ -504,8 +504,7 @@ stages:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/calculate_mol_properties.py
       datasets/cleaned/train_val.parquet --output
-      datasets/cleaned/train_val_mol_properties.csv --batch-size
-      ${mol_properties.batch_size} --records-per-task
+      datasets/cleaned/train_val_mol_properties.parquet --records-per-task
       ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/train_val_mol_properties_report.json
       --quiet
@@ -521,18 +520,16 @@ stages:
     - scripts/data/validation.py
     - scripts/envs_scr/requirements/nmr-main.txt
     params:
-    - mol_properties.batch_size
     - mol_properties.records_per_task
     - mol_properties.workers
     outs:
-    - datasets/cleaned/train_val_mol_properties.csv
+    - datasets/cleaned/train_val_mol_properties.parquet
     - datasets/cleaned/train_val_mol_properties_report.json
   calculate_test_properties:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/calculate_mol_properties.py
       datasets/cleaned/test_benchmark.parquet --output
-      datasets/cleaned/test_benchmark_mol_properties.csv --batch-size
-      ${mol_properties.batch_size} --records-per-task
+      datasets/cleaned/test_benchmark_mol_properties.parquet --records-per-task
       ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/test_benchmark_mol_properties_report.json
       --quiet
@@ -548,18 +545,16 @@ stages:
     - scripts/data/validation.py
     - scripts/envs_scr/requirements/nmr-main.txt
     params:
-    - mol_properties.batch_size
     - mol_properties.records_per_task
     - mol_properties.workers
     outs:
-    - datasets/cleaned/test_benchmark_mol_properties.csv
+    - datasets/cleaned/test_benchmark_mol_properties.parquet
     - datasets/cleaned/test_benchmark_mol_properties_report.json
   calculate_simnmr_properties:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/calculate_mol_properties.py
       datasets/cleaned/simnmr.parquet --output
-      datasets/cleaned/simnmr_mol_properties.csv --batch-size
-      ${mol_properties.batch_size} --records-per-task
+      datasets/cleaned/simnmr_mol_properties.parquet --records-per-task
       ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/simnmr_mol_properties_report.json --quiet
     deps:
@@ -574,18 +569,16 @@ stages:
     - scripts/data/validation.py
     - scripts/envs_scr/requirements/nmr-main.txt
     params:
-    - mol_properties.batch_size
     - mol_properties.records_per_task
     - mol_properties.workers
     outs:
-    - datasets/cleaned/simnmr_mol_properties.csv
+    - datasets/cleaned/simnmr_mol_properties.parquet
     - datasets/cleaned/simnmr_mol_properties_report.json
   calculate_nmrgym_properties:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/calculate_mol_properties.py
       datasets/cleaned/nmrgym.parquet --output
-      datasets/cleaned/nmrgym_mol_properties.csv --batch-size
-      ${mol_properties.batch_size} --records-per-task
+      datasets/cleaned/nmrgym_mol_properties.parquet --records-per-task
       ${mol_properties.records_per_task} --workers ${mol_properties.workers}
       --report-output datasets/cleaned/nmrgym_mol_properties_report.json --quiet
     deps:
@@ -600,11 +593,10 @@ stages:
     - scripts/data/validation.py
     - scripts/envs_scr/requirements/nmr-main.txt
     params:
-    - mol_properties.batch_size
     - mol_properties.records_per_task
     - mol_properties.workers
     outs:
-    - datasets/cleaned/nmrgym_mol_properties.csv
+    - datasets/cleaned/nmrgym_mol_properties.parquet
     - datasets/cleaned/nmrgym_mol_properties_report.json
   analyze_cleaned_collection:
     cmd: PYTHONPATH=scripts python
@@ -634,13 +626,13 @@ stages:
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.csv
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
     - datasets/cleaned/nmrgym.parquet
-    - datasets/cleaned/nmrgym_mol_properties.csv
+    - datasets/cleaned/nmrgym_mol_properties.parquet
     - datasets/cleaned/simnmr.parquet
-    - datasets/cleaned/simnmr_mol_properties.csv
+    - datasets/cleaned/simnmr_mol_properties.parquet
     - datasets/cleaned/test_benchmark.parquet
-    - datasets/cleaned/test_benchmark_mol_properties.csv
+    - datasets/cleaned/test_benchmark_mol_properties.parquet
     - datasets/cleaned/train_val.parquet
-    - datasets/cleaned/train_val_mol_properties.csv
+    - datasets/cleaned/train_val_mol_properties.parquet
     - scripts/data/__init__.py
     - scripts/data/console.py
     - scripts/data/postprocess/analyze_cleaned_datasets.py

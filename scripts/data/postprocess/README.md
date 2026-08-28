@@ -209,10 +209,11 @@ cohort-cleanup counts.
 
 ## `calculate_mol_properties.py`
 
-Streams one final canonical Parquet and writes a same-order
-`*_mol_properties.csv`. It reads only `record_id` and `smiles_canonical`, uses
-bounded batches, and parallelizes the CPU-bound RDKit calculations with a
-small process pool.
+Streams one final canonical Parquet and writes a typed, same-order
+`*_mol_properties.parquet`. It reads only `record_id` and `smiles_canonical`,
+processes one source row group at a time, and parallelizes the CPU-bound RDKit
+calculations with a small process pool. The output preserves the source row
+groups so training workers can read the NMR and molecular files together.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
@@ -220,12 +221,11 @@ PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
   --workers 8
 ```
 
-Function, CLI, and `params.yaml` defaults are identical: 50,000 rows per Arrow
-batch, 1,000 records per worker task, and up to eight workers. A bounded queue
-keeps workers occupied across Arrow-batch boundaries, and workers serialize
-their result rows before returning them to the writer. Local profiling showed
-eight workers outperforming four, although RDKit calculation remains the main
-cost and machine-specific scaling should still be measured.
+`params.yaml` sends 1,000 records to each worker task and uses up to eight
+workers. A bounded queue preserves task order within each source row group.
+Morgan/ECFP4 is stored directly as 256 fingerprint bytes
+(`fixed_size_binary[256]`) and expanded to 2,048 bits only by the model
+collator.
 
 The output contains exact molecular weight, Crippen logP, TPSA, HBA/HBD,
 rotatable bonds, fraction Csp3, aromatic heavy-atom fraction, nine binary
@@ -233,6 +233,11 @@ SMARTS functional-group indicators, Morgan/ECFP4, and MACCS. Invalid structures
 remain represented by a row with `rdkit_status` and `rdkit_error` rather than
 being silently dropped. The complete column definitions are in
 `contex/Dataset Analysis.md`.
+
+The temporary `convert_mol_properties_csv_to_parquet.py` utility migrates the
+legacy same-order CSV files without recalculating RDKit features. It validates
+every `record_id` and recreates the row-group layout from the paired NMR
+Parquet. It is intentionally not part of the DVC DAG.
 
 ## `analyze_cleaned_datasets.py`
 

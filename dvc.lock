@@ -1287,8 +1287,8 @@ stages:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
       datasets/cleaned/train_val.parquet --output 
-      datasets/cleaned/train_val_mol_properties.csv --batch-size 50000 
-      --records-per-task 1000 --workers 8 --report-output 
+      datasets/cleaned/train_val_mol_properties.parquet --records-per-task 1000
+      --workers 8 --report-output
       datasets/cleaned/train_val_mol_properties_report.json --quiet
     deps:
     - path: datasets/cleaned/train_val.parquet
@@ -1309,8 +1309,8 @@ stages:
       size: 2396
     - path: scripts/data/postprocess/calculate_mol_properties.py
       hash: md5
-      md5: b04c529d56e0f4c3c7ffd708ec3b150d
-      size: 17346
+      md5: e37b26edcd1e1efea253670466ac4d2e
+      size: 19528
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
@@ -1329,28 +1329,27 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: 4682026e9e9117dcb42f058e8b2e6a91
+      size: 528
     params:
       params.yaml:
-        mol_properties.batch_size: 50000
         mol_properties.records_per_task: 1000
         mol_properties.workers: 8
     outs:
-    - path: datasets/cleaned/train_val_mol_properties.csv
+    - path: datasets/cleaned/train_val_mol_properties.parquet
       hash: md5
-      md5: aac618584a0f10b30454fdaaac76515a
-      size: 1652101246
+      md5: 9446e4613f113cd0c48f7f5d067d1683
+      size: 229730794
     - path: datasets/cleaned/train_val_mol_properties_report.json
       hash: md5
-      md5: 45a568d95f6ac3ff0b2515f84e12467d
-      size: 356
+      md5: 11eeb378b304510633ba66eff1741fb2
+      size: 601
   calculate_test_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
       datasets/cleaned/test_benchmark.parquet --output 
-      datasets/cleaned/test_benchmark_mol_properties.csv --batch-size 50000 
-      --records-per-task 1000 --workers 8 --report-output 
+      datasets/cleaned/test_benchmark_mol_properties.parquet --records-per-task
+      1000 --workers 8 --report-output
       datasets/cleaned/test_benchmark_mol_properties_report.json --quiet
     deps:
     - path: datasets/cleaned/test_benchmark.parquet
@@ -1371,8 +1370,8 @@ stages:
       size: 2396
     - path: scripts/data/postprocess/calculate_mol_properties.py
       hash: md5
-      md5: b04c529d56e0f4c3c7ffd708ec3b150d
-      size: 17346
+      md5: e37b26edcd1e1efea253670466ac4d2e
+      size: 19528
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
@@ -1391,28 +1390,27 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: 4682026e9e9117dcb42f058e8b2e6a91
+      size: 528
     params:
       params.yaml:
-        mol_properties.batch_size: 50000
         mol_properties.records_per_task: 1000
         mol_properties.workers: 8
     outs:
-    - path: datasets/cleaned/test_benchmark_mol_properties.csv
+    - path: datasets/cleaned/test_benchmark_mol_properties.parquet
       hash: md5
-      md5: 003a3452f99f0a677a62f3c647f82cdd
-      size: 74912389
+      md5: c3847be8b93638d6094bfe4e6948608d
+      size: 10634760
     - path: datasets/cleaned/test_benchmark_mol_properties_report.json
       hash: md5
-      md5: 406e85c26bbcf292e4fbcb3f5168603d
-      size: 360
+      md5: 67d469d8b837834c47e6e415d51300b6
+      size: 610
   calculate_simnmr_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
       datasets/cleaned/simnmr.parquet --output 
-      datasets/cleaned/simnmr_mol_properties.csv --batch-size 50000 
-      --records-per-task 1000 --workers 8 --report-output 
+      datasets/cleaned/simnmr_mol_properties.parquet --records-per-task 1000
+      --workers 8 --report-output
       datasets/cleaned/simnmr_mol_properties_report.json --quiet
     deps:
     - path: datasets/cleaned/simnmr.parquet
@@ -1433,8 +1431,8 @@ stages:
       size: 2396
     - path: scripts/data/postprocess/calculate_mol_properties.py
       hash: md5
-      md5: b04c529d56e0f4c3c7ffd708ec3b150d
-      size: 17346
+      md5: e37b26edcd1e1efea253670466ac4d2e
+      size: 19528
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
@@ -1453,28 +1451,27 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: 4682026e9e9117dcb42f058e8b2e6a91
+      size: 528
     params:
       params.yaml:
-        mol_properties.batch_size: 50000
         mol_properties.records_per_task: 1000
         mol_properties.workers: 8
     outs:
-    - path: datasets/cleaned/simnmr_mol_properties.csv
+    - path: datasets/cleaned/simnmr_mol_properties.parquet
       hash: md5
-      md5: 7e451a3c5ca15e8649442c2deb779ece
-      size: 90996154212
+      md5: 8d3c7a6d35417a206bf6626547dd4456
+      size: 12205859421
     - path: datasets/cleaned/simnmr_mol_properties_report.json
       hash: md5
-      md5: ff33f8b9fa452a88d510c543fc139e01
-      size: 356
+      md5: b2a4bc315593f2e9faaf85c7447b8727
+      size: 600
   calculate_nmrgym_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
       datasets/cleaned/nmrgym.parquet --output 
-      datasets/cleaned/nmrgym_mol_properties.csv --batch-size 50000 
-      --records-per-task 1000 --workers 8 --report-output 
+      datasets/cleaned/nmrgym_mol_properties.parquet --records-per-task 1000
+      --workers 8 --report-output
       datasets/cleaned/nmrgym_mol_properties_report.json --quiet
     deps:
     - path: datasets/cleaned/nmrgym.parquet
@@ -1495,8 +1492,8 @@ stages:
       size: 2396
     - path: scripts/data/postprocess/calculate_mol_properties.py
       hash: md5
-      md5: b04c529d56e0f4c3c7ffd708ec3b150d
-      size: 17346
+      md5: e37b26edcd1e1efea253670466ac4d2e
+      size: 19528
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
@@ -1515,22 +1512,21 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: 4682026e9e9117dcb42f058e8b2e6a91
+      size: 528
     params:
       params.yaml:
-        mol_properties.batch_size: 50000
         mol_properties.records_per_task: 1000
         mol_properties.workers: 8
     outs:
-    - path: datasets/cleaned/nmrgym_mol_properties.csv
+    - path: datasets/cleaned/nmrgym_mol_properties.parquet
       hash: md5
-      md5: dd0fd64690ec9be04f2f969fa548bbf8
-      size: 228777624
+      md5: 0f255aeb259d4e1b866e605faecd96e5
+      size: 33650782
     - path: datasets/cleaned/nmrgym_mol_properties_report.json
       hash: md5
-      md5: 34fffef499b8a205d3a0e3f9b4a8731f
-      size: 347
+      md5: db8161eaa278108df4796eed22a381af
+      size: 588
   analyze_cleaned_collection:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/analyze_cleaned_datasets.py --cleaned-root 
@@ -1596,34 +1592,34 @@ stages:
       hash: md5
       md5: 33a84bd0eab525d7195f5e23a447527c
       size: 34395080
-    - path: datasets/cleaned/nmrgym_mol_properties.csv
+    - path: datasets/cleaned/nmrgym_mol_properties.parquet
       hash: md5
-      md5: dd0fd64690ec9be04f2f969fa548bbf8
-      size: 228777624
+      md5: 0f255aeb259d4e1b866e605faecd96e5
+      size: 33650782
     - path: datasets/cleaned/simnmr.parquet
       hash: md5
       md5: 63cbcd45ec909014fbab74fb58d0d6da
       size: 17728324521
-    - path: datasets/cleaned/simnmr_mol_properties.csv
+    - path: datasets/cleaned/simnmr_mol_properties.parquet
       hash: md5
-      md5: 7e451a3c5ca15e8649442c2deb779ece
-      size: 90996154212
+      md5: 8d3c7a6d35417a206bf6626547dd4456
+      size: 12205859421
     - path: datasets/cleaned/test_benchmark.parquet
       hash: md5
       md5: d0de2f85632189af2fd3df594e42a271
       size: 16138429
-    - path: datasets/cleaned/test_benchmark_mol_properties.csv
+    - path: datasets/cleaned/test_benchmark_mol_properties.parquet
       hash: md5
-      md5: 003a3452f99f0a677a62f3c647f82cdd
-      size: 74912389
+      md5: c3847be8b93638d6094bfe4e6948608d
+      size: 10634760
     - path: datasets/cleaned/train_val.parquet
       hash: md5
       md5: f26f6fbb38effd077594106e2602b3cf
       size: 779774433
-    - path: datasets/cleaned/train_val_mol_properties.csv
+    - path: datasets/cleaned/train_val_mol_properties.parquet
       hash: md5
-      md5: aac618584a0f10b30454fdaaac76515a
-      size: 1652101246
+      md5: 9446e4613f113cd0c48f7f5d067d1683
+      size: 229730794
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1634,16 +1630,16 @@ stages:
       size: 2396
     - path: scripts/data/postprocess/analyze_cleaned_datasets.py
       hash: md5
-      md5: f4ca327d6ac0e021be8e9276f21b92a9
-      size: 43588
+      md5: 8a20ebdd628b62dfa0665203b08d419e
+      size: 43594
     - path: scripts/data/reporting.py
       hash: md5
       md5: 5c03d141ee42ecbeaa30322e695f3f45
       size: 1749
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: 4682026e9e9117dcb42f058e8b2e6a91
+      size: 528
     params:
       params.yaml:
         analytics.sample_per_group: 20000

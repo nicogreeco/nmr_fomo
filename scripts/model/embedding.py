@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional, TypedDict
+from typing import Optional
 
 import torch
 import torch.nn as nn
 
-from model import MAX_J_VALUES, MULTIPLICITY_TO_ID
-from scripts.model.utils.fourier_features import FourierFeatures, RBFExpansion
+from .processor import MAX_J_VALUES, MULTIPLICITY_TO_ID
+from .utils.fourier_features import FourierFeatures, RBFExpansion
 
 
 INTEGRATION_DIM = 32
@@ -16,25 +16,6 @@ WIDTH_DIM = 32
 NUM_AVAILABILITY_FEATURES = 4
 
 
-class PeakBatch(TypedDict):
-    shift: torch.Tensor
-    peak_mask: torch.Tensor
-
-
-class HPeakBatch(PeakBatch):
-    integration: torch.Tensor
-    multiplicity: torch.Tensor
-    j_values: torch.Tensor
-    j_mask: torch.Tensor
-    range_half_span: torch.Tensor
-    availability: torch.Tensor
-
-
-class NmrBatch(TypedDict):
-    h: HPeakBatch
-    c: PeakBatch
-
-
 class ShiftEmbedder(nn.Module):
     """Embed scalar chemical shifts using Fourier features followed by an MLP."""
 
@@ -42,6 +23,7 @@ class ShiftEmbedder(nn.Module):
         self,
         x_min: float,
         x_max: float,
+        resolution: float,
         d_model: int,
         fourier_strategy: str,
         num_fourier_freqs: Optional[int],
@@ -52,6 +34,7 @@ class ShiftEmbedder(nn.Module):
             strategy=fourier_strategy,
             x_min=x_min,
             x_max=x_max,
+            resolution=resolution,
             num_freqs=num_fourier_freqs,
         )
 
@@ -231,6 +214,7 @@ class HPeakEmbedder(nn.Module):
         self,
         d_model: int,
         h_range: tuple[float, float],
+        h_resolution: float,
         fourier_strategy: str,
         num_fourier_freqs: Optional[int],
         num_multiplicities: int,
@@ -243,6 +227,7 @@ class HPeakEmbedder(nn.Module):
 
         self.shift_embedder = ShiftEmbedder(
             *h_range,
+            resolution=h_resolution,
             d_model=d_model,
             fourier_strategy=fourier_strategy,
             num_fourier_freqs=num_fourier_freqs,
@@ -271,20 +256,10 @@ class HPeakEmbedder(nn.Module):
             nn.GELU(),
             nn.Linear(d_model // 2, d_model),
         )
-
-        self._initialize_rich_projection()
+        nn.init.normal_(self.rich_mlp[-1].weight, mean=0.0, std=1e-3)
+        nn.init.zeros_(self.rich_mlp[-1].bias)
 
         self.layer_norm = nn.LayerNorm(d_model)
-
-    def _initialize_rich_projection(self) -> None:
-        """Initialize the rich residual branch close to zero."""
-        final_layer = self.rich_mlp[-1]
-
-        if not isinstance(final_layer, nn.Linear):
-            raise TypeError("Expected final rich_mlp layer to be nn.Linear")
-
-        nn.init.normal_(final_layer.weight, mean=0.0, std=1e-3)
-        nn.init.zeros_(final_layer.bias)
 
     def forward(
         self,
@@ -295,6 +270,7 @@ class HPeakEmbedder(nn.Module):
         width: torch.Tensor,
         j_mask: torch.Tensor,
         availability: torch.Tensor,
+        shift_prediction_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -313,6 +289,11 @@ class HPeakEmbedder(nn.Module):
         a_i, a_m, a_j, a_w = torch.unbind(availability_features, dim=-1)
 
         shift_embedding = self.shift_embedder(shift)
+        if shift_prediction_mask is not None:
+            shift_embedding = shift_embedding.masked_fill(
+                shift_prediction_mask.unsqueeze(-1),
+                0.0,
+            )
 
         integration_embedding = (
             a_i.unsqueeze(-1) * self.integration_embedder(integration)
@@ -356,6 +337,7 @@ class CPeakEmbedder(nn.Module):
         self,
         d_model: int,
         c_range: tuple[float, float],
+        c_resolution: float,
         fourier_strategy: str,
         num_fourier_freqs: Optional[int],
     ) -> None:
@@ -363,6 +345,7 @@ class CPeakEmbedder(nn.Module):
 
         self.shift_embedder = ShiftEmbedder(
             *c_range,
+            resolution=c_resolution,
             d_model=d_model,
             fourier_strategy=fourier_strategy,
             num_fourier_freqs=num_fourier_freqs,
@@ -370,7 +353,11 @@ class CPeakEmbedder(nn.Module):
 
         self.layer_norm = nn.LayerNorm(d_model)
 
-    def forward(self, shift: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        shift: torch.Tensor,
+        shift_prediction_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         """
         Args:
             shift: Carbon shifts with shape [B, N].
@@ -378,7 +365,13 @@ class CPeakEmbedder(nn.Module):
         Returns:
             Carbon peak embeddings with shape [B, N, d_model].
         """
-        return self.layer_norm(self.shift_embedder(shift))
+        shift_embedding = self.shift_embedder(shift)
+        if shift_prediction_mask is not None:
+            shift_embedding = shift_embedding.masked_fill(
+                shift_prediction_mask.unsqueeze(-1),
+                0.0,
+            )
+        return self.layer_norm(shift_embedding)
 
 
 class NmrEmbedder(nn.Module):
@@ -393,10 +386,12 @@ class NmrEmbedder(nn.Module):
         self,
         d_model: int = 512,
         fourier_strategy: str = "log_spaced",
-        h_x_min: float = 0.01,
+        h_x_min: float = -5.5,
         h_x_max: float = 20.0,
-        c_x_min: float = 0.1,
+        h_resolution: float = 0.02,
+        c_x_min: float = -40.0,
         c_x_max: float = 300.0,
+        c_resolution: float = 0.2,
         num_fourier_freqs: Optional[int] = 256,
         num_multiplicities: Optional[int] = None,
         j_min: float = 0.0,
@@ -420,6 +415,7 @@ class NmrEmbedder(nn.Module):
         self.h_embedder = HPeakEmbedder(
             d_model=d_model,
             h_range=(h_x_min, h_x_max),
+            h_resolution=h_resolution,
             fourier_strategy=fourier_strategy,
             num_fourier_freqs=num_fourier_freqs,
             num_multiplicities=num_multiplicities,
@@ -432,13 +428,17 @@ class NmrEmbedder(nn.Module):
         self.c_embedder = CPeakEmbedder(
             d_model=d_model,
             c_range=(c_x_min, c_x_max),
+            c_resolution=c_resolution,
             fourier_strategy=fourier_strategy,
             num_fourier_freqs=num_fourier_freqs,
         )
 
     def forward(
         self,
-        batch: NmrBatch,
+        batch: dict,
+        *,
+        h_shift_prediction_mask: Optional[torch.Tensor] = None,
+        c_shift_prediction_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
@@ -464,10 +464,12 @@ class NmrEmbedder(nn.Module):
             width=h_peaks["range_half_span"],
             j_mask=h_peaks["j_mask"],
             availability=h_peaks["availability"],
+            shift_prediction_mask=h_shift_prediction_mask,
         )
 
         c_tokens = self.c_embedder(
             shift=c_peaks["shift"],
+            shift_prediction_mask=c_shift_prediction_mask,
         )
 
         h_valid = h_peaks["peak_mask"].unsqueeze(-1)

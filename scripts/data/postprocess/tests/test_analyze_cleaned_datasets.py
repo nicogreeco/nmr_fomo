@@ -10,7 +10,7 @@ try:
     from data.postprocess.analyze_cleaned_datasets import (
         FUNCTIONAL_GROUP_COLUMNS,
         PROPERTY_COLUMNS,
-        molecular_frame_from_aligned_csv,
+        molecular_frame_from_aligned_parquet,
         sample_by_group,
     )
 except ModuleNotFoundError:
@@ -54,10 +54,10 @@ class AnalyzeCleanedDatasetsTest(unittest.TestCase):
             )
 
         with tempfile.TemporaryDirectory() as directory:
-            path = Path(directory) / "properties.csv"
-            pl.DataFrame(property_rows).write_csv(path)
+            path = Path(directory) / "properties.parquet"
+            pl.DataFrame(property_rows).write_parquet(path)
             with self.assertRaisesRegex(ValueError, "not aligned"):
-                molecular_frame_from_aligned_csv(records, path)
+                molecular_frame_from_aligned_parquet(records, path)
 
 
 if __name__ == "__main__":

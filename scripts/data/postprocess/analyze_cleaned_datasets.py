@@ -92,7 +92,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "analyze one cleaned NMR-Solver Parquet and its adjacent "
-            "_mol_properties.csv, then exit"
+            "_mol_properties.parquet, then exit"
         ),
     )
     parser.add_argument(
@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help=(
             "analyze one cleaned NMRGym Parquet and its adjacent "
-            "_mol_properties.csv as a shift-only dataset, then exit"
+            "_mol_properties.parquet as a shift-only dataset, then exit"
         ),
     )
     parser.add_argument(
@@ -272,11 +272,11 @@ def nmrsolver_inventory(records: pl.LazyFrame) -> pl.DataFrame:
     )
 
 
-def molecular_frame_from_aligned_csv(
+def molecular_frame_from_aligned_parquet(
     records: pl.LazyFrame,
     properties_path: Path,
 ) -> pl.LazyFrame:
-    """Read a same-order property CSV and fail on any alignment mismatch.
+    """Read a same-order property Parquet and fail on any alignment mismatch.
 
     calculate_mol_properties.py writes exactly one output row per input row
     and preserves input order, including when worker processes are used.
@@ -289,10 +289,7 @@ def molecular_frame_from_aligned_csv(
         pl.lit(True).alias("_record_present"),
         pl.col("atoms").list.len().alias("num_atoms"),
     )
-    property_fields = pl.scan_csv(
-        properties_path,
-        empty_string_is_null=True,
-    ).select(
+    property_fields = pl.scan_parquet(properties_path).select(
         pl.col("record_id").alias("_properties_record_id"),
         "rdkit_status",
         pl.lit(True).alias("_properties_present"),
@@ -905,9 +902,9 @@ def analyze_main_dataset(
         dataset_analytics_dir / f"{dataset_name}_source_inventory.csv"
     )
 
-    molecular = molecular_frame_from_aligned_csv(
+    molecular = molecular_frame_from_aligned_parquet(
         records,
-        parquet_path.with_name(f"{parquet_path.stem}_mol_properties.csv"),
+        parquet_path.with_name(f"{parquet_path.stem}_mol_properties.parquet"),
     )
     write_molecular_tables_and_plot(
         molecular,
@@ -936,7 +933,7 @@ def analyze_nmrsolver_dataset(
 ) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
-        f"{parquet_path.stem}_mol_properties.csv"
+        f"{parquet_path.stem}_mol_properties.parquet"
     )
     require_file(properties_path)
     analytics_dir = parquet_path.parent / "analytics" / "simnmr"
@@ -949,7 +946,7 @@ def analyze_nmrsolver_dataset(
     inventory.write_csv(
         analytics_dir / "nmrsolver_source_inventory.csv"
     )
-    molecular = molecular_frame_from_aligned_csv(records, properties_path)
+    molecular = molecular_frame_from_aligned_parquet(records, properties_path)
     write_molecular_tables_and_plot(
         molecular,
         "source",
@@ -984,7 +981,7 @@ def analyze_nmrgym_dataset(
 ) -> tuple[Path, int]:
     require_file(parquet_path)
     properties_path = parquet_path.with_name(
-        f"{parquet_path.stem}_mol_properties.csv"
+        f"{parquet_path.stem}_mol_properties.parquet"
     )
     require_file(properties_path)
     analytics_dir = parquet_path.parent / "analytics" / "nmrgym"
@@ -997,7 +994,7 @@ def analyze_nmrgym_dataset(
     inventory.write_csv(
         analytics_dir / "nmrgym_source_inventory.csv"
     )
-    molecular = molecular_frame_from_aligned_csv(records, properties_path)
+    molecular = molecular_frame_from_aligned_parquet(records, properties_path)
     write_molecular_tables_and_plot(
         molecular,
         "source",
@@ -1181,7 +1178,7 @@ def main() -> None:
 
     if args.nmrsolver_parquet is not None:
         properties_path = args.nmrsolver_parquet.with_name(
-            f"{args.nmrsolver_parquet.stem}_mol_properties.csv"
+            f"{args.nmrsolver_parquet.stem}_mol_properties.parquet"
         )
         default_analytics_dir = (
             args.nmrsolver_parquet.parent / "analytics" / "simnmr"
@@ -1221,7 +1218,7 @@ def main() -> None:
 
     if args.nmrgym_parquet is not None:
         properties_path = args.nmrgym_parquet.with_name(
-            f"{args.nmrgym_parquet.stem}_mol_properties.csv"
+            f"{args.nmrgym_parquet.stem}_mol_properties.parquet"
         )
         default_analytics_dir = (
             args.nmrgym_parquet.parent / "analytics" / "nmrgym"
@@ -1274,7 +1271,7 @@ def main() -> None:
         [
             *main_dataset_paths.values(),
             *[
-                path.with_name(f"{path.stem}_mol_properties.csv")
+                path.with_name(f"{path.stem}_mol_properties.parquet")
                 for path in main_dataset_paths.values()
             ],
         ],

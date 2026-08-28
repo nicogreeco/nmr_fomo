@@ -85,6 +85,7 @@ scripts/
     postprocess/            derived-data and benchmark-preparation utilities
     download_raw_datasets.sh  pinned public-source downloader
     generate_dvc_pipeline.sh  generator for the root DVC DAG
+  model/                    dataset, collator, and new foundation-model code
   model_benchmarks/         processors and embedders for published-model comparison
   envs_scr/                 model-specific environment setup material
   test_notebook.ipynb       exploratory work
@@ -95,6 +96,19 @@ The reusable data layer remains independent of the published models:
 ```text
 CanonicalParquetDataset -> processor/collator -> model batch -> embedder -> embeddings
 ```
+
+Foundation-model training can additionally pair each final NMR Parquet with
+its same-order molecular-property sidecar:
+
+```text
+NMR Parquet + molecular-property Parquet
+    -> PairedFoundationDataset
+    -> FoundationNMRProcessor
+    -> NMR tensors + float32 Morgan fingerprints
+```
+
+See [scripts/model/README.md](scripts/model/README.md) for a complete PyTorch
+`DataLoader` example and the Lightning device-transfer behavior.
 
 Canonical Parquet schema version 2 stores source SMILES plus RDKit-derived
 canonical SMILES, molecular formula, and atom symbols. It deliberately omits
@@ -107,7 +121,7 @@ implementation note linked below.
 The final processed collection is public on
 [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
 It contains the cleaned train/validation and benchmark Parquets, SimNMR and
-NMRGym shift-only pools, ADMET cohorts, molecular-property CSVs, and analytics.
+NMRGym shift-only pools, ADMET cohorts, molecular-property Parquets, and analytics.
 Most users should download it directly:
 
 ```bash

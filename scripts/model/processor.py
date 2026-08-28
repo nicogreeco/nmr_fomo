@@ -10,6 +10,8 @@ from data.validation import (
     validate_canonical_record,
 )
 
+from .dataset import MORGAN_FP_BYTES, PairedFoundationRecord
+
 
 MAX_H_PEAKS = MAX_PEAKS_PER_MODALITY
 MAX_C_PEAKS = MAX_PEAKS_PER_MODALITY
@@ -31,6 +33,25 @@ ID_TO_MULTIPLICITY = {
 }
 
 
+def _unpack_morgan_fingerprints(fingerprints):
+    """Expand RDKit binary bytes into little-endian float32 fingerprint bits."""
+
+    for index, fingerprint in enumerate(fingerprints):
+        if len(fingerprint) != MORGAN_FP_BYTES:
+            raise ValueError(
+                f"fingerprint {index} has {len(fingerprint)} bytes; "
+                f"expected {MORGAN_FP_BYTES}"
+            )
+
+    packed = torch.tensor(
+        [list(fingerprint) for fingerprint in fingerprints],
+        dtype=torch.uint8,
+    )
+    bit_offsets = torch.arange(8, dtype=torch.uint8)
+    bits = (packed.unsqueeze(-1) >> bit_offsets) & 1
+    return bits.reshape(len(fingerprints), -1).to(torch.float32)
+
+
 class FoundationNMRProcessor:
     """Validate, pad, and collate canonical peak records into dense tensors."""
 
@@ -38,6 +59,19 @@ class FoundationNMRProcessor:
         records = list(records)
         if not records:
             raise ValueError("cannot collate an empty foundation NMR batch")
+
+        paired_flags = [
+            isinstance(record, PairedFoundationRecord) for record in records
+        ]
+        if any(paired_flags) and not all(paired_flags):
+            raise TypeError(
+                "cannot mix paired and unpaired records in one foundation batch"
+            )
+
+        fingerprints = None
+        if all(paired_flags):
+            fingerprints = [record.morgan_fingerprint for record in records]
+            records = [record.record for record in records]
 
         canonical_records = []
         for value in records:
@@ -141,7 +175,7 @@ class FoundationNMRProcessor:
                 c_shift[batch_index, peak_index] = peak.shift
                 c_peak_mask[batch_index, peak_index] = True
 
-        return {
+        batch = {
             "record_ids": record_ids,
             "h": {
                 "shift": h_shift,
@@ -158,6 +192,9 @@ class FoundationNMRProcessor:
                 "peak_mask": c_peak_mask,
             },
         }
+        if fingerprints is not None:
+            batch["fingerprints"] = _unpack_morgan_fingerprints(fingerprints)
+        return batch
 
 
 __all__ = [
