@@ -1,0 +1,259 @@
+"""Simple FoMoNMR pretraining and continued-pretraining entry point."""
+
+import argparse
+import os
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
+
+import lightning as L
+import psutil
+import torch
+import yaml
+from dotenv import load_dotenv
+from lightning.pytorch.callbacks import (
+    EarlyStopping,
+    LearningRateMonitor,
+    ModelCheckpoint,
+)
+from lightning.pytorch.loggers import MLFlowLogger
+from torch.utils.data import DataLoader
+
+from model import (
+    FoundationNMRProcessor,
+    MixedFoundationDataset,
+    PairedFoundationDataset,
+)
+from model.FoMoNMR import FoMoNMR, ModelConfig
+
+
+class MemoryLogger(L.Callback):
+    def __init__(self):
+        self.last_step = -1
+
+    def on_train_batch_end(self, trainer, model, outputs, batch, batch_idx):
+        step = trainer.global_step
+        if (
+            step == 0
+            or step == self.last_step
+            or step % trainer.log_every_n_steps != 0
+        ):
+            return
+
+        self.last_step = step
+        megabyte = 1024 ** 2
+        memory = {
+            "memory/cpu_mb": psutil.Process().memory_info().rss / megabyte,
+        }
+        if model.device.type == "cuda":
+            memory["memory/gpu_mb"] = torch.cuda.memory_allocated() / megabyte
+        model.log_dict(memory, on_step=True, on_epoch=False)
+
+
+def parse_args():
+    load_dotenv('mlflow.env')
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stage", choices=("pretrain", "posttrain"), default="pretrain")
+    parser.add_argument(
+        "--config",
+        default="scripts/model/configs/default.yaml",
+    )
+    parser.add_argument("--pretrained-checkpoint")
+    parser.add_argument("--resume")
+    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--accumulate-grad-batches", type=int, default=1)
+    parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--max-steps", type=int)
+    parser.add_argument("--validation-interval", type=int, default=10_000)
+    parser.add_argument("--checkpoint-interval", type=int, default=10_000)
+    parser.add_argument("--precision", default="bf16-mixed")
+    parser.add_argument("--accelerator", default="auto")
+    parser.add_argument("--devices", type=int, default=1)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--tracking-uri",
+        default=os.getenv('MLFLOW_TRACKING_URI'),
+    )
+    parser.add_argument("--run-name")
+    parser.add_argument("--no-mlflow", action="store_true")
+    return parser.parse_args()
+
+
+def paired_dataset(source, split, shuffle, shift_only, seed):
+    root = Path("datasets/train_splits")
+    return PairedFoundationDataset(
+        root / f"{source}_{split}.parquet",
+        root / f"{source}_{split}_mol_properties.parquet",
+        shuffle=shuffle,
+        shuffle_buffer_size=8192,
+        seed=seed,
+        shift_only=shift_only,
+    )
+
+
+def make_dataloaders(stage, batch_size, num_workers, seed):
+    if stage == "pretrain":
+        train_data = MixedFoundationDataset(
+            datasets=[
+                paired_dataset("simnmr", "train", True, True, seed),
+                paired_dataset("rich", "train", True, True, seed),
+                paired_dataset("nmrgym", "train", True, True, seed),
+            ],
+            proportions=[0.90, 0.09, 0.01],
+            shift_only=[True, True, True],
+            seed=seed,
+        )
+    else:
+        train_data = MixedFoundationDataset(
+            datasets=[
+                paired_dataset("rich", "train", True, False, seed),
+                paired_dataset("simnmr", "train", True, True, seed),
+                paired_dataset("nmrgym", "train", True, True, seed),
+            ],
+            proportions=[0.90, 0.05, 0.05],
+            shift_only=[False, True, True],
+            seed=seed,
+        )
+
+    validation_data = [
+        paired_dataset("rich", "val", False, False, seed),
+        paired_dataset("simnmr", "val", False, True, seed),
+        paired_dataset("nmrgym", "val", False, True, seed),
+    ]
+
+    processor = FoundationNMRProcessor()
+    loader_options = {
+        "batch_size": batch_size,
+        "num_workers": num_workers,
+        "collate_fn": processor,
+        "pin_memory": torch.cuda.is_available(),
+        "persistent_workers": num_workers > 0,
+    }
+    train_loader = DataLoader(train_data, drop_last=True, **loader_options)
+    val_loaders = [
+        DataLoader(dataset, drop_last=False, **loader_options)
+        for dataset in validation_data
+    ]
+    return train_loader, val_loaders
+
+
+def main():
+    args = parse_args()
+    if args.pretrained_checkpoint and args.resume:
+        raise ValueError("Use --pretrained-checkpoint or --resume, not both")
+    if args.pretrained_checkpoint and args.stage != "posttrain":
+        raise ValueError("--pretrained-checkpoint is only used for posttrain")
+
+    L.seed_everything(args.seed, workers=True)
+
+    with open(args.config) as file:
+        config_values = yaml.safe_load(file)
+    config_values["stage"] = args.stage
+    if args.max_steps is not None:
+        config_values["max_steps"] = args.max_steps
+    config = ModelConfig(**config_values)
+
+    train_loader, val_loaders = make_dataloaders(
+        args.stage,
+        args.batch_size,
+        args.num_workers,
+        args.seed,
+    )
+
+    if args.pretrained_checkpoint:
+        model = FoMoNMR.load_from_checkpoint(
+            args.pretrained_checkpoint,
+            config=config,
+        )
+    else:
+        model = FoMoNMR(config)
+
+    run_name = args.run_name or (
+        f"{args.stage}-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+    )
+    run_dir = Path("runs/fomonmr") / run_name
+
+    latest_checkpoints = ModelCheckpoint(
+        dirpath=run_dir / "checkpoints/latest",
+        filename="step={step}",
+        monitor="step",
+        mode="max",
+        save_top_k=3,
+        save_last="link",
+        save_on_exception=True,
+        every_n_train_steps=args.checkpoint_interval,
+        auto_insert_metric_name=False,
+    )
+    best_checkpoints = ModelCheckpoint(
+        dirpath=run_dir / "checkpoints/best",
+        filename="best-step={step}",
+        monitor="val/mean_loss",
+        mode="min",
+        save_top_k=2,
+        save_on_train_epoch_end=False,
+        auto_insert_metric_name=False,
+    )
+    early_stopping = EarlyStopping(
+        monitor="val/mean_loss",
+        mode="min",
+        patience=config.early_stopping_patience,
+        check_on_train_epoch_end=False,
+    )
+    callbacks = [latest_checkpoints, best_checkpoints, early_stopping]
+
+    logger = False
+    if not args.no_mlflow:
+        logger = MLFlowLogger(
+            experiment_name=f"fomonmr-{args.stage}",
+            run_name=run_name,
+            tracking_uri=args.tracking_uri,
+            log_model=False,
+            tags={"stage": args.stage},
+        )
+        logger.log_hyperparams(
+            {
+                **asdict(config),
+                "accumulate_grad_batches": args.accumulate_grad_batches,
+                "batch_size": args.batch_size,
+                "num_workers": args.num_workers,
+                "seed": args.seed,
+                "precision": args.precision,
+                "validation_interval": args.validation_interval,
+                "checkpoint_interval": args.checkpoint_interval,
+            }
+        )
+        callbacks.extend(
+            [
+                LearningRateMonitor(logging_interval="step"),
+                MemoryLogger(),
+            ]
+        )
+
+    validation_batches = args.validation_interval * args.accumulate_grad_batches
+
+    trainer = L.Trainer(
+        accelerator=args.accelerator,
+        devices=args.devices,
+        precision=args.precision,
+        max_steps=config.max_steps,
+        max_epochs=-1,
+        val_check_interval=validation_batches,
+        check_val_every_n_epoch=None,
+        accumulate_grad_batches=args.accumulate_grad_batches,
+        gradient_clip_val=1.0,
+        gradient_clip_algorithm="norm",
+        log_every_n_steps=50,
+        logger=logger,
+        callbacks=callbacks,
+        default_root_dir=run_dir,
+    )
+    trainer.fit(
+        model,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loaders,
+        ckpt_path=args.resume,
+    )
+
+
+if __name__ == "__main__":
+    main()

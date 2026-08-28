@@ -1,6 +1,10 @@
 """Input preparation for the new NMR foundation model."""
 
-from .dataset import PairedFoundationDataset, PairedFoundationRecord
+from .dataset import (
+    MixedFoundationDataset,
+    PairedFoundationDataset,
+    PairedFoundationRecord,
+)
 from .processor import (
     FoundationNMRProcessor,
     H_AVAILABILITY_FIELDS,
@@ -13,6 +17,7 @@ from .processor import (
 
 
 __all__ = [
+    "MixedFoundationDataset",
     "PairedFoundationDataset",
     "PairedFoundationRecord",
     "FoundationNMRProcessor",

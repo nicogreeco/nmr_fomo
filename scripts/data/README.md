@@ -42,6 +42,7 @@ raw source releases
   -> common filtering of train, test, SimNMR, and NMRGym
   -> ADMET cohort preparation and leakage removal from rich train
   -> final molecular-property sidecars
+  -> molecule-safe foundation-model train/validation splits
   -> final collection analytics
 ```
 
@@ -65,6 +66,10 @@ sidecars, analytics, and the small processing reports use the normal push
 policy for the private maintainer cache and are released publicly through
 Hugging Face. Reports are ordinary cached DVC outputs rather than no-cache metrics,
 so they do not disable the stage run cache.
+
+The physical foundation-model splits under `datasets/train_splits/` are local
+outputs with `cache: false`. DVC records the stage and its report, but does not
+copy the large split Parquets into its cache or remote storage.
 
 After downloading the pinned public raw releases, inspect or execute the
 pipeline with:

@@ -240,10 +240,10 @@ PYTHONPATH=scripts python scripts/model/train.py \
 To stop a real trial after exactly 10,000 optimizer steps, pass
 `--max-steps 10000`.
 
-The default `--precision bf16-mixed` is appropriate for recent GPUs such as H200:
-bfloat16 has a wide numerical range and is normally more stable than float16.
+The default `--precision 32-true` performs every operation in float32.
 `--precision 16-mixed` uses float16 where safe, while keeping model weights and
-some sensitive operations in float32. Use `--precision 32-true` for full float32.
+sensitive operations in float32. On an H200, prefer `--precision bf16-mixed`:
+bfloat16 has a wider numerical range and is normally more stable than float16.
 Choose the physical batch size after a hardware benchmark.
 If the desired batch does not fit, `--batch-size 128` together with
 `--accumulate-grad-batches 4` gives an effective batch of 512 using four
@@ -308,15 +308,12 @@ preferred source. Change `--checkpoint-interval` to control periodic saves and
 
 The script reads `MLFLOW_TRACKING_URI` from `mlflow.env`, unless it is overridden
 with `--tracking-uri`. It logs parameters, learning rate, train/validation
-losses, and two small memory metrics every 50 optimizer steps:
+losses, and CUDA allocator statistics. These include current and peak allocated
+and reserved GPU memory, allocation retries, and OOM counts.
 
-- `memory/cpu_mb`: RAM used by the main training process;
-- `memory/gpu_mb`: GPU memory currently allocated by PyTorch.
-
-The GPU metric is present only when training on CUDA. It intentionally does not
-include GPU utilization or every allocator statistic; use `nvidia-smi` when a
-more detailed hardware check is needed. Use `--no-mlflow` while testing locally;
-the memory metrics are disabled together with logging.
+Lightning does not report GPU compute utilization percentage through this
+callback. Check it initially with `watch -n 1 nvidia-smi`. Use `--no-mlflow`
+while testing locally; hardware statistics are disabled together with logging.
 
 Checkpoints remain local under `runs/fomonmr/<run-name>/`; `log_model=False`
 avoids uploading every large rolling checkpoint. If the MLflow server is later

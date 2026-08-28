@@ -40,6 +40,9 @@ and write the cleaned ADMET-disjoint train/validation dataset
 calculate molecular-property sidecars for final Parquet files
         |
         v
+create molecule-safe foundation-model train/validation pairs
+        |
+        v
 generate final analytics
 ```
 
@@ -238,6 +241,23 @@ The temporary `convert_mol_properties_csv_to_parquet.py` utility migrates the
 legacy same-order CSV files without recalculating RDKit features. It validates
 every `record_id` and recreates the row-group layout from the paired NMR
 Parquet. It is intentionally not part of the DVC DAG.
+
+## `split_foundation_datasets.py`
+
+Creates aligned physical train/validation pairs for SimNMR, rich `train_val`,
+and NMRGym under `datasets/train_splits/`. It selects approximately 50,000,
+50,000, and 10,000 validation records respectively using a seeded SHA-256 hash
+of `smiles_canonical`. Selected molecules are unioned across all three sources,
+so one molecule can never be validation in one source and training in another.
+
+```bash
+dvc repro split_foundation_datasets
+```
+
+All records belonging to a selected molecule stay in validation, so final row
+counts may exceed the targets. The NMR and molecular-property outputs retain
+matching row groups. Their DVC outputs use `cache: false`; the original cleaned
+files and benchmark test are unchanged.
 
 ## `analyze_cleaned_datasets.py`
 

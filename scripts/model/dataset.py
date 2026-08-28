@@ -28,6 +28,7 @@ class PairedFoundationRecord:
 
     record: CanonicalRecord
     morgan_fingerprint: bytes
+    shift_only: bool = False
 
 
 def _checked_record(value: object) -> CanonicalRecord:
@@ -78,6 +79,7 @@ class PairedFoundationDataset(IterableDataset):
         shuffle: bool = True,
         shuffle_buffer_size: int = 8192,
         seed: int = 0,
+        shift_only: bool = False,
         include_unimol: bool = False,
     ):
         if include_unimol:
@@ -96,6 +98,7 @@ class PairedFoundationDataset(IterableDataset):
         self.shuffle = shuffle
         self.shuffle_buffer_size = shuffle_buffer_size
         self.seed = seed
+        self.shift_only = shift_only
         self._shuffle_random = None
         self._shuffle_random_context = None
 
@@ -228,6 +231,7 @@ class PairedFoundationDataset(IterableDataset):
                     yield PairedFoundationRecord(
                         record=_checked_record(value),
                         morgan_fingerprint=fingerprint,
+                        shift_only=self.shift_only,
                     )
                     offset += 1
 
@@ -289,4 +293,52 @@ class PairedFoundationDataset(IterableDataset):
         )
 
 
-__all__ = ["PairedFoundationDataset", "PairedFoundationRecord"]
+class MixedFoundationDataset(IterableDataset):
+    """Mix paired datasets until the first dataset is exhausted."""
+
+    def __init__(self, datasets, proportions, shift_only, seed=0):
+        if not (len(datasets) == len(proportions) == len(shift_only)):
+            raise ValueError("datasets, proportions, and shift_only must match")
+        if abs(sum(proportions) - 1.0) > 1e-6:
+            raise ValueError("proportions must sum to 1")
+
+        self.datasets = list(datasets)
+        self.proportions = list(proportions)
+        self.shift_only = list(shift_only)
+        self.seed = seed
+
+    def __len__(self):
+        return round(len(self.datasets[0]) / self.proportions[0])
+
+    def __iter__(self):
+        iterators = [iter(dataset) for dataset in self.datasets]
+        worker = get_worker_info()
+        worker_id = 0 if worker is None else worker.id
+        random_generator = random.Random(self.seed + worker_id)
+
+        while True:
+            source = random_generator.choices(
+                range(len(self.datasets)),
+                weights=self.proportions,
+            )[0]
+
+            try:
+                sample = next(iterators[source])
+            except StopIteration:
+                if source == 0:
+                    return
+                iterators[source] = iter(self.datasets[source])
+                sample = next(iterators[source])
+
+            yield PairedFoundationRecord(
+                record=sample.record,
+                morgan_fingerprint=sample.morgan_fingerprint,
+                shift_only=self.shift_only[source],
+            )
+
+
+__all__ = [
+    "MixedFoundationDataset",
+    "PairedFoundationDataset",
+    "PairedFoundationRecord",
+]

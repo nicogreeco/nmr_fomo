@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+import yaml
 
 import lightning as L
 import torch
@@ -64,13 +65,27 @@ class ModelConfig:
     lambda_annotation: float = 0.2
 
     lr: float = 1e-4
-    weight_decay: float = 0.0
+    min_lr: float = 1e-6
+    weight_decay: float = 1e-4
+    warmup_steps: int = 5_000
+    plateau_factor: float = 0.5
+    plateau_patience: int = 2
+    early_stopping_patience: int = 8
+    max_steps: int = 1_000_000
+    validation_seed: int = 42
 
 
 class FoMoNMR(L.LightningModule):
     def __init__(self, config=None):
         super().__init__()
-        self.config = config or ModelConfig()
+        if config is None:
+            config = ModelConfig()
+        elif isinstance(config, dict):
+            config = ModelConfig(**config)
+        self.config = config
+        self.save_hyperparameters({"config": asdict(config)})
+        self.validation_loss_sums = [0.0, 0.0, 0.0]
+        self.validation_sample_counts = [0, 0, 0]
 
         self.embedding = NmrEmbedder(
             d_model=self.config.d_model,
@@ -116,9 +131,6 @@ class FoMoNMR(L.LightningModule):
             nn.Linear(2 * self.config.d_model, self.config.d_model),
             nn.ReLU(),
             nn.Dropout(self.config.dropout),
-            nn.Linear(self.config.d_model, self.config.d_model),
-            nn.ReLU(),
-            nn.Dropout(self.config.dropout),
             nn.Linear(self.config.d_model, self.fp_sim_num_bins),
         )
 
@@ -147,6 +159,13 @@ class FoMoNMR(L.LightningModule):
             )
             for module in rich_modules:
                 module.requires_grad_(False)
+
+    @classmethod
+    def from_config(cls, path):
+        with open(path) as f:
+            config = yaml.safe_load(f)
+
+        return cls(ModelConfig(**config))
 
     def forward(
         self,
@@ -240,6 +259,9 @@ class FoMoNMR(L.LightningModule):
             h["j_mask"].fill_(False)
             annotation_mask = torch.zeros_like(h["availability"])
         else:
+            shift_only = batch["shift_only"]
+            h["availability"][shift_only] = False
+            h["j_mask"][shift_only] = False
             annotation_mask = mask_annotations(
                 h,
                 self.config.annotation_mask_probability,
@@ -416,24 +438,116 @@ class FoMoNMR(L.LightningModule):
             h_shift_prediction_mask=corruption["h_shift_mask"],
             c_shift_prediction_mask=corruption["c_shift_mask"],
         )
-        return self.compute_losses(outputs, batch, corruption)["loss"]
+        losses = self.compute_losses(outputs, batch, corruption)
+        batch_size = batch["h"]["shift"].shape[0]
+        for name, value in losses.items():
+            self.log(
+                f"train/{name}",
+                value,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=name == "loss",
+                batch_size=batch_size,
+            )
+        return losses["loss"]
 
-    def validation_step(self, batch, batch_idx):
-        corrupted, corruption = self.corrupt_batch(batch)
-        outputs = self(
-            corrupted,
-            h_shift_prediction_mask=corruption["h_shift_mask"],
-            c_shift_prediction_mask=corruption["c_shift_mask"],
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        # The same validation record receives the same corruption every run.
+        with torch.random.fork_rng():
+            seed = self.config.validation_seed + dataloader_idx * 100_000 + batch_idx
+            torch.manual_seed(seed)
+            corrupted, corruption = self.corrupt_batch(batch)
+            outputs = self(
+                corrupted,
+                h_shift_prediction_mask=corruption["h_shift_mask"],
+                c_shift_prediction_mask=corruption["c_shift_mask"],
+            )
+            losses = self.compute_losses(outputs, batch, corruption)
+
+        sources = ("rich", "simnmr", "nmrgym")
+        source = sources[dataloader_idx]
+        batch_size = batch["h"]["shift"].shape[0]
+        self.validation_loss_sums[dataloader_idx] += (
+            losses["loss"].detach() * batch_size
         )
-        return self.compute_losses(outputs, batch, corruption)
+        self.validation_sample_counts[dataloader_idx] += batch_size
+        for name, value in losses.items():
+            self.log(
+                f"val/{source}/{name}",
+                value,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=name == "loss",
+                batch_size=batch_size,
+                add_dataloader_idx=False,
+            )
+        return losses
+
+    def on_validation_epoch_start(self):
+        self.validation_loss_sums = [0.0, 0.0, 0.0]
+        self.validation_sample_counts = [0, 0, 0]
+
+    def on_validation_epoch_end(self):
+        source_losses = [
+            loss_sum / sample_count
+            for loss_sum, sample_count in zip(
+                self.validation_loss_sums,
+                self.validation_sample_counts,
+            )
+            if sample_count > 0
+        ]
+        if source_losses:
+            mean_loss = torch.stack(source_losses).mean()
+            self.log(
+                "val/mean_loss",
+                mean_loss,
+                prog_bar=True,
+            )
+            if (
+                not self.trainer.sanity_checking
+                and self.global_step >= self.config.warmup_steps
+            ):
+                self.lr_schedulers().step(mean_loss)
+
+    def optimizer_step(self, epoch, batch_idx, optimizer, optimizer_closure):
+        if self.global_step < self.config.warmup_steps:
+            warmup_lr = self.config.lr * (
+                (self.global_step + 1) / self.config.warmup_steps
+            )
+            for parameter_group in optimizer.param_groups:
+                parameter_group["lr"] = warmup_lr
+
+        super().optimizer_step(
+            epoch, batch_idx, optimizer, optimizer_closure
+        )
 
     def configure_optimizers(self):
         trainable_parameters = [
             parameter for parameter in self.parameters() if parameter.requires_grad
         ]
-        return torch.optim.Adam(
+        optimizer = torch.optim.AdamW(
             trainable_parameters,
             lr=self.config.lr,
+            betas=(0.9, 0.99),
             weight_decay=self.config.weight_decay,
             eps=1e-6,
         )
+
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="min",
+            factor=self.config.plateau_factor,
+            patience=self.config.plateau_patience,
+            min_lr=self.config.min_lr,
+        )
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "val/mean_loss",
+            },
+        }
+
+    def lr_scheduler_step(self, scheduler, metric):
+        # ReduceLROnPlateau is stepped after each validation above.
+        pass

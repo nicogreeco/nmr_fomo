@@ -387,6 +387,48 @@ add_molecular_properties_stage test test_benchmark
 add_molecular_properties_stage simnmr simnmr
 add_molecular_properties_stage nmrgym nmrgym
 
+split_output_root=datasets/train_splits
+split_report=${split_output_root}/split_report.json
+split_outputs=()
+for source_name in simnmr rich nmrgym; do
+    split_outputs+=("${split_output_root}/${source_name}_train.parquet")
+    split_outputs+=("${split_output_root}/${source_name}_train_mol_properties.parquet")
+    split_outputs+=("${split_output_root}/${source_name}_val.parquet")
+    split_outputs+=("${split_output_root}/${source_name}_val_mol_properties.parquet")
+done
+split_args=(
+    stage add --force --name split_foundation_datasets
+    --deps datasets/cleaned/simnmr.parquet
+    --deps datasets/cleaned/simnmr_mol_properties.parquet
+    --deps datasets/cleaned/train_val.parquet
+    --deps datasets/cleaned/train_val_mol_properties.parquet
+    --deps datasets/cleaned/nmrgym.parquet
+    --deps datasets/cleaned/nmrgym_mol_properties.parquet
+    --deps scripts/data/postprocess/split_foundation_datasets.py
+    "${postprocess_dep_args[@]}"
+    --params foundation_splits.seed
+    --params foundation_splits.batch_size
+    --params foundation_splits.simnmr_validation_records
+    --params foundation_splits.rich_validation_records
+    --params foundation_splits.nmrgym_validation_records
+    --outs "${split_report}"
+)
+for output_path in "${split_outputs[@]}"; do
+    split_args+=(--outs-no-cache "${output_path}")
+done
+split_command="PYTHONPATH=scripts python"
+split_command+=" scripts/data/postprocess/split_foundation_datasets.py"
+split_command+=" --cleaned-root datasets/cleaned"
+split_command+=" --output-root ${split_output_root}"
+split_command+=" --seed \${foundation_splits.seed}"
+split_command+=" --batch-size \${foundation_splits.batch_size}"
+split_command+=" --simnmr-validation-records \${foundation_splits.simnmr_validation_records}"
+split_command+=" --rich-validation-records \${foundation_splits.rich_validation_records}"
+split_command+=" --nmrgym-validation-records \${foundation_splits.nmrgym_validation_records}"
+split_command+=" --report-output ${split_report}"
+split_command+=" --overwrite --quiet"
+dvc "${split_args[@]}" "${split_command}"
+
 analytics_deps=(
     datasets/cleaned/train_val.parquet
     datasets/cleaned/test_benchmark.parquet

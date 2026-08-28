@@ -69,8 +69,13 @@ class FoundationNMRProcessor:
             )
 
         fingerprints = None
+        shift_only = torch.zeros(len(records), dtype=torch.bool)
         if all(paired_flags):
             fingerprints = [record.morgan_fingerprint for record in records]
+            shift_only = torch.tensor(
+                [record.shift_only for record in records],
+                dtype=torch.bool,
+            )
             records = [record.record for record in records]
 
         canonical_records = []
@@ -177,6 +182,7 @@ class FoundationNMRProcessor:
 
         batch = {
             "record_ids": record_ids,
+            "shift_only": shift_only,
             "h": {
                 "shift": h_shift,
                 "integration": h_integration,

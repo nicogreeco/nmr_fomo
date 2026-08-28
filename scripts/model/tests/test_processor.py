@@ -96,6 +96,8 @@ class FoundationNMRProcessorTests(unittest.TestCase):
             batch["record_ids"],
             ["paired", "h-only", "c-only", "shift-only-h"],
         )
+        self.assertEqual(batch["shift_only"].shape, (4,))
+        self.assertFalse(batch["shift_only"].any().item())
         self.assertEqual(tuple(batch["h"]["shift"].shape), (4, 60))
         self.assertEqual(tuple(batch["h"]["integration"].shape), (4, 60))
         self.assertEqual(tuple(batch["h"]["multiplicity"].shape), (4, 60))
@@ -117,6 +119,7 @@ class FoundationNMRProcessorTests(unittest.TestCase):
         self.assertEqual(batch["h"]["availability"].dtype, torch.bool)
         self.assertEqual(batch["c"]["shift"].dtype, torch.float32)
         self.assertEqual(batch["c"]["peak_mask"].dtype, torch.bool)
+        self.assertEqual(batch["shift_only"].dtype, torch.bool)
 
         self.assertEqual(
             batch["h"]["peak_mask"][:, :2].tolist(),

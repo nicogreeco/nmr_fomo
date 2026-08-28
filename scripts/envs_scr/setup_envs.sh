@@ -308,7 +308,7 @@ install_main() {
     "$UV_BIN" pip install \
         --python "$python" \
         -r "${SCRIPT_DIR}/requirements/nmr-main.txt"
-    "$python" -c 'import lz4, numpy, pandas, pyarrow, rdkit, sklearn, torch'
+    "$python" -c 'import lightning, lz4, mlflow, numpy, pandas, pyarrow, rdkit, sklearn, torch'
     verify_torch "$python" "nmr_venv"
     record_manifest "nmr_venv" "$python"
 }

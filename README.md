@@ -78,6 +78,7 @@ datasets/
   canonical/                reproducible source conversions
   intermediate/             reproducible merge, overlap, and audit outputs
   cleaned/                  final datasets, molecular properties, and analytics
+  train_splits/             local no-cache train/validation Parquets
 models/                     pinned upstream repositories (Git submodules)
 scripts/
   data/                     canonical data code and data-preparation utilities

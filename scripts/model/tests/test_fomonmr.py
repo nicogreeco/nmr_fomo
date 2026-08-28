@@ -362,6 +362,41 @@ class FoMoNMRTests(unittest.TestCase):
         overlap = annotation_mask.any(dim=2) & info["h_shift_mask"]
         self.assertTrue(overlap.any().item())
 
+    def test_posttrain_shift_only_rows_hide_rich_annotations(self):
+        records = [
+            CanonicalRecord(
+                record_id=f"rich-{index}",
+                h_nmr_peaks=(
+                    rich_peak(
+                        1.0 + index,
+                        integration=2,
+                        multiplicity="d",
+                        j_values=(7.0,),
+                        width=0.02,
+                    ),
+                ),
+            )
+            for index in range(2)
+        ]
+        clean = FoundationNMRProcessor()(records)
+        clean["shift_only"] = torch.tensor([False, True])
+        model = FoMoNMR(
+            small_config(
+                stage="posttrain",
+                global_shift_probability=0.0,
+                local_jitter_probability=0.0,
+                modality_dropout_probability=0.0,
+                annotation_mask_probability=1.0,
+            )
+        )
+
+        corrupted, info = model.corrupt_batch(clean)
+
+        self.assertTrue(info["annotation_mask"][0].any().item())
+        self.assertFalse(info["annotation_mask"][1].any().item())
+        self.assertFalse(corrupted["h"]["availability"][1].any().item())
+        self.assertFalse(corrupted["h"]["j_mask"][1].any().item())
+
     def test_fingerprint_pairs_are_complete_symmetric_and_include_identity_bin(self):
         first = torch.tensor([[1.0, 2.0], [3.0, 5.0], [7.0, 11.0]])
         fingerprints = torch.tensor(
@@ -463,8 +498,44 @@ class FoMoNMRTests(unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 validation_losses = model.validation_step(batch, 4)
+                repeated_losses = model.validation_step(batch, 4)
             for value in validation_losses.values():
                 self.assertTrue(torch.isfinite(value))
+            for name in validation_losses:
+                self.assertTrue(
+                    torch.allclose(
+                        validation_losses[name],
+                        repeated_losses[name],
+                    )
+                )
+
+    def test_adamw_and_plateau_schedule(self):
+        model = FoMoNMR(
+            small_config(
+                lr=1e-3,
+                min_lr=1e-4,
+                weight_decay=1e-2,
+                plateau_factor=0.5,
+                plateau_patience=2,
+            )
+        )
+        configured = model.configure_optimizers()
+        optimizer = configured["optimizer"]
+        scheduler = configured["lr_scheduler"]["scheduler"]
+
+        self.assertIsInstance(optimizer, torch.optim.AdamW)
+        self.assertIsInstance(
+            scheduler,
+            torch.optim.lr_scheduler.ReduceLROnPlateau,
+        )
+        self.assertEqual(configured["lr_scheduler"]["monitor"], "val/mean_loss")
+        self.assertAlmostEqual(optimizer.param_groups[0]["lr"], 1e-3)
+
+        scheduler.step(1.0)
+        scheduler.step(1.1)
+        scheduler.step(1.1)
+        self.assertAlmostEqual(optimizer.param_groups[0]["lr"], 1e-3)
+        scheduler.step(1.1)
 
     def test_losses_handle_batch_without_component_targets(self):
         model = FoMoNMR(small_config(lambda_fp=0.0))

@@ -22,6 +22,7 @@ from data.postprocess.calculate_mol_properties import (
 )
 from model import (
     FoundationNMRProcessor,
+    MixedFoundationDataset,
     PairedFoundationDataset,
     PairedFoundationRecord,
 )
@@ -146,6 +147,19 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             sorted(worker_zero + worker_one),
             [f"record-{index}" for index in range(4)],
         )
+
+    def test_dataset_attaches_shift_only_flag(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nmr_path, molecular_path, _ = self.write_pair(Path(directory))
+            dataset = PairedFoundationDataset(
+                nmr_path,
+                molecular_path,
+                shuffle=False,
+                shift_only=True,
+            )
+            batch = FoundationNMRProcessor()(list(dataset))
+
+        self.assertTrue(batch["shift_only"].all().item())
 
     def test_shuffle_changes_order_between_iterations(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -273,6 +287,59 @@ class PairedFoundationDatasetTest(unittest.TestCase):
         )
         with self.assertRaisesRegex(TypeError, "mix paired and unpaired"):
             FoundationNMRProcessor()([record, paired])
+
+    def test_mixed_dataset_uses_primary_epoch_and_shift_only_flags(self):
+        fingerprint = bytes(MORGAN_FP_BYTES)
+        primary = [
+            PairedFoundationRecord(
+                CanonicalRecord(
+                    record_id=f"primary-{index}",
+                    h_nmr_peaks=(ProtonPeak(1.0),),
+                ),
+                fingerprint,
+            )
+            for index in range(20)
+        ]
+        auxiliary = [
+            PairedFoundationRecord(
+                CanonicalRecord(
+                    record_id=f"auxiliary-{index}",
+                    h_nmr_peaks=(ProtonPeak(2.0),),
+                ),
+                fingerprint,
+            )
+            for index in range(2)
+        ]
+        dataset = MixedFoundationDataset(
+            [primary, auxiliary],
+            proportions=[0.5, 0.5],
+            shift_only=[False, True],
+            seed=5,
+        )
+
+        samples = list(dataset)
+        primary_samples = [
+            sample for sample in samples if sample.record.record_id.startswith("primary")
+        ]
+        auxiliary_samples = [
+            sample for sample in samples if sample.record.record_id.startswith("auxiliary")
+        ]
+
+        self.assertEqual(len(primary_samples), 20)
+        self.assertGreater(len(auxiliary_samples), 2)
+        self.assertAlmostEqual(
+            len(primary_samples) / len(samples),
+            0.5,
+            delta=0.15,
+        )
+        self.assertTrue(all(not sample.shift_only for sample in primary_samples))
+        self.assertTrue(all(sample.shift_only for sample in auxiliary_samples))
+        self.assertEqual(len(dataset), 40)
+
+        batch = FoundationNMRProcessor()(samples[:8])
+        expected_flags = [sample.shift_only for sample in samples[:8]]
+        self.assertEqual(batch["shift_only"].dtype, torch.bool)
+        self.assertEqual(batch["shift_only"].tolist(), expected_flags)
 
 
 if __name__ == "__main__":
