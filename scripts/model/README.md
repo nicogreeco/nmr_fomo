@@ -137,6 +137,7 @@ def paired(name, split, shuffle, shift_only=False):
         shuffle=shuffle,
         seed=42,
         shift_only=shift_only,
+        source_name=name,
     )
 
 
@@ -173,16 +174,21 @@ In posttraining, the processor places these flags in `batch["shift_only"]`.
 `FoMoNMR.corrupt_batch()` then hides rich inputs only for replayed SimNMR and
 NMRGym rows. Loss computation needs no source-specific logic.
 
-Validation does not use source proportions. Keep the three fixed datasets in
-separate loaders, so every validation record is evaluated once and Lightning
-can report each source separately:
+Validation does not use source proportions. Keep each validation dataset in a
+separate loader. The model reads `source_name` from those loaders, so the metric
+groups automatically follow whichever datasets are passed:
 
 ```python
 validation_data = [
     paired("rich", "val", False, shift_only=False),
-    paired("simnmr", "val", False, shift_only=True),
-    paired("nmrgym", "val", False, shift_only=True),
 ]
+if stage == "pretrain":
+    validation_data.append(
+        paired("simnmr", "val", False, shift_only=True)
+    )
+validation_data.append(
+    paired("nmrgym", "val", False, shift_only=True)
+)
 
 val_loaders = [
     DataLoader(
@@ -213,8 +219,9 @@ in `train.py`; a separate DataModule is not needed for the current workflow.
 
 ## Pretraining and continued pretraining
 
-`FoMoNMR` uses one explicit `stage` from
-[`configs/default.yaml`](configs/default.yaml):
+`FoMoNMR` uses one explicit `stage`. When `--config` is omitted, `train.py`
+automatically loads [`configs/pretrain.yaml`](configs/pretrain.yaml) or
+[`configs/posttrain.yaml`](configs/posttrain.yaml):
 
 - `pretrain` hides every rich H annotation and trains masked H/C shift
   reconstruction plus weak Morgan-similarity classification;
@@ -281,7 +288,7 @@ different from `--pretrained-checkpoint`, which starts a new training stage.
 
 The default optimizer is AdamW with `lr=1e-4`, weight decay `1e-4`, 5,000
 linear warmup steps, and gradient norm clipping at `1.0`. After warmup,
-`ReduceLROnPlateau` monitors `val/mean_loss`. When validation stops improving,
+`ReduceLROnPlateau` monitors `val/loss`. When validation stops improving,
 it halves the learning rate after a patience of two checks, down to `1e-6`.
 
 Early stopping uses the same validation metric with patience eight. The default
@@ -289,10 +296,30 @@ one million `max_steps` is therefore only a safety limit: a normal run can stop
 earlier when validation has stopped improving. Both patience values count
 validation checks, not optimizer steps or natural dataset epochs.
 
-Validation runs every `--validation-interval` steps. Rich, SimNMR, and NMRGym
-losses are logged separately. `val/mean_loss` first computes each source mean
-over all of its validation records and then gives the three sources equal
-weight, regardless of their different validation-set sizes.
+Pretraining validates on Rich, SimNMR, and NMRGym. Posttraining validates on
+Rich and NMRGym. In either stage, `val/loss` is the normal mean over every
+record in the validation loaders, so source names and dataset sizes do not
+receive special weighting.
+
+The default `--logging minimal` mode reports the global total, shift, H/C
+shift, and fingerprint losses, H/C MAE in ppm, fingerprint MAE, and the
+annotation loss during posttraining. Per-source logging contains only
+`val/datasets/<source>/loss` for every available validation loader. Fingerprint
+validation also reports
+`val/fp_macro_mae` across five fixed Tanimoto ranges. Predictions use the
+expected similarity under the classifier probabilities.
+
+Each validation writes the five range MAEs, counts, and mean predicted
+similarities under
+`runs/fomonmr/<run-name>/artifacts/fingerprint_validation/` and, when enabled,
+uploads the CSV to the MLflow artifact path `fingerprint_validation`.
+It also writes H and C shift MAEs, counts, and mean predictions over 20 uniform
+ranges under the corresponding `shift_validation` paths.
+
+`--logging complete` keeps the same global metrics and adds the complete loss
+and MAE breakdown under each `val/datasets/<source>/...` group. Annotation
+components are included only for non-shift-only batches during posttraining.
+Training logging is unchanged.
 
 The training script keeps:
 
@@ -300,48 +327,48 @@ The training script keeps:
 - `last.ckpt` as a link to the newest one for easy recovery;
 - the best two checkpoints under `checkpoints/best/`.
 
-The best checkpoint is selected by the lowest `val/mean_loss`, not by one
-preferred source. Change `--checkpoint-interval` to control periodic saves and
+The best checkpoint is selected by the lowest `val/loss`. Change
+`--checkpoint-interval` to control periodic saves and
 `--validation-interval` to control both validation and best-model evaluation.
 
 ## MLflow
 
 The script reads `MLFLOW_TRACKING_URI` from `mlflow.env`, unless it is overridden
 with `--tracking-uri`. It logs parameters, learning rate, train/validation
-losses, and two small memory metrics every 50 optimizer steps:
+losses, and two peak GPU memory metrics at the end of each training epoch:
 
-- `memory/cpu_mb`: RAM used by the main training process;
-- `memory/gpu_mb`: GPU memory currently allocated by PyTorch.
+- `memory/gpu_peak_allocated_mb`;
+- `memory/gpu_peak_reserved_mb`.
 
-The GPU metric is present only when training on CUDA. It intentionally does not
-include GPU utilization or every allocator statistic; use `nvidia-smi` when a
-more detailed hardware check is needed. Use `--no-mlflow` while testing locally;
-the memory metrics are disabled together with logging.
+Peak statistics are reset at the beginning of every epoch. The metrics are
+present only when training on CUDA and MLflow logging is enabled.
 
 Checkpoints remain local under `runs/fomonmr/<run-name>/`; `log_model=False`
 avoids uploading every large rolling checkpoint. If the MLflow server is later
 configured with an S3 artifact store, selected best checkpoints can be uploaded
 explicitly without changing the training loop.
 
-## Linear probe (future diagnostic)
+## MACCS linear probe
 
 [DreaMS](https://pmc.ncbi.nlm.nih.gov/articles/PMC13090125/) periodically freezes
 its encoder and trains a small linear classifier on a fixed molecule-safe set to
 measure how well fingerprint bits are recoverable from the learned embedding.
 
-For FoMoNMR this should live in a separate small script, not inside
-`training_step`. Running it from selected saved checkpoints keeps the main
-optimization state untouched and makes the diagnostic reproducible:
+The DVC stage `split_maccs_probe` derives fixed, molecule-disjoint probe files
+from rich validation under `datasets/train_splits/maccs_probe/`. It retains
+about 20,000 train and 10,000 evaluation records while preserving the rich
+source proportions in both splits.
 
-1. freeze FoMoNMR and extract clean pooled embeddings for fixed probe splits;
-2. train one linear layer from `d_model` to fingerprint bits;
-3. use `BCEWithLogitsLoss` and report validation recall/AUROC;
-4. log the probe metrics to the same MLflow run or a linked probe run.
+After every validation, a separate callback extracts clean shift-only pooled
+embeddings with FoMoNMR in evaluation/no-gradient mode. It trains a fresh
+`Linear(d_model, 166)` layer with `BCEWithLogitsLoss` and logs
+`probe/maccs_macro_auroc`. The probe never contributes to the FoMoNMR loss or
+its gradients, checkpoint selection, scheduling, or early stopping. Pass
+`--no-maccs-probe` to disable this diagnostic.
 
-Initially the existing 2,048-bit Morgan target is the simplest choice. Because
-Morgan similarity already supervises pretraining, this probe measures how
-explicitly that information is encoded; it is a useful training diagnostic, but
-not an independent downstream benchmark.
+The probe uses MACCS rather than the Morgan similarity target used during
+training. It is a representation diagnostic, not an independent downstream
+benchmark.
 
 ## Validation and current limitations
 

@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from typing import List
 
 
 def gaussian_soft_cross_entropy(
@@ -19,18 +20,23 @@ def focal_cross_entropy(
     logits: torch.Tensor,
     targets: torch.Tensor,
     gamma: float,
+    weights: torch.Tensor | None = None
 ) -> torch.Tensor:
     """Focal classification loss following UltraNMR's implementation."""
     cross_entropy = F.cross_entropy(logits, targets, reduction="none")
     target_probability = torch.exp(-cross_entropy)
-    return (((1.0 - target_probability) ** gamma) * cross_entropy).mean()
-
+    loss = ((1.0 - target_probability) ** gamma) * cross_entropy
+    if weights is not None:
+        return (loss * weights).sum() / weights.sum()
+    return loss.mean()
 
 def symmetric_fingerprint_pairs(
     pooled: torch.Tensor,
     fingerprints: torch.Tensor,
+    bin_size: float = 0.05,
+    max_pairs_per_bin: int | None = None,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Return all unique symmetric representation pairs and Tanimoto targets."""
+    """Return symmetric pairs, optionally capped within each Tanimoto bin."""
 
     batch_size = pooled.shape[0]
     pair_indices = torch.triu_indices(
@@ -39,18 +45,32 @@ def symmetric_fingerprint_pairs(
         offset=1,
         device=pooled.device,
     )
+    intersections = fingerprints @ fingerprints.T
+    bit_counts = fingerprints.sum(dim=1, keepdim=True)
+    unions = bit_counts + bit_counts.T - intersections
+    tanimoto = intersections / unions.clamp_min(1e-8)
+    similarities = tanimoto[pair_indices[0], pair_indices[1]]
+
+    if max_pairs_per_bin is not None:
+        num_bins = int(1.0 / bin_size) + 1
+        bins = tanimoto_to_bins(similarities, bin_size, num_bins)
+        selected = []
+        for bin_index in range(num_bins):
+            indices = torch.where(bins == bin_index)[0]
+            if len(indices) > max_pairs_per_bin:
+                order = torch.randperm(len(indices), device=indices.device)
+                indices = indices[order[:max_pairs_per_bin]]
+            selected.append(indices)
+        selected = torch.cat(selected)
+        pair_indices = pair_indices[:, selected]
+        similarities = similarities[selected]
+
     first = pooled[pair_indices[0]]
     second = pooled[pair_indices[1]]
     features = torch.cat(
         (torch.abs(first - second), first * second),
         dim=-1,
     )
-
-    intersections = fingerprints @ fingerprints.T
-    bit_counts = fingerprints.sum(dim=1, keepdim=True)
-    unions = bit_counts + bit_counts.T - intersections
-    tanimoto = intersections / unions.clamp_min(1e-8)
-    similarities = tanimoto[pair_indices[0], pair_indices[1]]
     return features, similarities
 
 

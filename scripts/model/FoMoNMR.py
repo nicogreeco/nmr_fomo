@@ -25,6 +25,7 @@ from .utils.corruption import (
 @dataclass
 class ModelConfig:
     stage: str = "pretrain"
+    logging_mode: str = "minimal"
 
     d_model: int = 512
     fourier_strategy: str = "log_spaced"
@@ -49,6 +50,7 @@ class ModelConfig:
 
     fp_sim_bin_size: float = 0.05
     fp_focal_gamma: float = 5.0
+    balanced_fp_pairs: bool = False
 
     global_shift_probability: float = 0.2
     h_global_shift_max: float = 0.01
@@ -76,6 +78,56 @@ class ModelConfig:
 
 
 class FoMoNMR(L.LightningModule):
+    validation_metric_names = {
+        "loss": "loss",
+        "shift": "shift",
+        "shift_h": "shift_h",
+        "shift_c": "shift_c",
+        "fingerprint": "fp_loss",
+        "fingerprint_mae": "fp_mae",
+        "annotation": "annotation",
+        "integration": "annotation/integration",
+        "multiplicity": "annotation/multiplicity",
+        "width": "annotation/width",
+        "j": "annotation/j",
+        "j_count": "annotation/j_count",
+        "j_value": "annotation/j_value",
+        "shift_h_mae": "shift/h_mae_ppm",
+        "shift_c_mae": "shift/c_mae_ppm",
+    }
+    training_metric_names = {
+        "loss": "train/loss",
+        "shift": "train/shift",
+        "shift_h": "train/shift/h",
+        "shift_c": "train/shift/c",
+        "fingerprint": "train/fp_loss",
+        "annotation": "train/rich",
+        "integration": "train/rich/integration",
+        "multiplicity": "train/rich/multiplicity",
+        "width": "train/rich/width",
+        "j": "train/rich/j",
+        "j_count": "train/rich/j_count",
+        "j_value": "train/rich/j_value",
+    }
+    base_loss_names = ("loss", "shift", "fingerprint")
+    shift_component_names = ("shift_h", "shift_c")
+    rich_loss_names = (
+        "annotation",
+        "integration",
+        "multiplicity",
+        "width",
+        "j",
+        "j_count",
+        "j_value",
+    )
+    fingerprint_range_labels = (
+        "0.0-0.2",
+        "0.2-0.4",
+        "0.4-0.6",
+        "0.6-0.8",
+        "0.8-1.0",
+    )
+
     def __init__(self, config=None):
         super().__init__()
         if config is None:
@@ -83,9 +135,35 @@ class FoMoNMR(L.LightningModule):
         elif isinstance(config, dict):
             config = ModelConfig(**config)
         self.config = config
-        self.save_hyperparameters({"config": asdict(config)})
-        self.validation_loss_sums = [0.0, 0.0, 0.0]
-        self.validation_sample_counts = [0, 0, 0]
+        if config.logging_mode not in ("minimal", "complete"):
+            raise ValueError("logging_mode must be minimal or complete")
+        self.save_hyperparameters({"config": asdict(config)}, logger=False)
+        self.validation_metric_sums = {}
+        self.validation_metric_counts = {}
+
+        self.validation_source_names = []
+        self.fp_source_range_error_sums = {}
+        self.fp_source_range_counts = {}
+        self.register_buffer(
+            "fp_range_error_sums", torch.zeros(5), persistent=False
+        )
+        self.register_buffer(
+            "fp_range_prediction_sums", torch.zeros(5), persistent=False
+        )
+        self.register_buffer(
+            "fp_range_counts", torch.zeros(5, dtype=torch.long), persistent=False
+        )
+        self.register_buffer(
+            "shift_range_error_sums", torch.zeros(2, 20), persistent=False
+        )
+        self.register_buffer(
+            "shift_range_prediction_sums", torch.zeros(2, 20), persistent=False
+        )
+        self.register_buffer(
+            "shift_range_counts",
+            torch.zeros(2, 20, dtype=torch.long),
+            persistent=False,
+        )
 
         self.embedding = NmrEmbedder(
             d_model=self.config.d_model,
@@ -276,7 +354,14 @@ class FoMoNMR(L.LightningModule):
         }
         return corrupted, corruption
 
-    def compute_losses(self, outputs, clean_batch, corruption):
+    def compute_losses(
+        self,
+        outputs,
+        clean_batch,
+        corruption,
+        compute_mae=False,
+        fp_source=None,
+    ):
         pooled, peak_states, _ = outputs
         zero = pooled.sum() * 0.0
 
@@ -286,6 +371,7 @@ class FoMoNMR(L.LightningModule):
 
         h_shift_mask = corruption["h_shift_mask"]
         h_shift_loss = zero
+        h_shift_mae = zero
         if h_shift_mask.any():
             h_logits = self.h_classification_head(h_states[h_shift_mask])
             h_targets = corruption["h_shift_targets"][h_shift_mask]
@@ -299,9 +385,18 @@ class FoMoNMR(L.LightningModule):
                 h_bin_centers,
                 self.config.h_soft_label_sigma,
             )
+            if compute_mae:
+                h_prediction = (
+                    F.softmax(h_logits.float(), dim=1) * h_bin_centers
+                ).sum(dim=1)
+                h_shift_mae = F.l1_loss(h_prediction, h_targets)
+                self.update_shift_range_statistics(
+                    0, h_targets, h_prediction, self.config.h_min, self.config.h_max
+                )
 
         c_shift_mask = corruption["c_shift_mask"]
         c_shift_loss = zero
+        c_shift_mae = zero
         if c_shift_mask.any():
             c_logits = self.c_classification_head(c_states[c_shift_mask])
             c_targets = corruption["c_shift_targets"][c_shift_mask]
@@ -316,6 +411,15 @@ class FoMoNMR(L.LightningModule):
                 self.config.c_soft_label_sigma,
             )
 
+            if compute_mae:
+                c_prediction = (
+                    F.softmax(c_logits.float(), dim=1) * c_bin_centers
+                ).sum(dim=1)
+                c_shift_mae = F.l1_loss(c_prediction, c_targets)
+                self.update_shift_range_statistics(
+                    1, c_targets, c_prediction, self.config.c_min, self.config.c_max
+                )
+
         shift_losses = []
         if h_shift_mask.any():
             shift_losses.append(h_shift_loss)
@@ -323,11 +427,16 @@ class FoMoNMR(L.LightningModule):
             shift_losses.append(c_shift_loss)
         shift_loss = torch.stack(shift_losses).mean() if shift_losses else zero
 
+        # Validation keeps every natural pair and the fixed weights for comparison.
+        balance_fp_pairs = self.training and self.config.balanced_fp_pairs
         pair_features, similarities = symmetric_fingerprint_pairs(
             pooled,
             clean_batch["fingerprints"],
+            bin_size=self.config.fp_sim_bin_size,
+            max_pairs_per_bin=1024 if balance_fp_pairs else None,
         )
         fingerprint_loss = zero
+        fingerprint_mae = zero
         if similarities.numel() > 0:
             fp_logits = self.fp_sim_classifier(pair_features)
             fp_targets = tanimoto_to_bins(
@@ -335,11 +444,51 @@ class FoMoNMR(L.LightningModule):
                 self.config.fp_sim_bin_size,
                 self.fp_sim_num_bins,
             )
+            pair_weights = None
+            if not balance_fp_pairs:
+                range_idx = (similarities / 0.2).long().clamp(max=4)
+                range_weights = similarities.new_tensor([
+                    1.0,   # 0.0 - 0.2
+                    2.0,   # 0.2 - 0.4
+                    5.0,   # 0.4 - 0.6
+                    10.0,  # 0.6 - 0.8
+                    20.0,  # 0.8 - 1.0
+                ])
+                pair_weights = range_weights[range_idx]
             fingerprint_loss = focal_cross_entropy(
                 fp_logits,
                 fp_targets,
                 self.config.fp_focal_gamma,
+                pair_weights
             )
+            if compute_mae:
+                fp_values = (
+                    torch.arange(self.fp_sim_num_bins, device=fp_logits.device) + 0.5
+                ) * self.config.fp_sim_bin_size
+                fp_values = fp_values.clamp_max(1.0)
+                fp_prediction = (
+                    F.softmax(fp_logits.float(), dim=1) * fp_values
+                ).sum(dim=1)
+                fp_errors = (fp_prediction - similarities).abs()
+                fingerprint_mae = fp_errors.mean()
+
+                range_indices = (similarities / 0.2).long().clamp(max=4)
+                self.fp_range_error_sums.scatter_add_(
+                    0, range_indices, fp_errors.detach()
+                )
+                self.fp_range_prediction_sums.scatter_add_(
+                    0, range_indices, fp_prediction.detach()
+                )
+                self.fp_range_counts.scatter_add_(
+                    0, range_indices, torch.ones_like(range_indices)
+                )
+                if fp_source is not None:
+                    self.fp_source_range_error_sums[fp_source].scatter_add_(
+                        0, range_indices, fp_errors.detach()
+                    )
+                    self.fp_source_range_counts[fp_source].scatter_add_(
+                        0, range_indices, torch.ones_like(range_indices)
+                    )
 
         integration_loss = zero
         multiplicity_loss = zero
@@ -422,6 +571,7 @@ class FoMoNMR(L.LightningModule):
             "shift_h": h_shift_loss,
             "shift_c": c_shift_loss,
             "fingerprint": fingerprint_loss,
+            "fingerprint_mae": fingerprint_mae,
             "annotation": annotation_loss,
             "integration": integration_loss,
             "multiplicity": multiplicity_loss,
@@ -429,7 +579,19 @@ class FoMoNMR(L.LightningModule):
             "j": j_loss,
             "j_count": j_count_loss,
             "j_value": j_value_loss,
+            "shift_h_mae": h_shift_mae,
+            "shift_c_mae": c_shift_mae,
         }
+
+    def losses_to_log(self, losses, include_annotations=True):
+        names = list(self.base_loss_names)
+        if self.config.logging_mode == "complete":
+            names.extend(self.shift_component_names)
+        if self.config.stage == "posttrain" and include_annotations:
+            names.append("annotation")
+            if self.config.logging_mode == "complete":
+                names.extend(self.rich_loss_names[1:])
+        return {name: losses[name] for name in names}
 
     def training_step(self, batch, batch_idx):
         corrupted, corruption = self.corrupt_batch(batch)
@@ -438,11 +600,15 @@ class FoMoNMR(L.LightningModule):
             h_shift_prediction_mask=corruption["h_shift_mask"],
             c_shift_prediction_mask=corruption["c_shift_mask"],
         )
-        losses = self.compute_losses(outputs, batch, corruption)
+        losses = self.compute_losses(
+            outputs,
+            batch,
+            corruption,
+        )
         batch_size = batch["h"]["shift"].shape[0]
-        for name, value in losses.items():
+        for name, value in self.losses_to_log(losses).items():
             self.log(
-                f"train/{name}",
+                self.training_metric_names[name],
                 value,
                 on_step=True,
                 on_epoch=False,
@@ -452,6 +618,11 @@ class FoMoNMR(L.LightningModule):
         return losses["loss"]
 
     def validation_step(self, batch, batch_idx, dataloader_idx=0):
+        if dataloader_idx < len(self.validation_source_names):
+            source = self.validation_source_names[dataloader_idx]
+        else:
+            source = f"dataloader_{dataloader_idx}"
+
         # The same validation record receives the same corruption every run.
         with torch.random.fork_rng():
             seed = self.config.validation_seed + dataloader_idx * 100_000 + batch_idx
@@ -462,47 +633,187 @@ class FoMoNMR(L.LightningModule):
                 h_shift_prediction_mask=corruption["h_shift_mask"],
                 c_shift_prediction_mask=corruption["c_shift_mask"],
             )
-            losses = self.compute_losses(outputs, batch, corruption)
+            losses = self.compute_losses(
+                outputs,
+                batch,
+                corruption,
+                compute_mae=True,
+                fp_source=(
+                    source if source in self.fp_source_range_counts else None
+                ),
+            )
 
-        sources = ("rich", "simnmr", "nmrgym")
-        source = sources[dataloader_idx]
         batch_size = batch["h"]["shift"].shape[0]
-        self.validation_loss_sums[dataloader_idx] += (
-            losses["loss"].detach() * batch_size
+        annotations_active = (
+            self.config.stage == "posttrain"
+            and not batch["shift_only"].all().item()
         )
-        self.validation_sample_counts[dataloader_idx] += batch_size
-        for name, value in losses.items():
+        global_names = [*self.base_loss_names, *self.shift_component_names]
+        if annotations_active:
+            global_names.append("annotation")
+        global_metrics = {name: losses[name] for name in global_names}
+        metric_weights = {name: batch_size for name in global_metrics}
+        metric_counts = {
+            "shift_h_mae": int(corruption["h_shift_mask"].sum()),
+            "shift_c_mae": int(corruption["c_shift_mask"].sum()),
+            "fingerprint_mae": batch_size * (batch_size - 1) // 2,
+        }
+        for name, count in metric_counts.items():
+            if count > 0:
+                global_metrics[name] = losses[name]
+                metric_weights[name] = count
+
+        for name, value in global_metrics.items():
+            weight = metric_weights[name]
+            if name == "fingerprint_mae":
+                continue
+            self.validation_metric_sums[name] = (
+                self.validation_metric_sums.get(name, 0.0)
+                + value.detach() * weight
+            )
+            self.validation_metric_counts[name] = (
+                self.validation_metric_counts.get(name, 0) + weight
+            )
+
+        source_metrics = {"loss": losses["loss"]}
+        if self.config.logging_mode == "complete":
+            source_metrics = {name: losses[name] for name in global_names}
+            if annotations_active:
+                source_metrics.update(
+                    {name: losses[name] for name in self.rich_loss_names[1:]}
+                )
+            for name, count in metric_counts.items():
+                if count > 0:
+                    source_metrics[name] = losses[name]
+
+        for name, value in source_metrics.items():
+            weight = metric_weights.get(name, batch_size)
             self.log(
-                f"val/{source}/{name}",
+                f"val/datasets/{source}/{self.validation_metric_names[name]}",
                 value,
                 on_step=False,
                 on_epoch=True,
                 prog_bar=name == "loss",
-                batch_size=batch_size,
+                batch_size=weight,
                 add_dataloader_idx=False,
             )
         return losses
 
     def on_validation_epoch_start(self):
-        self.validation_loss_sums = [0.0, 0.0, 0.0]
-        self.validation_sample_counts = [0, 0, 0]
+        if self._trainer is not None:
+            loaders = self.trainer.val_dataloaders
+            if not isinstance(loaders, (list, tuple)):
+                loaders = [loaders]
+            self.validation_source_names = [
+                loader.dataset.source_name
+                for loader in loaders
+            ]
+        self.fp_source_range_error_sums = {
+            source: torch.zeros_like(self.fp_range_error_sums)
+            for source in self.validation_source_names
+        }
+        self.fp_source_range_counts = {
+            source: torch.zeros_like(self.fp_range_counts)
+            for source in self.validation_source_names
+        }
+        self.validation_metric_sums = {}
+        self.validation_metric_counts = {}
+        self.fp_range_error_sums.zero_()
+        self.fp_range_prediction_sums.zero_()
+        self.fp_range_counts.zero_()
+        self.shift_range_error_sums.zero_()
+        self.shift_range_prediction_sums.zero_()
+        self.shift_range_counts.zero_()
+
+    def update_shift_range_statistics(
+        self, nucleus_index, targets, predictions, minimum, maximum
+    ):
+        range_width = (maximum - minimum) / 20
+        range_indices = ((targets - minimum) / range_width).long().clamp(0, 19)
+        self.shift_range_error_sums[nucleus_index].scatter_add_(
+            0, range_indices, (predictions - targets).abs().detach()
+        )
+        self.shift_range_prediction_sums[nucleus_index].scatter_add_(
+            0, range_indices, predictions.detach()
+        )
+        self.shift_range_counts[nucleus_index].scatter_add_(
+            0, range_indices, torch.ones_like(range_indices)
+        )
+
+    def fingerprint_validation_rows(self):
+        error_sums = self.fp_range_error_sums.detach().cpu().tolist()
+        prediction_sums = self.fp_range_prediction_sums.detach().cpu().tolist()
+        counts = self.fp_range_counts.detach().cpu().tolist()
+        rows = []
+        for label, error_sum, prediction_sum, count in zip(
+            self.fingerprint_range_labels,
+            error_sums,
+            prediction_sums,
+            counts,
+        ):
+            mae = error_sum / count if count else float("nan")
+            mean_prediction = prediction_sum / count if count else float("nan")
+            rows.append((label, mae, int(count), mean_prediction))
+        return rows
+
+    def shift_validation_rows(self, nucleus):
+        nucleus_index = 0 if nucleus == "h" else 1
+        minimum = self.config.h_min if nucleus == "h" else self.config.c_min
+        maximum = self.config.h_max if nucleus == "h" else self.config.c_max
+        range_width = (maximum - minimum) / 20
+        error_sums = self.shift_range_error_sums[nucleus_index].cpu().tolist()
+        prediction_sums = self.shift_range_prediction_sums[nucleus_index].cpu().tolist()
+        counts = self.shift_range_counts[nucleus_index].cpu().tolist()
+        rows = []
+        for index, (error_sum, prediction_sum, count) in enumerate(
+            zip(error_sums, prediction_sums, counts)
+        ):
+            lower = minimum + index * range_width
+            upper = minimum + (index + 1) * range_width
+            mae = error_sum / count if count else float("nan")
+            mean_prediction = prediction_sum / count if count else float("nan")
+            rows.append(
+                (f"{lower:.3f}-{upper:.3f}", mae, int(count), mean_prediction)
+            )
+        return rows
 
     def on_validation_epoch_end(self):
-        source_losses = [
-            loss_sum / sample_count
-            for loss_sum, sample_count in zip(
-                self.validation_loss_sums,
-                self.validation_sample_counts,
-            )
-            if sample_count > 0
-        ]
-        if source_losses:
-            mean_loss = torch.stack(source_losses).mean()
+        mean_metrics = {}
+        for name, total in self.validation_metric_sums.items():
+            mean_metrics[name] = total / self.validation_metric_counts[name]
             self.log(
-                "val/mean_loss",
-                mean_loss,
-                prog_bar=True,
+                f"val/{self.validation_metric_names[name]}",
+                mean_metrics[name],
+                prog_bar=name == "loss",
             )
+
+        valid_ranges = self.fp_range_counts > 0
+        if valid_ranges.any():
+            range_maes = (
+                self.fp_range_error_sums[valid_ranges]
+                / self.fp_range_counts[valid_ranges]
+            )
+            fingerprint_mae = (
+                self.fp_range_error_sums.sum()
+                / self.fp_range_counts.sum()
+            )
+            self.log("val/fp_mae", fingerprint_mae)
+            self.log("val/fp_macro_mae", range_maes.mean())
+
+        mean_loss = mean_metrics.get("loss")
+        if self.config.logging_mode == "complete":
+            for source, counts in self.fp_source_range_counts.items():
+                valid_ranges = counts > 0
+                if valid_ranges.any():
+                    range_maes = (
+                        self.fp_source_range_error_sums[source][valid_ranges]
+                        / counts[valid_ranges]
+                    )
+                    self.log(
+                        f"val/datasets/{source}/fp_macro_mae", range_maes.mean()
+                    )
+        if mean_loss is not None:
+
             if (
                 not self.trainer.sanity_checking
                 and self.global_step >= self.config.warmup_steps
@@ -544,7 +855,7 @@ class FoMoNMR(L.LightningModule):
             "optimizer": optimizer,
             "lr_scheduler": {
                 "scheduler": scheduler,
-                "monitor": "val/mean_loss",
+                "monitor": "val/loss",
             },
         }
 

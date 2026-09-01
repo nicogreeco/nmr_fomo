@@ -2,6 +2,7 @@
 
 import copy
 import unittest
+from types import SimpleNamespace
 
 import torch
 
@@ -427,6 +428,103 @@ class FoMoNMRTests(unittest.TestCase):
         self.assertEqual(model.fp_sim_num_bins, 21)
         self.assertEqual(model.fp_sim_classifier[-1].out_features, 21)
 
+    def test_fingerprint_pairs_can_be_capped_per_bin(self):
+        pooled = torch.arange(10, dtype=torch.float32).reshape(5, 2)
+        fingerprints = torch.ones(5, 4)
+
+        features, similarities = symmetric_fingerprint_pairs(
+            pooled,
+            fingerprints,
+            max_pairs_per_bin=3,
+        )
+
+        self.assertEqual(features.shape, (3, 4))
+        self.assertEqual(similarities.tolist(), [1.0, 1.0, 1.0])
+
+    def test_fingerprint_validation_mae_uses_expected_similarity_and_ranges(self):
+        model = FoMoNMR(small_config())
+        batch = example_batch()
+        pooled = torch.zeros(3, model.config.d_model, requires_grad=True)
+        peak_states = torch.zeros(
+            3,
+            MAX_H_PEAKS * 2,
+            model.config.d_model,
+            requires_grad=True,
+        )
+        valid_peaks = torch.cat(
+            (batch["h"]["peak_mask"], batch["c"]["peak_mask"]),
+            dim=1,
+        )
+        corruption = {
+            "h_shift_mask": torch.zeros_like(batch["h"]["peak_mask"]),
+            "c_shift_mask": torch.zeros_like(batch["c"]["peak_mask"]),
+            "h_shift_targets": batch["h"]["shift"].clone(),
+            "c_shift_targets": batch["c"]["shift"].clone(),
+            "annotation_mask": torch.zeros_like(batch["h"]["availability"]),
+        }
+
+        with torch.no_grad():
+            for parameter in model.fp_sim_classifier.parameters():
+                parameter.zero_()
+
+        model.on_validation_epoch_start()
+        losses = model.compute_losses(
+            (pooled, peak_states, valid_peaks),
+            batch,
+            corruption,
+            compute_mae=True,
+        )
+
+        bin_values = (
+            (torch.arange(21) + 0.5) * model.config.fp_sim_bin_size
+        ).clamp_max(1.0)
+        uniform_prediction = bin_values.mean()
+        true_similarities = torch.tensor([0.5, 0.0, 0.0])
+        expected_mae = (uniform_prediction - true_similarities).abs().mean()
+
+        self.assertTrue(torch.allclose(losses["fingerprint_mae"], expected_mae))
+        self.assertEqual(
+            model.fp_range_counts.tolist(),
+            [2.0, 0.0, 1.0, 0.0, 0.0],
+        )
+        rows = model.fingerprint_validation_rows()
+        self.assertEqual(
+            [row[0] for row in rows],
+            list(model.fingerprint_range_labels),
+        )
+        self.assertEqual([row[2] for row in rows], [2, 0, 1, 0, 0])
+        self.assertAlmostEqual(rows[0][3], uniform_prediction.item(), places=6)
+        self.assertAlmostEqual(rows[2][3], uniform_prediction.item(), places=6)
+
+    def test_shift_validation_statistics_use_twenty_ranges(self):
+        model = FoMoNMR(small_config())
+        model.on_validation_epoch_start()
+        model.update_shift_range_statistics(
+            0,
+            torch.tensor([model.config.h_min, model.config.h_max]),
+            torch.tensor([-4.5, 18.0]),
+            model.config.h_min,
+            model.config.h_max,
+        )
+        model.update_shift_range_statistics(
+            1,
+            torch.tensor([model.config.c_min, model.config.c_max]),
+            torch.tensor([-30.0, 280.0]),
+            model.config.c_min,
+            model.config.c_max,
+        )
+
+        h_rows = model.shift_validation_rows("h")
+        c_rows = model.shift_validation_rows("c")
+        self.assertEqual(len(h_rows), 20)
+        self.assertEqual(len(c_rows), 20)
+        self.assertEqual([h_rows[0][2], h_rows[-1][2]], [1, 1])
+        self.assertEqual([c_rows[0][2], c_rows[-1][2]], [1, 1])
+        self.assertAlmostEqual(h_rows[0][1], 1.0)
+        self.assertAlmostEqual(h_rows[-1][1], 2.0)
+        self.assertAlmostEqual(c_rows[0][3], -30.0)
+        self.assertAlmostEqual(c_rows[-1][3], 280.0)
+
     def test_j_loss_sorts_valid_values_and_ignores_padding(self):
         model = FoMoNMR(small_config(stage="posttrain", lambda_fp=0.0))
         clean = example_batch()
@@ -509,6 +607,66 @@ class FoMoNMRTests(unittest.TestCase):
                     )
                 )
 
+    def test_minimal_and_complete_logging_select_expected_losses(self):
+        losses = {
+            name: torch.tensor(1.0)
+            for name in FoMoNMR.training_metric_names
+        }
+        minimal_names = {"loss", "shift", "fingerprint"}
+
+        pretrain = FoMoNMR(small_config(stage="pretrain"))
+        self.assertEqual(
+            set(pretrain.losses_to_log(losses)),
+            minimal_names,
+        )
+
+        posttrain = FoMoNMR(small_config(stage="posttrain"))
+        self.assertEqual(
+            set(posttrain.losses_to_log(losses)),
+            minimal_names | {"annotation"},
+        )
+
+        complete = FoMoNMR(
+            small_config(stage="posttrain", logging_mode="complete")
+        )
+        self.assertEqual(
+            set(complete.losses_to_log(losses)),
+            set(losses),
+        )
+        self.assertEqual(
+            set(complete.losses_to_log(losses, include_annotations=False)),
+            minimal_names | {"shift_h", "shift_c"},
+        )
+
+    def test_validation_loss_is_record_weighted(self):
+        model = FoMoNMR(small_config())
+        loaders = [
+            SimpleNamespace(dataset=SimpleNamespace(source_name=name))
+            for name in ("custom_a", "custom_b", "custom_c")
+        ]
+        model._trainer = SimpleNamespace(
+            sanity_checking=True,
+            val_dataloaders=loaders,
+        )
+        model.on_validation_epoch_start()
+        model.validation_metric_sums = {"loss": torch.tensor(14.0)}
+        model.validation_metric_counts = {"loss": 3}
+        logged = {}
+        model.log = lambda name, value, **kwargs: logged.update({name: value})
+
+        model.on_validation_epoch_end()
+
+        self.assertAlmostEqual(logged["val/loss"].item(), 14.0 / 3.0, places=6)
+        self.assertNotIn("val/mean", logged)
+        self.assertEqual(
+            model.validation_source_names,
+            ["custom_a", "custom_b", "custom_c"],
+        )
+        self.assertEqual(
+            set(model.fp_source_range_counts),
+            set(model.validation_source_names),
+        )
+
     def test_adamw_and_plateau_schedule(self):
         model = FoMoNMR(
             small_config(
@@ -528,7 +686,7 @@ class FoMoNMRTests(unittest.TestCase):
             scheduler,
             torch.optim.lr_scheduler.ReduceLROnPlateau,
         )
-        self.assertEqual(configured["lr_scheduler"]["monitor"], "val/mean_loss")
+        self.assertEqual(configured["lr_scheduler"]["monitor"], "val/loss")
         self.assertAlmostEqual(optimizer.param_groups[0]["lr"], 1e-3)
 
         scheduler.step(1.0)

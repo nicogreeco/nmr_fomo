@@ -10,7 +10,7 @@ from data.validation import (
     validate_canonical_record,
 )
 
-from .dataset import MORGAN_FP_BYTES, PairedFoundationRecord
+from .dataset import MACCS_OUTPUT_BITS, MORGAN_FP_BYTES, PairedFoundationRecord
 
 
 MAX_H_PEAKS = MAX_PEAKS_PER_MODALITY
@@ -52,6 +52,17 @@ def _unpack_morgan_fingerprints(fingerprints):
     return bits.reshape(len(fingerprints), -1).to(torch.float32)
 
 
+def _maccs_fingerprints_to_tensor(fingerprints):
+    for index, fingerprint in enumerate(fingerprints):
+        if len(fingerprint) != MACCS_OUTPUT_BITS or set(fingerprint) - {"0", "1"}:
+            raise ValueError(f"MACCS fingerprint {index} must contain 166 bits")
+
+    return torch.tensor(
+        [[int(bit) for bit in fingerprint] for fingerprint in fingerprints],
+        dtype=torch.float32,
+    )
+
+
 class FoundationNMRProcessor:
     """Validate, pad, and collate canonical peak records into dense tensors."""
 
@@ -69,9 +80,11 @@ class FoundationNMRProcessor:
             )
 
         fingerprints = None
+        maccs_fingerprints = None
         shift_only = torch.zeros(len(records), dtype=torch.bool)
         if all(paired_flags):
             fingerprints = [record.morgan_fingerprint for record in records]
+            maccs_fingerprints = [record.maccs_fingerprint for record in records]
             shift_only = torch.tensor(
                 [record.shift_only for record in records],
                 dtype=torch.bool,
@@ -200,6 +213,9 @@ class FoundationNMRProcessor:
         }
         if fingerprints is not None:
             batch["fingerprints"] = _unpack_morgan_fingerprints(fingerprints)
+            batch["maccs_fingerprints"] = _maccs_fingerprints_to_tensor(
+                maccs_fingerprints
+            )
         return batch
 
 

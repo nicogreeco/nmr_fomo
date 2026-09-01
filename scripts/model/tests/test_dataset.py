@@ -16,6 +16,8 @@ from torch.utils.data import DataLoader
 from data import CanonicalRecord, CarbonPeak, ProtonPeak
 from data.canonicalize.common import write_canonical_parquet
 from data.postprocess.calculate_mol_properties import (
+    MACCS_FIELD,
+    MACCS_OUTPUT_BITS,
     MORGAN_FIELD,
     MORGAN_FP_BYTES,
     molecular_properties_schema,
@@ -61,6 +63,10 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             bytes([1 << (index % 8)]) + bytes(MORGAN_FP_BYTES - 1)
             for index in range(num_records)
         ]
+        maccs_fingerprints = [
+            "0" * index + "1" + "0" * (MACCS_OUTPUT_BITS - index - 1)
+            for index in range(num_records)
+        ]
         ids = molecular_ids or [record.record_id for record in records]
         row_statuses = statuses or ["ok"] * len(records)
         rows = [
@@ -69,11 +75,13 @@ class PairedFoundationDatasetTest(unittest.TestCase):
                 "smiles_canonical": "C",
                 "rdkit_status": status,
                 MORGAN_FIELD: fingerprint if status == "ok" else None,
+                MACCS_FIELD: maccs if status == "ok" else None,
             }
-            for record_id, status, fingerprint in zip(
+            for record_id, status, fingerprint, maccs in zip(
                 ids,
                 row_statuses,
                 fingerprints,
+                maccs_fingerprints,
             )
         ]
         molecular_path = root / "molecular.parquet"
@@ -92,6 +100,7 @@ class PairedFoundationDatasetTest(unittest.TestCase):
                 molecular_path,
                 arrow_batch_size=1,
                 shuffle=False,
+                source_name="custom_source",
             )
             loader = DataLoader(
                 dataset,
@@ -102,6 +111,7 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             loaded_fingerprints = [
                 sample.morgan_fingerprint for sample in dataset
             ]
+        self.assertEqual(dataset.source_name, "custom_source")
 
         self.assertEqual(len(dataset), 4)
         self.assertEqual(
@@ -110,6 +120,8 @@ class PairedFoundationDatasetTest(unittest.TestCase):
         )
         self.assertEqual(batch["fingerprints"].shape, (4, 2048))
         self.assertEqual(batch["fingerprints"].dtype, torch.float32)
+        self.assertEqual(batch["maccs_fingerprints"].shape, (4, 166))
+        self.assertEqual(batch["maccs_fingerprints"].dtype, torch.float32)
         self.assertEqual(
             batch["fingerprints"][:, :8].tolist(),
             [
@@ -120,6 +132,15 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             ],
         )
         self.assertEqual(loaded_fingerprints, fingerprints)
+        self.assertEqual(
+            batch["maccs_fingerprints"][:, :4].tolist(),
+            [
+                [1.0, 0.0, 0.0, 0.0],
+                [0.0, 1.0, 0.0, 0.0],
+                [0.0, 0.0, 1.0, 0.0],
+                [0.0, 0.0, 0.0, 1.0],
+            ],
+        )
 
     def test_workers_receive_disjoint_row_groups(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -284,12 +305,14 @@ class PairedFoundationDatasetTest(unittest.TestCase):
         paired = PairedFoundationRecord(
             record=record,
             morgan_fingerprint=bytes(MORGAN_FP_BYTES),
+            maccs_fingerprint="0" * MACCS_OUTPUT_BITS,
         )
         with self.assertRaisesRegex(TypeError, "mix paired and unpaired"):
             FoundationNMRProcessor()([record, paired])
 
     def test_mixed_dataset_uses_primary_epoch_and_shift_only_flags(self):
         fingerprint = bytes(MORGAN_FP_BYTES)
+        maccs_fingerprint = "0" * MACCS_OUTPUT_BITS
         primary = [
             PairedFoundationRecord(
                 CanonicalRecord(
@@ -297,6 +320,7 @@ class PairedFoundationDatasetTest(unittest.TestCase):
                     h_nmr_peaks=(ProtonPeak(1.0),),
                 ),
                 fingerprint,
+                maccs_fingerprint,
             )
             for index in range(20)
         ]
@@ -307,6 +331,7 @@ class PairedFoundationDatasetTest(unittest.TestCase):
                     h_nmr_peaks=(ProtonPeak(2.0),),
                 ),
                 fingerprint,
+                maccs_fingerprint,
             )
             for index in range(2)
         ]

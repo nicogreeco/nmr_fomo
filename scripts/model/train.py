@@ -1,13 +1,13 @@
 """Simple FoMoNMR pretraining and continued-pretraining entry point."""
 
 import argparse
+import csv
 import os
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 import lightning as L
-import psutil
 import torch
 import yaml
 from dotenv import load_dotenv
@@ -25,29 +25,82 @@ from model import (
     PairedFoundationDataset,
 )
 from model.FoMoNMR import FoMoNMR, ModelConfig
+from model.maccs_probe import MaccsLinearProbe
 
 
 class MemoryLogger(L.Callback):
-    def __init__(self):
-        self.last_step = -1
+    def on_train_epoch_start(self, trainer, model):
+        if model.device.type == "cuda":
+            torch.cuda.reset_peak_memory_stats(model.device)
 
-    def on_train_batch_end(self, trainer, model, outputs, batch, batch_idx):
-        step = trainer.global_step
-        if (
-            step == 0
-            or step == self.last_step
-            or step % trainer.log_every_n_steps != 0
-        ):
+    def on_train_epoch_end(self, trainer, model):
+        if model.device.type != "cuda":
             return
 
-        self.last_step = step
         megabyte = 1024 ** 2
-        memory = {
-            "memory/cpu_mb": psutil.Process().memory_info().rss / megabyte,
-        }
-        if model.device.type == "cuda":
-            memory["memory/gpu_mb"] = torch.cuda.memory_allocated() / megabyte
-        model.log_dict(memory, on_step=True, on_epoch=False)
+        model.log_dict(
+            {
+                "memory/gpu_peak_allocated_mb": (
+                    torch.cuda.max_memory_allocated(model.device) / megabyte
+                ),
+                "memory/gpu_peak_reserved_mb": (
+                    torch.cuda.max_memory_reserved(model.device) / megabyte
+                ),
+            },
+            on_step=False,
+            on_epoch=True,
+        )
+
+
+class FingerprintValidationLogger(L.Callback):
+    def __init__(self, run_dir):
+        self.output_dir = run_dir / "artifacts/fingerprint_validation"
+
+    def on_validation_epoch_end(self, trainer, model):
+        if trainer.sanity_checking or not trainer.is_global_zero:
+            return
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        filename = (
+            f"epoch_{trainer.current_epoch}_step_{trainer.global_step}.csv"
+        )
+        output_path = self.output_dir / filename
+        with output_path.open("w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow(("range", "mae", "count", "mean_predicted_similarity"))
+            writer.writerows(model.fingerprint_validation_rows())
+
+        if isinstance(trainer.logger, MLFlowLogger):
+            trainer.logger.experiment.log_artifact(
+                trainer.logger.run_id,
+                str(output_path),
+                artifact_path="fingerprint_validation",
+            )
+
+
+class ShiftValidationLogger(L.Callback):
+    def __init__(self, run_dir):
+        self.output_dir = run_dir / "artifacts/shift_validation"
+
+    def on_validation_epoch_end(self, trainer, model):
+        if trainer.sanity_checking or not trainer.is_global_zero:
+            return
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        suffix = f"epoch_{trainer.current_epoch}_step_{trainer.global_step}.csv"
+        for nucleus in ("h", "c"):
+            output_path = self.output_dir / f"{nucleus}_{suffix}"
+            with output_path.open("w", newline="") as file:
+                writer = csv.writer(file)
+                writer.writerow(("range", "mae", "count", "mean_predicted_shift"))
+                writer.writerows(model.shift_validation_rows(nucleus))
+
+            if isinstance(trainer.logger, MLFlowLogger):
+                trainer.logger.experiment.log_artifact(
+                    trainer.logger.run_id,
+                    str(output_path),
+                    artifact_path="shift_validation",
+                )
 
 
 def parse_args():
@@ -55,17 +108,20 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", choices=("pretrain", "posttrain"), default="pretrain")
     parser.add_argument(
-        "--config",
-        default="scripts/model/configs/default.yaml",
+        "--logging",
+        dest="logging_mode",
+        choices=("minimal", "complete"),
+        default="minimal",
     )
+    parser.add_argument("--config")
     parser.add_argument("--pretrained-checkpoint")
     parser.add_argument("--resume")
-    parser.add_argument("--batch-size", type=int, default=128)
+    parser.add_argument("--batch-size", type=int, default=2048)
     parser.add_argument("--accumulate-grad-batches", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--max-steps", type=int)
-    parser.add_argument("--validation-interval", type=int, default=10_000)
-    parser.add_argument("--checkpoint-interval", type=int, default=10_000)
+    parser.add_argument("--validation-interval", type=int, default=40_000)
+    parser.add_argument("--checkpoint-interval", type=int, default=40_000)
     parser.add_argument("--precision", default="bf16-mixed")
     parser.add_argument("--accelerator", default="auto")
     parser.add_argument("--devices", type=int, default=1)
@@ -76,6 +132,8 @@ def parse_args():
     )
     parser.add_argument("--run-name")
     parser.add_argument("--no-mlflow", action="store_true")
+    parser.add_argument("--no-maccs-probe", action="store_true")
+    parser.add_argument("--maccs-probe-every-n-validations", type=int, default=1)
     return parser.parse_args()
 
 
@@ -85,9 +143,10 @@ def paired_dataset(source, split, shuffle, shift_only, seed):
         root / f"{source}_{split}.parquet",
         root / f"{source}_{split}_mol_properties.parquet",
         shuffle=shuffle,
-        shuffle_buffer_size=8192,
+        shuffle_buffer_size=65536,
         seed=seed,
         shift_only=shift_only,
+        source_name=source,
     )
 
 
@@ -117,24 +176,64 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
 
     validation_data = [
         paired_dataset("rich", "val", False, False, seed),
-        paired_dataset("simnmr", "val", False, True, seed),
-        paired_dataset("nmrgym", "val", False, True, seed),
     ]
+    if stage == "pretrain":
+        validation_data.append(
+            paired_dataset("simnmr", "val", False, True, seed)
+        )
+    validation_data.append(
+        paired_dataset("nmrgym", "val", False, True, seed)
+    )
 
     processor = FoundationNMRProcessor()
-    loader_options = {
+    train_loader_options = {
         "batch_size": batch_size,
         "num_workers": num_workers,
         "collate_fn": processor,
         "pin_memory": torch.cuda.is_available(),
         "persistent_workers": num_workers > 0,
     }
-    train_loader = DataLoader(train_data, drop_last=True, **loader_options)
+    train_loader = DataLoader(train_data, drop_last=True, **train_loader_options)
+
+    val_loader_options = {
+        "batch_size": 2048,
+        "num_workers": num_workers,
+        "collate_fn": processor,
+        "pin_memory": torch.cuda.is_available(),
+        "persistent_workers": num_workers > 0,
+    }
+
     val_loaders = [
-        DataLoader(dataset, drop_last=False, **loader_options)
+        DataLoader(dataset, drop_last=False, **val_loader_options)
         for dataset in validation_data
     ]
     return train_loader, val_loaders
+
+
+def make_probe_dataloaders(batch_size, num_workers, seed):
+    root = Path("datasets/train_splits/maccs_probe")
+    processor = FoundationNMRProcessor()
+    loaders = []
+    for split in ("train", "eval"):
+        dataset = PairedFoundationDataset(
+            root / f"{split}.parquet",
+            root / f"{split}_mol_properties.parquet",
+            shuffle=False,
+            seed=seed,
+            shift_only=True,
+            source_name=f"maccs_probe_{split}",
+        )
+        loaders.append(
+            DataLoader(
+                dataset,
+                batch_size=batch_size,
+                num_workers=num_workers,
+                collate_fn=processor,
+                pin_memory=torch.cuda.is_available(),
+                drop_last=False,
+            )
+        )
+    return loaders
 
 
 def main():
@@ -145,10 +244,13 @@ def main():
         raise ValueError("--pretrained-checkpoint is only used for posttrain")
 
     L.seed_everything(args.seed, workers=True)
+    torch.set_float32_matmul_precision("high")
 
-    with open(args.config) as file:
+    config_path = args.config or f"scripts/model/configs/{args.stage}.yaml"
+    with open(config_path) as file:
         config_values = yaml.safe_load(file)
     config_values["stage"] = args.stage
+    config_values["logging_mode"] = args.logging_mode
     if args.max_steps is not None:
         config_values["max_steps"] = args.max_steps
     config = ModelConfig(**config_values)
@@ -187,19 +289,39 @@ def main():
     best_checkpoints = ModelCheckpoint(
         dirpath=run_dir / "checkpoints/best",
         filename="best-step={step}",
-        monitor="val/mean_loss",
+        monitor="val/loss",
         mode="min",
         save_top_k=2,
         save_on_train_epoch_end=False,
         auto_insert_metric_name=False,
     )
     early_stopping = EarlyStopping(
-        monitor="val/mean_loss",
+        monitor="val/loss",
         mode="min",
         patience=config.early_stopping_patience,
         check_on_train_epoch_end=False,
     )
-    callbacks = [latest_checkpoints, best_checkpoints, early_stopping]
+    callbacks = [
+        latest_checkpoints,
+        best_checkpoints,
+        early_stopping,
+        FingerprintValidationLogger(run_dir),
+        ShiftValidationLogger(run_dir),
+    ]
+    if not args.no_maccs_probe:
+        probe_train_loader, probe_eval_loader = make_probe_dataloaders(
+            args.batch_size,
+            args.num_workers,
+            args.seed,
+        )
+        callbacks.append(
+            MaccsLinearProbe(
+                probe_train_loader,
+                probe_eval_loader,
+                seed=args.seed,
+                every_n_validations=args.maccs_probe_every_n_validations,
+            )
+        )
 
     logger = False
     if not args.no_mlflow:
@@ -220,6 +342,10 @@ def main():
                 "precision": args.precision,
                 "validation_interval": args.validation_interval,
                 "checkpoint_interval": args.checkpoint_interval,
+                "maccs_probe": not args.no_maccs_probe,
+                "maccs_probe_every_n_validations": (
+                    args.maccs_probe_every_n_validations
+                ),
             }
         )
         callbacks.extend(
@@ -242,10 +368,12 @@ def main():
         accumulate_grad_batches=args.accumulate_grad_batches,
         gradient_clip_val=1.0,
         gradient_clip_algorithm="norm",
-        log_every_n_steps=50,
+        log_every_n_steps=16,
         logger=logger,
         callbacks=callbacks,
         default_root_dir=run_dir,
+        # limit_train_batches=8000, # -----------------------
+        # limit_val_batches=400, # ----- Remove after smoke
     )
     trainer.fit(
         model,
@@ -253,7 +381,6 @@ def main():
         val_dataloaders=val_loaders,
         ckpt_path=args.resume,
     )
-
 
 if __name__ == "__main__":
     main()

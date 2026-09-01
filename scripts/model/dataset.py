@@ -19,15 +19,18 @@ from data.postprocess.calculate_mol_properties import (
     MORGAN_FP_BYTES,
     MORGAN_FP_SIZE,
     MORGAN_RADIUS,
+    MACCS_OUTPUT_BITS,
+    MACCS_FIELD,
 )
 
 
 @dataclass(frozen=True)
 class PairedFoundationRecord:
-    """One validated NMR record and its compact Morgan fingerprint."""
+    """One validated NMR record and its molecular fingerprints."""
 
     record: CanonicalRecord
     morgan_fingerprint: bytes
+    maccs_fingerprint: str
     shift_only: bool = False
 
 
@@ -80,6 +83,7 @@ class PairedFoundationDataset(IterableDataset):
         shuffle_buffer_size: int = 8192,
         seed: int = 0,
         shift_only: bool = False,
+        source_name: str | None = None,
         include_unimol: bool = False,
     ):
         if include_unimol:
@@ -99,6 +103,7 @@ class PairedFoundationDataset(IterableDataset):
         self.shuffle_buffer_size = shuffle_buffer_size
         self.seed = seed
         self.shift_only = shift_only
+        self.source_name = source_name or self.nmr_path.stem
         self._shuffle_random = None
         self._shuffle_random_context = None
 
@@ -188,12 +193,13 @@ class PairedFoundationDataset(IterableDataset):
         for row_group_index in row_group_indices:
             molecular_table = molecular_file.read_row_group(
                 row_group_index,
-                columns=["record_id", "rdkit_status", MORGAN_FIELD],
+                columns=["record_id", "rdkit_status", MORGAN_FIELD, MACCS_FIELD],
                 use_threads=True,
             )
             molecular_ids = molecular_table.column("record_id").to_pylist()
             statuses = molecular_table.column("rdkit_status").to_pylist()
             fingerprints = molecular_table.column(MORGAN_FIELD).to_pylist()
+            maccs_vectors = molecular_table.column(MACCS_FIELD).to_pylist()
 
             offset = 0
             for nmr_batch in nmr_file.iter_batches(
@@ -228,9 +234,18 @@ class PairedFoundationDataset(IterableDataset):
                             f"expected {MORGAN_FP_BYTES}"
                         )
 
+                    maccs_vector = maccs_vectors[offset]
+                    if maccs_vector is None or len(maccs_vector) != MACCS_OUTPUT_BITS:
+                        length = None if maccs_vector is None else len(maccs_vector)
+                        raise ValueError(
+                            f"record {nmr_record_id} has MACCS byte length {length}; "
+                            f"expected {MACCS_OUTPUT_BITS}"
+                        )
+
                     yield PairedFoundationRecord(
                         record=_checked_record(value),
                         morgan_fingerprint=fingerprint,
+                        maccs_fingerprint=maccs_vector,
                         shift_only=self.shift_only,
                     )
                     offset += 1
@@ -333,6 +348,7 @@ class MixedFoundationDataset(IterableDataset):
             yield PairedFoundationRecord(
                 record=sample.record,
                 morgan_fingerprint=sample.morgan_fingerprint,
+                maccs_fingerprint=sample.maccs_fingerprint,
                 shift_only=self.shift_only[source],
             )
 
