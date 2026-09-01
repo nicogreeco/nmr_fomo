@@ -130,6 +130,7 @@ def parse_args():
         "--tracking-uri",
         default=os.getenv('MLFLOW_TRACKING_URI'),
     )
+    parser.add_argument("--experiment-name")
     parser.add_argument("--run-name")
     parser.add_argument("--no-mlflow", action="store_true")
     parser.add_argument("--no-maccs-probe", action="store_true")
@@ -326,7 +327,7 @@ def main():
     logger = False
     if not args.no_mlflow:
         logger = MLFlowLogger(
-            experiment_name=f"fomonmr-{args.stage}",
+            experiment_name=args.experiment_name or f"fomonmr-{args.stage}",
             run_name=run_name,
             tracking_uri=args.tracking_uri,
             log_model=False,

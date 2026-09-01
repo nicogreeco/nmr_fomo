@@ -247,6 +247,9 @@ PYTHONPATH=scripts python scripts/model/train.py \
 To stop a real trial after exactly 10,000 optimizer steps, pass
 `--max-steps 10000`.
 
+MLflow uses `fomonmr-<stage>` as the default experiment name. Pass, for
+example, `--experiment-name fp_ablation_pretrain` to select another experiment.
+
 The default `--precision bf16-mixed` is appropriate for recent GPUs such as H200:
 bfloat16 has a wide numerical range and is normally more stable than float16.
 `--precision 16-mixed` uses float16 where safe, while keeping model weights and
