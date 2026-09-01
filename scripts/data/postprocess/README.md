@@ -259,6 +259,20 @@ counts may exceed the targets. The NMR and molecular-property outputs retain
 matching row groups. Their DVC outputs use `cache: false`; the original cleaned
 files and benchmark test are unchanged.
 
+## `split_maccs_probe.py`
+
+Creates fixed MACCS linear-probe train and evaluation pairs from rich
+validation only. Molecules are assigned by a seeded hash and stratified by
+their exact rich-source record counts, keeping the source proportions nearly
+identical across approximately 20,000 train and 10,000 evaluation records.
+
+```bash
+dvc repro split_maccs_probe
+```
+
+The aligned outputs live under `datasets/train_splits/maccs_probe/`, use
+`cache: false`, and never modify the parent rich validation files.
+
 ## `analyze_cleaned_datasets.py`
 
 Generates source inventories, molecular-property summaries, functional-group

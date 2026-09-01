@@ -1790,3 +1790,86 @@ stages:
       hash: md5
       md5: 189d328aecf338e93b35887cc4b136a5
       size: 1966
+  split_maccs_probe:
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/split_maccs_probe.py
+      datasets/train_splits/rich_val.parquet
+      datasets/train_splits/rich_val_mol_properties.parquet --output-root
+      datasets/train_splits/maccs_probe --train-records 20000 --eval-records
+      10000 --seed 42 --batch-size 50000 --report-output
+      datasets/train_splits/maccs_probe/split_report.json --overwrite --quiet
+    deps:
+    - path: datasets/train_splits/rich_val.parquet
+      hash: md5
+      md5: 13199662c5591b82f1fb1f1cc175531d
+      size: 23577285
+    - path: datasets/train_splits/rich_val_mol_properties.parquet
+      hash: md5
+      md5: 72364678d82574dd7b1ab1ed0f8f0048
+      size: 6681458
+    - path: scripts/data/__init__.py
+      hash: md5
+      md5: a5094c4c302ee242c2e0be535ed8377f
+      size: 1392
+    - path: scripts/data/canonicalize/common.py
+      hash: md5
+      md5: 0b3ab46d187e9ba0eb902d8b8ec48df9
+      size: 23898
+    - path: scripts/data/console.py
+      hash: md5
+      md5: d3c1bbeb1bf68f67c78fccf3fcf83575
+      size: 2396
+    - path: scripts/data/postprocess/common.py
+      hash: md5
+      md5: 7b3ca03a089a7583a630989165c53a72
+      size: 8989
+    - path: scripts/data/postprocess/split_foundation_datasets.py
+      hash: md5
+      md5: fd4c1d3e75492931d6bf1c0ab2c8a48e
+      size: 9975
+    - path: scripts/data/postprocess/split_maccs_probe.py
+      hash: md5
+      md5: d089fae73681c8fc7ea08a185e81a2b7
+      size: 9468
+    - path: scripts/data/reporting.py
+      hash: md5
+      md5: 5c03d141ee42ecbeaa30322e695f3f45
+      size: 1749
+    - path: scripts/data/schema.py
+      hash: md5
+      md5: 66c6413f50373ee7b65f51f8872b68de
+      size: 4509
+    - path: scripts/data/validation.py
+      hash: md5
+      md5: 33cfe3e12196926143c0bb802a721c17
+      size: 10691
+    - path: scripts/envs_scr/requirements/nmr-main.txt
+      hash: md5
+      md5: 2ff29d80b397c3349acfc8cade46f70f
+      size: 597
+    params:
+      params.yaml:
+        foundation_splits.seed: 42
+        maccs_probe.eval_records: 10000
+        maccs_probe.train_records: 20000
+        postprocess.batch_size: 50000
+    outs:
+    - path: datasets/train_splits/maccs_probe/eval.parquet
+      hash: md5
+      md5: 6daa3a588c4a9881e14805a31e6a039a
+      size: 5072130
+    - path: datasets/train_splits/maccs_probe/eval_mol_properties.parquet
+      hash: md5
+      md5: 7f22d001c2ee6f9079833dc7236ecade
+      size: 1611167
+    - path: datasets/train_splits/maccs_probe/split_report.json
+      hash: md5
+      md5: 78d3e14bf5a09ede06306112cfa62905
+      size: 1158
+    - path: datasets/train_splits/maccs_probe/train.parquet
+      hash: md5
+      md5: 0799a14abc6302825d0f8ba64442d8dc
+      size: 9697732
+    - path: datasets/train_splits/maccs_probe/train_mol_properties.parquet
+      hash: md5
+      md5: cf3448df5370db3ea88e83ba3e8620af
+      size: 2892975

@@ -43,6 +43,7 @@ raw source releases
   -> ADMET cohort preparation and leakage removal from rich train
   -> final molecular-property sidecars
   -> molecule-safe foundation-model train/validation splits
+  -> fixed molecule-safe MACCS probe split from rich validation
   -> final collection analytics
 ```
 

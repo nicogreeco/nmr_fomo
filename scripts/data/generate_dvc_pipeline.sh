@@ -429,6 +429,43 @@ split_command+=" --report-output ${split_report}"
 split_command+=" --overwrite --quiet"
 dvc "${split_args[@]}" "${split_command}"
 
+probe_output_root=datasets/train_splits/maccs_probe
+probe_report=${probe_output_root}/split_report.json
+probe_outputs=(
+    ${probe_output_root}/train.parquet
+    ${probe_output_root}/train_mol_properties.parquet
+    ${probe_output_root}/eval.parquet
+    ${probe_output_root}/eval_mol_properties.parquet
+)
+probe_args=(
+    stage add --force --name split_maccs_probe
+    --deps datasets/train_splits/rich_val.parquet
+    --deps datasets/train_splits/rich_val_mol_properties.parquet
+    --deps scripts/data/postprocess/split_maccs_probe.py
+    --deps scripts/data/postprocess/split_foundation_datasets.py
+    "${postprocess_dep_args[@]}"
+    --params foundation_splits.seed
+    --params postprocess.batch_size
+    --params maccs_probe.train_records
+    --params maccs_probe.eval_records
+    --outs "${probe_report}"
+)
+for output_path in "${probe_outputs[@]}"; do
+    probe_args+=(--outs-no-cache "${output_path}")
+done
+probe_command="PYTHONPATH=scripts python"
+probe_command+=" scripts/data/postprocess/split_maccs_probe.py"
+probe_command+=" datasets/train_splits/rich_val.parquet"
+probe_command+=" datasets/train_splits/rich_val_mol_properties.parquet"
+probe_command+=" --output-root ${probe_output_root}"
+probe_command+=" --train-records \${maccs_probe.train_records}"
+probe_command+=" --eval-records \${maccs_probe.eval_records}"
+probe_command+=" --seed \${foundation_splits.seed}"
+probe_command+=" --batch-size \${postprocess.batch_size}"
+probe_command+=" --report-output ${probe_report}"
+probe_command+=" --overwrite --quiet"
+dvc "${probe_args[@]}" "${probe_command}"
+
 analytics_deps=(
     datasets/cleaned/train_val.parquet
     datasets/cleaned/test_benchmark.parquet

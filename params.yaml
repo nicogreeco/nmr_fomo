@@ -17,5 +17,9 @@ foundation_splits:
   rich_validation_records: 50000
   nmrgym_validation_records: 10000
 
+maccs_probe:
+  train_records: 20000
+  eval_records: 10000
+
 analytics:
   sample_per_group: 20000

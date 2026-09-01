@@ -65,6 +65,7 @@ MORGAN_FP_BYTES = MORGAN_FP_SIZE // 8
 MORGAN_FIELD = "morgan_ecfp4_2048"
 LEGACY_MORGAN_HEX_FIELD = "morgan_ecfp4_2048_hex"
 MACCS_OUTPUT_BITS = 166
+MACCS_FIELD = "maccs_keys_166_bits"
 
 FUNCTIONAL_GROUP_SMARTS = {
     "has_amine": "[NX3;!$(N[C,S]=O);!$(N=*)]",
@@ -120,7 +121,7 @@ def molecular_properties_schema() -> pa.Schema:
     fields.extend(
         [
             pa.field(MORGAN_FIELD, pa.binary(MORGAN_FP_BYTES)),
-            pa.field("maccs_keys_166_bits", pa.string()),
+            pa.field(MACCS_FIELD, pa.string()),
         ]
     )
     return pa.schema(
@@ -140,7 +141,7 @@ MOLECULAR_PROPERTY_FIELDS = molecular_properties_schema().names
 LEGACY_CSV_FIELDS = [
     *MOLECULAR_PROPERTY_FIELDS[:-2],
     LEGACY_MORGAN_HEX_FIELD,
-    "maccs_keys_166_bits",
+    MACCS_FIELD,
 ]
 # Retain the old public name for the one-time migration helper and downstream
 # notebooks that may still inspect the legacy CSV header.
@@ -241,7 +242,7 @@ def calculate_row(record_id: str, smiles: object) -> dict[str, object]:
             "fraction_csp3": rdMolDescriptors.CalcFractionCSP3(molecule),
             "aromatic_atom_fraction": aromatic_atom_fraction,
             MORGAN_FIELD: morgan_bytes,
-            "maccs_keys_166_bits": maccs_bits[1:],
+            MACCS_FIELD: maccs_bits[1:],
         }
         for name, pattern in FUNCTIONAL_GROUP_PATTERNS.items():
             row[name] = int(molecule.HasSubstructMatch(pattern))

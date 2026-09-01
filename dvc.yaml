@@ -703,3 +703,40 @@ stages:
     - datasets/train_splits/simnmr_val_mol_properties.parquet:
         cache: false
     - datasets/train_splits/split_report.json
+  split_maccs_probe:
+    cmd: PYTHONPATH=scripts python scripts/data/postprocess/split_maccs_probe.py
+      datasets/train_splits/rich_val.parquet
+      datasets/train_splits/rich_val_mol_properties.parquet --output-root
+      datasets/train_splits/maccs_probe --train-records
+      ${maccs_probe.train_records} --eval-records ${maccs_probe.eval_records}
+      --seed ${foundation_splits.seed} --batch-size ${postprocess.batch_size}
+      --report-output datasets/train_splits/maccs_probe/split_report.json
+      --overwrite --quiet
+    deps:
+    - datasets/train_splits/rich_val.parquet
+    - datasets/train_splits/rich_val_mol_properties.parquet
+    - scripts/data/__init__.py
+    - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
+    - scripts/data/postprocess/common.py
+    - scripts/data/postprocess/split_foundation_datasets.py
+    - scripts/data/postprocess/split_maccs_probe.py
+    - scripts/data/reporting.py
+    - scripts/data/schema.py
+    - scripts/data/validation.py
+    - scripts/envs_scr/requirements/nmr-main.txt
+    params:
+    - foundation_splits.seed
+    - maccs_probe.eval_records
+    - maccs_probe.train_records
+    - postprocess.batch_size
+    outs:
+    - datasets/train_splits/maccs_probe/eval.parquet:
+        cache: false
+    - datasets/train_splits/maccs_probe/eval_mol_properties.parquet:
+        cache: false
+    - datasets/train_splits/maccs_probe/split_report.json
+    - datasets/train_splits/maccs_probe/train.parquet:
+        cache: false
+    - datasets/train_splits/maccs_probe/train_mol_properties.parquet:
+        cache: false
