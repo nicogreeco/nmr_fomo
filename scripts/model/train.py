@@ -2,12 +2,14 @@
 
 import argparse
 import csv
+import inspect
 import os
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
 import lightning as L
+import mlflow
 import torch
 import yaml
 from dotenv import load_dotenv
@@ -101,6 +103,66 @@ class ShiftValidationLogger(L.Callback):
                     str(output_path),
                     artifact_path="shift_validation",
                 )
+
+
+class FinalModelLogger(L.Callback):
+    def __init__(self, latest_checkpoints, best_checkpoints, tracking_uri):
+        self.latest_checkpoints = latest_checkpoints
+        self.best_checkpoints = best_checkpoints
+        self.tracking_uri = tracking_uri
+
+    def _log_checkpoints(self, trainer, checkpoint_callback, artifact_path):
+        for checkpoint_path in checkpoint_callback.best_k_models:
+            path = Path(checkpoint_path)
+            if path.is_file():
+                trainer.logger.experiment.log_artifact(
+                    trainer.logger.run_id,
+                    str(path),
+                    artifact_path=artifact_path,
+                )
+
+    def on_fit_end(self, trainer, model):
+        if not trainer.is_global_zero or not isinstance(trainer.logger, MLFlowLogger):
+            return
+
+        self._log_checkpoints(
+            trainer,
+            self.latest_checkpoints,
+            artifact_path="checkpoints/latest",
+        )
+        self._log_checkpoints(
+            trainer,
+            self.best_checkpoints,
+            artifact_path="checkpoints/best",
+        )
+
+        best_path = Path(self.best_checkpoints.best_model_path)
+        if not best_path.is_file():
+            print("No best checkpoint is available to log as an MLflow model.")
+            return
+
+        best_model = FoMoNMR.load_from_checkpoint(
+            best_path,
+            config=model.config,
+            map_location="cpu",
+        )
+        best_model.eval()
+
+        if self.tracking_uri:
+            mlflow.set_tracking_uri(self.tracking_uri)
+        with mlflow.start_run(run_id=trainer.logger.run_id):
+            log_model_parameters = inspect.signature(
+                mlflow.pytorch.log_model
+            ).parameters
+            log_model_options = {"pytorch_model": best_model}
+            if "name" in log_model_parameters:
+                log_model_options["name"] = "model"
+            else:
+                log_model_options["artifact_path"] = "model"
+            if "serialization_format" in log_model_parameters:
+                log_model_options["serialization_format"] = "pickle"
+
+            mlflow.pytorch.log_model(**log_model_options)
 
 
 def parse_args():
@@ -353,6 +415,11 @@ def main():
             [
                 LearningRateMonitor(logging_interval="step"),
                 MemoryLogger(),
+                FinalModelLogger(
+                    latest_checkpoints,
+                    best_checkpoints,
+                    args.tracking_uri,
+                ),
             ]
         )
 
@@ -373,8 +440,6 @@ def main():
         logger=logger,
         callbacks=callbacks,
         default_root_dir=run_dir,
-        # limit_train_batches=8000, # -----------------------
-        # limit_val_batches=400, # ----- Remove after smoke
     )
     trainer.fit(
         model,

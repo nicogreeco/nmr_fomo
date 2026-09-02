@@ -25,8 +25,8 @@ from torch.utils.data import DataLoader
 from model import FoundationNMRProcessor, PairedFoundationDataset
 
 dataset = PairedFoundationDataset(
-    "datasets/cleaned/train_val.parquet",
-    "datasets/cleaned/train_val_mol_properties.parquet",
+    "datasets/cleaned/rich.parquet",
+    "datasets/cleaned/rich_mol_properties.parquet",
     arrow_batch_size=2048,
     shuffle=True,
     shuffle_buffer_size=8192,
