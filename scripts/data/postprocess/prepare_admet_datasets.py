@@ -17,11 +17,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
+from openpyxl import load_workbook
 from rdkit import Chem, RDLogger
 
 from data.console import (
@@ -41,7 +43,14 @@ from data.postprocess.common import (
 RDLogger.DisableLog("rdApp.warning")
 RDLogger.DisableLog("rdApp.error")
 
-ENDPOINTS = ("solubility_aqsoldb", "ld50_zhu", "ames")
+TDC_ENDPOINTS = (
+    "solubility_aqsoldb",
+    "ld50_zhu",
+    "ames",
+    "lipophilicity_astrazeneca",
+)
+SANGSTER_ENDPOINT = "sangster_logp"
+ENDPOINTS = (*TDC_ENDPOINTS, SANGSTER_ENDPOINT)
 SPLITS = ("train_val", "test")
 SCRIPT_PATH = "scripts/data/postprocess/prepare_admet_datasets.py"
 IDENTITY_DESCRIPTION = "exact RDKit full InChIKey equality"
@@ -90,7 +99,7 @@ def load_property_releases(
     endpoint_split_keys: dict[tuple[str, str], set[str]] = {}
     cross_split_keys_by_endpoint: dict[str, set[str]] = {}
 
-    for endpoint in ENDPOINTS:
+    for endpoint in TDC_ENDPOINTS:
         for split in SPLITS:
             path = tdc_root / endpoint / f"{split}.csv"
             if not path.is_file():
@@ -139,6 +148,121 @@ def load_property_releases(
                 ]
 
     return releases, requested_keys, cross_split_keys_by_endpoint
+
+
+def split_molecule_keys(
+    keys: Iterable[str],
+    *,
+    train_fraction: float,
+    seed: int,
+) -> dict[str, set[str]]:
+    """Return a deterministic, molecule-disjoint 80/20-style split."""
+
+    if not 0.0 < train_fraction < 1.0:
+        raise ValueError("Sangster train fraction must be between 0 and 1")
+    unique_keys = sorted(set(keys))
+    if len(unique_keys) < 2:
+        raise ValueError("Sangster requires at least two matched molecules")
+    ordered_keys = sorted(
+        unique_keys,
+        key=lambda key: hashlib.sha256(
+            f"{seed}:{key}".encode("utf-8")
+        ).hexdigest(),
+    )
+    train_size = round(len(ordered_keys) * train_fraction)
+    train_size = min(max(train_size, 1), len(ordered_keys) - 1)
+    return {
+        "train_val": set(ordered_keys[:train_size]),
+        "test": set(ordered_keys[train_size:]),
+    }
+
+
+def load_sangster_release(path: Path):
+    """Load and standardize the high-confidence Sangster logP rows."""
+
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    required_columns = {"SMILES", "logP", "Ionisation-based class"}
+    candidates = []
+    for worksheet in workbook.worksheets:
+        header = list(
+            next(worksheet.iter_rows(min_row=1, max_row=1, values_only=True))
+        )
+        if required_columns.issubset(header):
+            candidates.append((worksheet.max_row, worksheet, header))
+    if not candidates:
+        workbook.close()
+        raise ValueError(f"{path} has no Sangster data worksheet")
+
+    _, worksheet, header = max(candidates, key=lambda item: item[0])
+    column_index = {name: header.index(name) for name in required_columns}
+    rows = []
+    keyed_rows = []
+    invalid_rows = 0
+    source_rows = 0
+    for values in worksheet.iter_rows(min_row=2, values_only=True):
+        if not any(value is not None for value in values):
+            continue
+        source_rows += 1
+        if values[column_index["Ionisation-based class"]] != "P":
+            continue
+        smiles = values[column_index["SMILES"]]
+        key = full_inchikey(smiles)
+        if key is None:
+            invalid_rows += 1
+            continue
+        row = {
+            "Drug_ID": key,
+            "Drug": str(smiles),
+            "Y": str(values[column_index["logP"]]),
+        }
+        rows.append(row)
+        keyed_rows.append((row, key))
+    sheet_name = worksheet.title
+    workbook.close()
+    return {
+        "path": path,
+        "fieldnames": ["Drug_ID", "Drug", "Y"],
+        "rows": rows,
+        "keyed_rows": keyed_rows,
+        "invalid_rows": invalid_rows,
+        "source_rows": source_rows,
+        "sheet": sheet_name,
+    }
+
+
+def add_sangster_splits(
+    releases: dict[tuple[str, str], dict[str, object]],
+    sangster_release: dict[str, object],
+    record_ids_by_key: dict[str, list[str]],
+    *,
+    train_fraction: float,
+    seed: int,
+) -> None:
+    """Split matched Sangster molecules and add them to the common releases."""
+
+    split_keys = split_molecule_keys(
+        (
+            key
+            for _, key in sangster_release["keyed_rows"]
+            if record_ids_by_key.get(key)
+        ),
+        train_fraction=train_fraction,
+        seed=seed,
+    )
+    for split in SPLITS:
+        keyed_rows = [
+            (row, key)
+            for row, key in sangster_release["keyed_rows"]
+            if key in split_keys[split]
+        ]
+        releases[(SANGSTER_ENDPOINT, split)] = {
+            **sangster_release,
+            "rows": [row for row, _ in keyed_rows],
+            "keyed_rows": keyed_rows,
+            "invalid_rows": 0,
+        }
 
 
 def index_requested_nmr_records(
@@ -308,6 +432,9 @@ def prepare_admet_datasets(
     output_root: str | Path,
     train_output_path: str | Path,
     *,
+    sangster_workbook_path: str | Path,
+    sangster_train_fraction: float = 0.8,
+    sangster_seed: int = 42,
     report_output_path: str | Path | None = None,
     smiles_column: str = "Drug",
     label_column: str = "Y",
@@ -323,6 +450,7 @@ def prepare_admet_datasets(
     property_root = Path(tdc_root)
     cohort_root = Path(output_root)
     train_output = Path(train_output_path)
+    sangster_workbook = Path(sangster_workbook_path)
 
     releases, requested_keys, cross_split_keys_by_endpoint = (
         load_property_releases(
@@ -331,12 +459,22 @@ def prepare_admet_datasets(
             label_column,
         )
     )
+    sangster_release = load_sangster_release(sangster_workbook)
+    requested_keys.update(key for _, key in sangster_release["keyed_rows"])
     input_file, record_ids_by_key, input_summary = index_requested_nmr_records(
         input_file_path,
         requested_keys,
         batch_size=batch_size,
         show_progress=show_progress,
     )
+    add_sangster_splits(
+        releases,
+        sangster_release,
+        record_ids_by_key,
+        train_fraction=sangster_train_fraction,
+        seed=sangster_seed,
+    )
+    cross_split_keys_by_endpoint[SANGSTER_ENDPOINT] = set()
 
     planned_parquets: dict[tuple[str, str] | str, tuple[Path, Path]] = {}
     planned_csvs: dict[tuple[str, str], tuple[Path, Path]] = {}
@@ -467,7 +605,7 @@ def prepare_admet_datasets(
             {
                 b"postprocess_step": b"prepare_admet_datasets",
                 b"postprocess_script": SCRIPT_PATH.encode("utf-8"),
-                b"postprocess_output_role": b"admet_disjoint_train_validation",
+                b"postprocess_output_role": b"admet_disjoint_rich",
                 b"molecule_identity": IDENTITY_DESCRIPTION.encode("utf-8"),
                 b"removed_record_count": str(len(all_matched_record_ids)).encode(
                     "utf-8"
@@ -495,9 +633,10 @@ def prepare_admet_datasets(
             "inputs": {
                 "dataset": str(input_file_path),
                 "admet_source": str(property_root),
+                "sangster_workbook": str(sangster_workbook),
             },
             "outputs": {
-                "train_val": str(final_train),
+                "rich": str(final_train),
                 "admet_root": str(cohort_root),
             },
             "counts": {
@@ -510,6 +649,14 @@ def prepare_admet_datasets(
                 "cross_split_molecules": {
                     endpoint: len(keys)
                     for endpoint, keys in cross_split_keys_by_endpoint.items()
+                },
+                "sangster": {
+                    "sheet": sangster_release["sheet"],
+                    "source_records": sangster_release["source_rows"],
+                    "p_class_records": len(sangster_release["rows"]),
+                    "invalid_p_class_records": sangster_release["invalid_rows"],
+                    "train_fraction": sangster_train_fraction,
+                    "seed": sangster_seed,
                 },
             },
         }
@@ -539,8 +686,11 @@ def build_argument_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path, help="cleaned rich train/validation")
     parser.add_argument("--tdc-root", required=True, type=Path)
+    parser.add_argument("--sangster-workbook", required=True, type=Path)
     parser.add_argument("--output-root", required=True, type=Path)
     parser.add_argument("--train-output", required=True, type=Path)
+    parser.add_argument("--sangster-train-fraction", type=float, default=0.8)
+    parser.add_argument("--sangster-seed", type=int, default=42)
     parser.add_argument("--smiles-column", default="Drug")
     parser.add_argument("--label-column", default="Y")
     parser.add_argument("--batch-size", type=int, default=50_000)
@@ -563,6 +713,9 @@ def main() -> None:
         args.tdc_root,
         args.output_root,
         args.train_output,
+        sangster_workbook_path=args.sangster_workbook,
+        sangster_train_fraction=args.sangster_train_fraction,
+        sangster_seed=args.sangster_seed,
         report_output_path=args.report_output,
         smiles_column=args.smiles_column,
         label_column=args.label_column,

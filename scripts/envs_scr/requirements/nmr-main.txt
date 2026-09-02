@@ -12,6 +12,7 @@ lz4>=4.3,<5
 matplotlib>=3.8,<4
 mlflow>=2.17,<4
 numpy>=1.26,<3
+openpyxl>=3.1,<4
 pandas>=2,<3
 psutil>=5.9,<8
 pyarrow>=17,<26

@@ -89,7 +89,7 @@ class SplitFoundationDatasetsTests(unittest.TestCase):
             high = ordered[-6:]
 
             self.write_source(cleaned, "simnmr", [shared, high[0], high[1]])
-            self.write_source(cleaned, "train_val", [shared, high[2], high[3]])
+            self.write_source(cleaned, "rich", [shared, high[2], high[3]])
             self.write_source(cleaned, "nmrgym", [high[4], high[5], high[3]])
 
             first_output = root / "first"

@@ -1,0 +1,6 @@
+outs:
+- md5: 129c6ed6ec834fdf57991310da9eae58.dir
+  size: 2657854
+  nfiles: 1
+  hash: md5
+  path: sangster_logp

@@ -121,15 +121,28 @@ implementation note linked below.
 
 The final processed collection is public on
 [Hugging Face](https://huggingface.co/datasets/niccogreek/nmr-canonical-cleaned).
-It contains the cleaned train/validation and benchmark Parquets, SimNMR and
-NMRGym shift-only pools, ADMET cohorts, molecular-property Parquets, and analytics.
-Most users should download it directly:
+It contains the cleaned rich pretraining and benchmark Parquets, SimNMR and
+NMRGym shift-only pools, five property cohorts (AqSolDB, LD50 Zhu, Ames,
+AstraZeneca lipophilicity, and Sangster logP), molecular-property Parquets,
+and analytics. Most users should download it directly:
 
 ```bash
 hf download niccogreek/nmr-canonical-cleaned \
   --repo-type dataset \
   --local-dir datasets/cleaned
 ```
+
+To create the molecule-safe train/validation files used by FoMoNMR, run the
+last two DVC stages from the repository root:
+
+```bash
+dvc repro --single-item split_foundation_datasets
+dvc repro --single-item split_maccs_probe
+```
+
+The first stage creates `datasets/train_splits/`; the second creates the fixed
+MACCS probe split from rich validation. Both use the cleaned NMR and
+molecular-property Parquets downloaded from Hugging Face.
 
 To reproduce or modify the collection, activate the main environment, download
 the pinned raw sources, then let DVC rebuild the complete graph:

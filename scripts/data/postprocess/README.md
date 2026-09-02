@@ -58,7 +58,7 @@ requires exact full-key equality. Connectivity-only matching is not part of
 the maintained pipeline.
 
 Intermediate names should describe their current role. Final collection files
-should use stable names such as `train_val.parquet`, `test_benchmark.parquet`,
+should use stable names such as `rich.parquet`, `test_benchmark.parquet`,
 `simnmr.parquet`, and `nmrgym.parquet`; historical names such as `double` and
 `extended` are not needed in the final release.
 
@@ -180,8 +180,8 @@ and `<input>_removed.parquet` beside the input.
 
 ## `prepare_admet_datasets.py`
 
-Runs after rich train/validation has been extended and filtered. It reads the
-small TDC endpoint files first, calculates their full InChIKeys, then streams
+Runs after rich train/validation has been extended and filtered. It reads the small TDC endpoint files and the high-confidence Sangster logP
+rows first, calculates their full InChIKeys, then streams
 the large cleaned NMR input once and retains only requested matches in memory.
 It creates the endpoint `train_val` and `test` label/Parquet pairs and removes
 the union of all matched records from the pretraining output.
@@ -200,8 +200,9 @@ Repeated or cross-split property identities are handled during the same step:
 PYTHONPATH=scripts python scripts/data/postprocess/prepare_admet_datasets.py \
   datasets/intermediate/train_val_filtered.parquet \
   --tdc-root datasets/raw/admet \
+  --sangster-workbook datasets/raw/sangster_logp/Datasets.xlsx \
   --output-root datasets/cleaned/admet \
-  --train-output datasets/cleaned/train_val.parquet
+  --train-output datasets/cleaned/rich.parquet
 ```
 
 Because the input has already passed the common filter, the resulting ADMET
@@ -220,7 +221,7 @@ groups so training workers can read the NMR and molecular files together.
 
 ```bash
 PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \
-  datasets/cleaned/train_val.parquet \
+  datasets/cleaned/rich.parquet \
   --workers 8
 ```
 
@@ -236,11 +237,6 @@ SMARTS functional-group indicators, Morgan/ECFP4, and MACCS. Invalid structures
 remain represented by a row with `rdkit_status` and `rdkit_error` rather than
 being silently dropped. The complete column definitions are in
 `contex/Dataset Analysis.md`.
-
-The temporary `convert_mol_properties_csv_to_parquet.py` utility migrates the
-legacy same-order CSV files without recalculating RDKit features. It validates
-every `record_id` and recreates the row-group layout from the paired NMR
-Parquet. It is intentionally not part of the DVC DAG.
 
 ## `split_foundation_datasets.py`
 

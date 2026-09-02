@@ -316,13 +316,13 @@ add_filter_stage \
     true
 
 admet_deps=()
-for endpoint in solubility_aqsoldb ld50_zhu ames; do
+for endpoint in solubility_aqsoldb ld50_zhu ames lipophilicity_astrazeneca; do
     for split in train_val test; do
         admet_deps+=("datasets/raw/admet/${endpoint}/${split}.csv")
     done
 done
-admet_outputs=(datasets/cleaned/train_val.parquet)
-for endpoint in solubility_aqsoldb ld50_zhu ames; do
+admet_outputs=(datasets/cleaned/rich.parquet)
+for endpoint in solubility_aqsoldb ld50_zhu ames lipophilicity_astrazeneca sangster_logp; do
     for split in train_val test; do
         admet_outputs+=("datasets/cleaned/admet/${endpoint}/${split}.parquet")
         admet_outputs+=("datasets/cleaned/admet/${endpoint}/${split}.csv")
@@ -333,9 +333,12 @@ admet_outputs+=("${admet_report}")
 prepare_admet_args=(
     stage add --force --name prepare_admet
     --deps datasets/intermediate/train_val_filtered.parquet
+    --deps datasets/raw/sangster_logp/Datasets.xlsx
     --deps scripts/data/postprocess/prepare_admet_datasets.py
     "${postprocess_dep_args[@]}"
     --params postprocess.batch_size
+    --params admet.sangster_train_fraction
+    --params admet.sangster_seed
 )
 for dependency in "${admet_deps[@]}"; do
     prepare_admet_args+=(--deps "${dependency}")
@@ -347,8 +350,11 @@ prepare_admet_command="PYTHONPATH=scripts python"
 prepare_admet_command+=" scripts/data/postprocess/prepare_admet_datasets.py"
 prepare_admet_command+=" datasets/intermediate/train_val_filtered.parquet"
 prepare_admet_command+=" --tdc-root datasets/raw/admet"
+prepare_admet_command+=" --sangster-workbook datasets/raw/sangster_logp/Datasets.xlsx"
 prepare_admet_command+=" --output-root datasets/cleaned/admet"
-prepare_admet_command+=" --train-output datasets/cleaned/train_val.parquet"
+prepare_admet_command+=" --train-output datasets/cleaned/rich.parquet"
+prepare_admet_command+=" --sangster-train-fraction \${admet.sangster_train_fraction}"
+prepare_admet_command+=" --sangster-seed \${admet.sangster_seed}"
 prepare_admet_command+=" --batch-size \${postprocess.batch_size}"
 prepare_admet_command+=" --report-output ${admet_report}"
 prepare_admet_command+=" --quiet"
@@ -382,7 +388,7 @@ add_molecular_properties_stage() {
         "${command}"
 }
 
-add_molecular_properties_stage train train_val
+add_molecular_properties_stage rich rich
 add_molecular_properties_stage test test_benchmark
 add_molecular_properties_stage simnmr simnmr
 add_molecular_properties_stage nmrgym nmrgym
@@ -400,8 +406,8 @@ split_args=(
     stage add --force --name split_foundation_datasets
     --deps datasets/cleaned/simnmr.parquet
     --deps datasets/cleaned/simnmr_mol_properties.parquet
-    --deps datasets/cleaned/train_val.parquet
-    --deps datasets/cleaned/train_val_mol_properties.parquet
+    --deps datasets/cleaned/rich.parquet
+    --deps datasets/cleaned/rich_mol_properties.parquet
     --deps datasets/cleaned/nmrgym.parquet
     --deps datasets/cleaned/nmrgym_mol_properties.parquet
     --deps scripts/data/postprocess/split_foundation_datasets.py
@@ -467,16 +473,16 @@ probe_command+=" --overwrite --quiet"
 dvc "${probe_args[@]}" "${probe_command}"
 
 analytics_deps=(
-    datasets/cleaned/train_val.parquet
+    datasets/cleaned/rich.parquet
     datasets/cleaned/test_benchmark.parquet
     datasets/cleaned/simnmr.parquet
     datasets/cleaned/nmrgym.parquet
-    datasets/cleaned/train_val_mol_properties.parquet
+    datasets/cleaned/rich_mol_properties.parquet
     datasets/cleaned/test_benchmark_mol_properties.parquet
     datasets/cleaned/simnmr_mol_properties.parquet
     datasets/cleaned/nmrgym_mol_properties.parquet
 )
-for endpoint in solubility_aqsoldb ld50_zhu ames; do
+for endpoint in solubility_aqsoldb ld50_zhu ames lipophilicity_astrazeneca sangster_logp; do
     for split in train_val test; do
         analytics_deps+=("datasets/cleaned/admet/${endpoint}/${split}.parquet")
         analytics_deps+=("datasets/cleaned/admet/${endpoint}/${split}.csv")

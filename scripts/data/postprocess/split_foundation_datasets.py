@@ -18,7 +18,7 @@ from data.reporting import prepare_report_output, write_processing_report
 
 SOURCES = {
     "simnmr": "simnmr",
-    "rich": "train_val",
+    "rich": "rich",
     "nmrgym": "nmrgym",
 }
 

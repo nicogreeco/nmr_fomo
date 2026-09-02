@@ -6,6 +6,10 @@ canonicalize:
 postprocess:
   batch_size: 50000
 
+admet:
+  sangster_train_fraction: 0.8
+  sangster_seed: 42
+
 mol_properties:
   records_per_task: 1000
   workers: 8

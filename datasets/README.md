@@ -8,7 +8,7 @@ the canonical pipeline.
 
 | Path | Contents | DVC policy |
 |---|---|---|
-| `raw/` | Original inputs: ADMET, MST-NMR, NMRexp, NMRTrans, NMRGym, SimNMR-PubChem | Source directories pinned by `.dvc` files; downloadable from public upstream releases |
+| `raw/` | Original inputs: ADMET, Sangster logP, MST-NMR, NMRexp, NMRTrans, NMRGym, SimNMR-PubChem | Source directories pinned by `.dvc` files; downloadable from public upstream releases |
 | `canonical/` | One schema-v2 Parquet per source split used by the pipeline | Cached and locked, `push: false` |
 | `intermediate/` | Rich merges, overlap-transfer outputs, pre-clean benchmark, filtered train, and removal audits | Cached and locked, `push: false` |
 | `cleaned/` | Final train/test, SimNMR, NMRGym, ADMET cohorts, molecular-property Parquets, and analytics | Locked by DVC and released publicly on Hugging Face |
@@ -25,8 +25,8 @@ stable human-readable provenance, licence where known, released filenames, and
 the converter or consumer. Keep secrets and machine-specific paths out of both.
 
 The ADMET raw directory contains all 22 downloaded TDC endpoints, while the
-current production stage declares only Ames, LD50 Zhu, and AqSolDB solubility
-as dependencies.
+production stage uses Ames, LD50 Zhu, AqSolDB solubility, and AstraZeneca
+lipophilicity from TDC, plus the separately tracked Sangster logP workbook.
 
 Download all raw inputs from their public upstream releases with:
 
@@ -62,15 +62,15 @@ A successful full run produces:
 cleaned/
 ├── README.md
 ├── ANALYTICS.md
-├── train_val.parquet
+├── rich.parquet
 ├── test_benchmark.parquet
 ├── simnmr.parquet
 ├── nmrgym.parquet
-├── {train_val,test_benchmark,simnmr,nmrgym}_mol_properties.parquet
+├── {rich,test_benchmark,simnmr,nmrgym}_mol_properties.parquet
 ├── *_report.json
 ├── admet/
 │   ├── preparation_report.json
-│   └── {ames,ld50_zhu,solubility_aqsoldb}/{train_val,test}.{csv,parquet}
+│   └── {ames,ld50_zhu,solubility_aqsoldb,lipophilicity_astrazeneca,sangster_logp}/{train_val,test}.{csv,parquet}
 └── analytics/
 ```
 

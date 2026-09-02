@@ -13,9 +13,9 @@ size_categories:
 
 # Canonical NMR Dataset Collection — Data Card
 
-**Dataset release:** v3  
-**Canonical schema:** v2  
-**Spectral modalities:** `1H` and `13C` resonance-level peak lists
+- **Dataset release:** v4
+- **Canonical schema:** v2
+- **Spectral modalities:** `1H` and `13C` resonance-level peak lists
 
 ## Collection overview
 
@@ -26,13 +26,14 @@ the provenance and annotation coverage of every source.
 
 The collection has five functional components:
 
-1. **`train_val`**, the common representation-learning pool built from the
+1. **`rich`**, the common representation-learning pool built from the
    MST-NMR, NMRexp, and NMRTrans/NMRSpec train and validation partitions;
 2. **`test_benchmark`**, the union of their published test partitions after
    moving SimNMR-overlapping rich spectra into training and removing residual
    exact-canonical-SMILES overlap with the extended train pool and NMRGym;
-3. **ADMET subsets**, exact molecule matches to three TDC endpoints, with the
-   original TDC train/validation and test assignments;
+3. **ADMET subsets**, exact molecule matches to four TDC endpoints plus
+   Sangster logP; TDC assignments are preserved and Sangster uses a deterministic
+   molecule-disjoint 80/20 split;
 4. **SimNMR-PubChem / NMR-Solver**, a much larger simulated shift-only
    component kept separate because its proton peaks contain shifts and
    equivalence-derived integration, while multiplicity, J coupling, and
@@ -56,7 +57,7 @@ deduplication rule described below.
 | NMRTrans / NMRSpec | Experimental peak tables mined from chemistry Supporting Information published between 2013 and 2025; this collection uses the released 212,440-record model dataset. | [NMRTrans](https://arxiv.org/abs/2602.10158) |
 | SimNMR-PubChem / NMR-Solver | PubChem-scale simulated atom-level `1H` and `13C` shifts grouped through supplied equivalence classes. | [NMR-Solver](https://doi.org/10.1038/s41467-026-71315-0) |
 | NMRGym | Experimental paired `1H` and `13C` shift lists released as the scaffold-split NMRGym benchmark used by UltraNMR. | [UltraNMR](https://arxiv.org/abs/2606.20756), [source repository](https://github.com/wuycM/UltraNMR) |
-| ADMET labels | Ames, LD50 Zhu, and AqSolDB solubility endpoints with the official Therapeutics Data Commons splits. | [Property benchmark notes](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Properties%20Dataset.md) |
+| ADMET labels | Ames, LD50 Zhu, AqSolDB solubility, and AstraZeneca lipophilicity use official Therapeutics Data Commons splits; Sangster logP uses the high-confidence `P` subset from Zenodo. | [Property benchmark notes](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Properties%20Dataset.md) |
 
 The source papers describe collection and upstream curation. This repository
 starts from the released processed representations and records the additional
@@ -66,16 +67,35 @@ canonicalisation, split protection, and cleaning applied here.
 
 | Component | NMR records | Labels or derived features |
 |---|---|---|
-| Representation-learning pool | [`train_val.parquet`](train_val.parquet) | [`train_val_mol_properties.parquet`](train_val_mol_properties.parquet) |
+| Representation-learning pool | [`rich.parquet`](rich.parquet) | [`rich_mol_properties.parquet`](rich_mol_properties.parquet) |
 | Molecule-disjoint benchmark | [`test_benchmark.parquet`](test_benchmark.parquet) | [`test_benchmark_mol_properties.parquet`](test_benchmark_mol_properties.parquet) |
 | SimNMR-PubChem shift-only pool | [`simnmr.parquet`](simnmr.parquet) | [`simnmr_mol_properties.parquet`](simnmr_mol_properties.parquet) |
 | NMRGym experimental shift-only pool | [`nmrgym.parquet`](nmrgym.parquet) | [`nmrgym_mol_properties.parquet`](nmrgym_mol_properties.parquet) |
 | Ames | [`train_val.parquet`](admet/ames/train_val.parquet), [`test.parquet`](admet/ames/test.parquet) | Matched [train/validation](admet/ames/train_val.csv) and [test](admet/ames/test.csv) labels |
 | LD50 Zhu | [`train_val.parquet`](admet/ld50_zhu/train_val.parquet), [`test.parquet`](admet/ld50_zhu/test.parquet) | Matched [train/validation](admet/ld50_zhu/train_val.csv) and [test](admet/ld50_zhu/test.csv) labels |
 | AqSolDB solubility | [`train_val.parquet`](admet/solubility_aqsoldb/train_val.parquet), [`test.parquet`](admet/solubility_aqsoldb/test.parquet) | Matched [train/validation](admet/solubility_aqsoldb/train_val.csv) and [test](admet/solubility_aqsoldb/test.csv) labels |
+| AstraZeneca lipophilicity | [`train_val.parquet`](admet/lipophilicity_astrazeneca/train_val.parquet), [`test.parquet`](admet/lipophilicity_astrazeneca/test.parquet) | Matched [train/validation](admet/lipophilicity_astrazeneca/train_val.csv) and [test](admet/lipophilicity_astrazeneca/test.csv) labels |
+| Sangster logP | [`train_val.parquet`](admet/sangster_logp/train_val.parquet), [`test.parquet`](admet/sangster_logp/test.parquet) | Deterministic molecule-level [train/validation](admet/sangster_logp/train_val.csv) and [test](admet/sangster_logp/test.csv) labels |
 
 The adjacent `*_report.json` files are compact processing reports generated by
 the same DVC run; `admet/preparation_report.json` records cohort construction.
+
+### Creating the FoMoNMR training splits
+
+After cloning the project repository, download this release into
+`datasets/cleaned/` and run the two final DVC stages:
+
+```bash
+hf download niccogreek/nmr-canonical-cleaned \
+  --repo-type dataset \
+  --local-dir datasets/cleaned
+dvc repro --single-item split_foundation_datasets
+dvc repro --single-item split_maccs_probe
+```
+
+This creates the molecule-safe train/validation files under
+`datasets/train_splits/` and the fixed MACCS probe split. It does not rebuild
+the raw, canonical, or intermediate datasets.
 
 Each molecular-property Parquet has one row per final NMR `record_id`. It contains
 RDKit descriptors, functional-group indicators, ECFP4 and MACCS fingerprints,
@@ -238,7 +258,7 @@ Example streaming access:
 ```python
 from data.dataset import CanonicalParquetDataset
 
-records = CanonicalParquetDataset("datasets/cleaned/train_val.parquet")
+records = CanonicalParquetDataset("datasets/cleaned/rich.parquet")
 
 for record in records:
     h_shifts = [peak.shift for peak in record.h_nmr_peaks]
@@ -413,12 +433,13 @@ the extended rich pool and 436 from the benchmark, leaving 1,953,201 and
 
 ### 5. ADMET preparation
 
-Ames, LD50 Zhu, and AqSolDB solubility retain their official TDC split
-assignments. Repeated property identities are consolidated; discordant labels
+Ames, LD50 Zhu, AqSolDB solubility, and AstraZeneca lipophilicity
+retain their official TDC split assignments. Sangster logP uses the 13,812
+high-confidence `P` molecules and a deterministic full-InChIKey 80/20 split. Repeated property identities are consolidated; discordant labels
 are excluded, and the single Ames identity occurring across official splits is
 removed from both splits. Full RDKit InChIKeys match the external structures to
-rich spectra. The union contains 5,401 matched molecules and removes 7,513 NMR
-records from pretraining, leaving 1,945,688 final `train_val` records.
+rich spectra. The union contains 8,169 matched molecules and removes 11,354 NMR
+records from pretraining, leaving 1,941,847 final `rich` records.
 
 ### 6. Molecular properties, reports, and analytics
 
@@ -433,10 +454,10 @@ pipeline, parameters, dependencies, and output hashes are tracked by
 
 | Dataset | Source | Records | Unique canonical SMILES | With `1H` | With `13C` | With both |
 |---|---|---:|---:|---:|---:|---:|
-| Train/validation | MST-NMR | 773,008 | 772,951 | 773,008 | 773,008 | 773,008 |
-| Train/validation | NMRexp | 995,124 | 995,124 | 870,029 | 849,287 | 724,192 |
-| Train/validation | NMRTrans / NMRSpec | 177,556 | 177,556 | 177,556 | 177,556 | 177,556 |
-| **Train/validation** | **All** | **1,945,688** | **1,872,304** | **1,820,593** | **1,799,851** | **1,674,756** |
+| Rich | MST-NMR | 771,255 | 771,199 | 771,255 | 771,255 | 771,255 |
+| Rich | NMRexp | 993,568 | 993,568 | 868,591 | 847,898 | 722,921 |
+| Rich | NMRTrans / NMRSpec | 177,024 | 177,024 | 177,024 | 177,024 | 177,024 |
+| **Rich** | **All** | **1,941,847** | **1,869,511** | **1,816,870** | **1,796,177** | **1,671,200** |
 | Benchmark test | MST-NMR | 3,717 | 3,717 | 3,717 | 3,717 | 3,717 |
 | Benchmark test | NMRexp | 74,209 | 74,209 | 64,866 | 63,446 | 54,103 |
 | Benchmark test | NMRTrans / NMRSpec | 9,971 | 9,971 | 9,971 | 9,971 | 9,971 |
@@ -455,9 +476,14 @@ remain paired in both files.
 | LD50 Zhu | Test | 574 | 427 |
 | AqSolDB solubility | Train/validation | 3,777 | 2,671 |
 | AqSolDB solubility | Test | 770 | 567 |
+| AstraZeneca lipophilicity | Train/validation | 865 | 678 |
+| AstraZeneca lipophilicity | Test | 182 | 153 |
+| Sangster logP | Train/validation | 4,565 | 3,091 |
+| Sangster logP | Test | 1,153 | 773 |
 
 A molecule can have several distinct NMR records, so spectrum-record counts can
-exceed unique property structures. Target definitions and units follow TDC.
+exceed unique property structures. Target definitions and units follow the TDC
+releases or, for Sangster, the pinned Zenodo workbook.
 
 ### SimNMR-PubChem shift-only component
 

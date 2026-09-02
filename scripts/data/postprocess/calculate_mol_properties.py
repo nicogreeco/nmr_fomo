@@ -15,7 +15,7 @@ left to the model collator, avoiding a 2,048-value representation on disk.
 
 Example:
     PYTHONPATH=scripts python scripts/data/postprocess/calculate_mol_properties.py \\
-        datasets/cleaned/train_val.parquet --workers 8
+        datasets/cleaned/rich.parquet --workers 8
 """
 
 from __future__ import annotations
@@ -63,7 +63,6 @@ MORGAN_RADIUS = 2
 MORGAN_FP_SIZE = 2048
 MORGAN_FP_BYTES = MORGAN_FP_SIZE // 8
 MORGAN_FIELD = "morgan_ecfp4_2048"
-LEGACY_MORGAN_HEX_FIELD = "morgan_ecfp4_2048_hex"
 MACCS_OUTPUT_BITS = 166
 MACCS_FIELD = "maccs_keys_166_bits"
 
@@ -138,14 +137,6 @@ def molecular_properties_schema() -> pa.Schema:
 
 
 MOLECULAR_PROPERTY_FIELDS = molecular_properties_schema().names
-LEGACY_CSV_FIELDS = [
-    *MOLECULAR_PROPERTY_FIELDS[:-2],
-    LEGACY_MORGAN_HEX_FIELD,
-    MACCS_FIELD,
-]
-# Retain the old public name for the one-time migration helper and downstream
-# notebooks that may still inspect the legacy CSV header.
-CSV_FIELDS = LEGACY_CSV_FIELDS
 
 
 def default_output_path(input_path: Path) -> Path:

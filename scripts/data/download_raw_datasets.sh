@@ -17,6 +17,8 @@ ZENODO_MD5="b27be622059908c9f07b6e9ba3ff641f"
 ADMET_URL="https://dataverse.harvard.edu/api/access/datafile/4426004"
 ADMET_FALLBACK_URL="https://zenodo.org/api/records/20180944/files/tdc_admet_group_2026-03-24.tar.gz/content"
 ADMET_FALLBACK_SHA256="8ac217bd8c316d04d15ab2ef5173ef6e9a084e156dfcd16c0ac21e2ed6e4590b"
+SANGSTER_URL="https://zenodo.org/records/19387552/files/Datasets.xlsx?download=1"
+SANGSTER_SHA256="a5f998a690ff48d820afe11b23d2522e95ff11764f6d13c773749750f3ea8d42"
 
 STEP_INDEX=0
 STEP_TOTAL=0
@@ -29,7 +31,7 @@ Usage:
   scripts/data/download_raw_datasets.sh [--no-verify] TARGET [TARGET ...]
 
 Targets:
-  admet mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem all
+  admet sangster_logp mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem all
 
 Examples:
   scripts/data/download_raw_datasets.sh nmrtrans nmrgym
@@ -197,6 +199,28 @@ download_admet() {
     trap - RETURN
 }
 
+download_sangster_logp() {
+    local target="$RAW_ROOT/sangster_logp"
+    require_new_target "$target"
+
+    local staging workbook
+    staging="$(mktemp -d)"
+    workbook="$staging/Datasets.xlsx"
+    trap 'rm -rf -- "$staging"' RETURN
+
+    printf 'Retrieving the Sangster logP workbook from Zenodo...\n'
+    curl --fail --location --retry 3 --progress-bar \
+        --output "$workbook" "$SANGSTER_URL"
+    printf '%s  %s\n' "$SANGSTER_SHA256" "$workbook" | sha256sum --check --status \
+        || die "the Sangster workbook checksum does not match release 19387552"
+    mkdir -p "$target"
+    mv "$workbook" "$target/Datasets.xlsx"
+    printf 'Completed sangster_logp.\n'
+
+    rm -rf -- "$staging"
+    trap - RETURN
+}
+
 download_simnmr() {
     local target_dir="$RAW_ROOT/simnmr_pubchem"
     local final_file="$target_dir/metadata/PubChem_merged_id.lmdb"
@@ -286,6 +310,7 @@ main() {
     for target in "$@"; do
         if [[ "$target" == all ]]; then
             selected[admet]=1
+            selected[sangster_logp]=1
             selected[mst_nmr]=1
             selected[nmrexp]=1
             selected[nmrgym]=1
@@ -293,7 +318,7 @@ main() {
             selected[simnmr_pubchem]=1
         else
             case "$target" in
-                admet|mst_nmr|nmrexp|nmrgym|nmrtrans|simnmr_pubchem)
+                admet|sangster_logp|mst_nmr|nmrexp|nmrgym|nmrtrans|simnmr_pubchem)
                     selected["$target"]=1
                     ;;
                 *)
@@ -306,19 +331,24 @@ main() {
     local want_mst="${selected[mst_nmr]:-0}"
     local want_nmrexp="${selected[nmrexp]:-0}"
     local selected_names=()
-    for target in admet mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
+    for target in admet sangster_logp mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
         [[ "${selected[$target]:-0}" == 0 ]] || selected_names+=("$target")
     done
     STEP_TOTAL="${#selected_names[@]}"
     printf 'Selected %d dataset(s): %s\n' "$STEP_TOTAL" "${selected_names[*]}"
 
-    if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 || "${selected[admet]:-0}" == 1 ]]; then
+    if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 || "${selected[admet]:-0}" == 1 || "${selected[sangster_logp]:-0}" == 1 ]]; then
         require_command curl
+    fi
+    if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 || "${selected[admet]:-0}" == 1 ]]; then
         require_command unzip
     fi
     if [[ "${selected[admet]:-0}" == 1 ]]; then
         require_command sha256sum
         require_command tar
+    fi
+    if [[ "${selected[sangster_logp]:-0}" == 1 ]]; then
+        require_command sha256sum
     fi
     if [[ "$want_mst" == 1 || "$want_nmrexp" == 1 ]]; then
         require_command md5sum
@@ -344,6 +374,10 @@ main() {
         announce_step 1 "Downloading admet"
         download_admet
     fi
+    if [[ "${selected[sangster_logp]:-0}" == 1 ]]; then
+        announce_step 1 "Downloading sangster_logp"
+        download_sangster_logp
+    fi
     if [[ "${selected[nmrgym]:-0}" == 1 ]]; then
         announce_step 1 "Downloading nmrgym"
         download_hf_files \
@@ -368,7 +402,7 @@ main() {
     if [[ "$verify" == 1 ]]; then
         printf 'Verifying selected datasets against DVC pointers...\n'
         local pointers=()
-        for target in admet mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
+        for target in admet sangster_logp mst_nmr nmrexp nmrgym nmrtrans simnmr_pubchem; do
             [[ "${selected[$target]:-0}" == 0 ]] || pointers+=("datasets/raw/$target.dvc")
         done
         verify_downloads "${pointers[@]}"

@@ -463,8 +463,11 @@ stages:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/prepare_admet_datasets.py
       datasets/intermediate/train_val_filtered.parquet --tdc-root
-      datasets/raw/admet --output-root datasets/cleaned/admet --train-output
-      datasets/cleaned/train_val.parquet --batch-size ${postprocess.batch_size}
+      datasets/raw/admet --sangster-workbook
+      datasets/raw/sangster_logp/Datasets.xlsx --output-root
+      datasets/cleaned/admet --train-output datasets/cleaned/rich.parquet
+      --sangster-train-fraction ${admet.sangster_train_fraction} --sangster-seed
+      ${admet.sangster_seed} --batch-size ${postprocess.batch_size}
       --report-output datasets/cleaned/admet/preparation_report.json --quiet
     deps:
     - datasets/intermediate/train_val_filtered.parquet
@@ -472,8 +475,11 @@ stages:
     - datasets/raw/admet/ames/train_val.csv
     - datasets/raw/admet/ld50_zhu/test.csv
     - datasets/raw/admet/ld50_zhu/train_val.csv
+    - datasets/raw/admet/lipophilicity_astrazeneca/test.csv
+    - datasets/raw/admet/lipophilicity_astrazeneca/train_val.csv
     - datasets/raw/admet/solubility_aqsoldb/test.csv
     - datasets/raw/admet/solubility_aqsoldb/train_val.csv
+    - datasets/raw/sangster_logp/Datasets.xlsx
     - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/console.py
@@ -484,6 +490,8 @@ stages:
     - scripts/data/validation.py
     - scripts/envs_scr/requirements/nmr-main.txt
     params:
+    - admet.sangster_seed
+    - admet.sangster_train_fraction
     - postprocess.batch_size
     outs:
     - datasets/cleaned/admet/ames/test.csv
@@ -494,37 +502,20 @@ stages:
     - datasets/cleaned/admet/ld50_zhu/test.parquet
     - datasets/cleaned/admet/ld50_zhu/train_val.csv
     - datasets/cleaned/admet/ld50_zhu/train_val.parquet
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/test.csv
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/test.parquet
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.csv
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.parquet
     - datasets/cleaned/admet/preparation_report.json
+    - datasets/cleaned/admet/sangster_logp/test.csv
+    - datasets/cleaned/admet/sangster_logp/test.parquet
+    - datasets/cleaned/admet/sangster_logp/train_val.csv
+    - datasets/cleaned/admet/sangster_logp/train_val.parquet
     - datasets/cleaned/admet/solubility_aqsoldb/test.csv
     - datasets/cleaned/admet/solubility_aqsoldb/test.parquet
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.csv
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
-    - datasets/cleaned/train_val.parquet
-  calculate_train_properties:
-    cmd: PYTHONPATH=scripts python
-      scripts/data/postprocess/calculate_mol_properties.py
-      datasets/cleaned/train_val.parquet --output
-      datasets/cleaned/train_val_mol_properties.parquet --records-per-task
-      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
-      --report-output datasets/cleaned/train_val_mol_properties_report.json
-      --quiet
-    deps:
-    - datasets/cleaned/train_val.parquet
-    - scripts/data/__init__.py
-    - scripts/data/canonicalize/common.py
-    - scripts/data/console.py
-    - scripts/data/postprocess/calculate_mol_properties.py
-    - scripts/data/postprocess/common.py
-    - scripts/data/reporting.py
-    - scripts/data/schema.py
-    - scripts/data/validation.py
-    - scripts/envs_scr/requirements/nmr-main.txt
-    params:
-    - mol_properties.records_per_task
-    - mol_properties.workers
-    outs:
-    - datasets/cleaned/train_val_mol_properties.parquet
-    - datasets/cleaned/train_val_mol_properties_report.json
+    - datasets/cleaned/rich.parquet
   calculate_test_properties:
     cmd: PYTHONPATH=scripts python
       scripts/data/postprocess/calculate_mol_properties.py
@@ -621,18 +612,26 @@ stages:
     - datasets/cleaned/admet/ld50_zhu/test.parquet
     - datasets/cleaned/admet/ld50_zhu/train_val.csv
     - datasets/cleaned/admet/ld50_zhu/train_val.parquet
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/test.csv
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/test.parquet
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.csv
+    - datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.parquet
+    - datasets/cleaned/admet/sangster_logp/test.csv
+    - datasets/cleaned/admet/sangster_logp/test.parquet
+    - datasets/cleaned/admet/sangster_logp/train_val.csv
+    - datasets/cleaned/admet/sangster_logp/train_val.parquet
     - datasets/cleaned/admet/solubility_aqsoldb/test.csv
     - datasets/cleaned/admet/solubility_aqsoldb/test.parquet
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.csv
     - datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
     - datasets/cleaned/nmrgym.parquet
     - datasets/cleaned/nmrgym_mol_properties.parquet
+    - datasets/cleaned/rich.parquet
+    - datasets/cleaned/rich_mol_properties.parquet
     - datasets/cleaned/simnmr.parquet
     - datasets/cleaned/simnmr_mol_properties.parquet
     - datasets/cleaned/test_benchmark.parquet
     - datasets/cleaned/test_benchmark_mol_properties.parquet
-    - datasets/cleaned/train_val.parquet
-    - datasets/cleaned/train_val_mol_properties.parquet
     - scripts/data/__init__.py
     - scripts/data/console.py
     - scripts/data/postprocess/analyze_cleaned_datasets.py
@@ -658,10 +657,10 @@ stages:
     deps:
     - datasets/cleaned/nmrgym.parquet
     - datasets/cleaned/nmrgym_mol_properties.parquet
+    - datasets/cleaned/rich.parquet
+    - datasets/cleaned/rich_mol_properties.parquet
     - datasets/cleaned/simnmr.parquet
     - datasets/cleaned/simnmr_mol_properties.parquet
-    - datasets/cleaned/train_val.parquet
-    - datasets/cleaned/train_val_mol_properties.parquet
     - scripts/data/__init__.py
     - scripts/data/canonicalize/common.py
     - scripts/data/console.py
@@ -740,3 +739,27 @@ stages:
         cache: false
     - datasets/train_splits/maccs_probe/train_mol_properties.parquet:
         cache: false
+  calculate_rich_properties:
+    cmd: PYTHONPATH=scripts python
+      scripts/data/postprocess/calculate_mol_properties.py
+      datasets/cleaned/rich.parquet --output
+      datasets/cleaned/rich_mol_properties.parquet --records-per-task
+      ${mol_properties.records_per_task} --workers ${mol_properties.workers}
+      --report-output datasets/cleaned/rich_mol_properties_report.json --quiet
+    deps:
+    - datasets/cleaned/rich.parquet
+    - scripts/data/__init__.py
+    - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
+    - scripts/data/postprocess/calculate_mol_properties.py
+    - scripts/data/postprocess/common.py
+    - scripts/data/reporting.py
+    - scripts/data/schema.py
+    - scripts/data/validation.py
+    - scripts/envs_scr/requirements/nmr-main.txt
+    params:
+    - mol_properties.records_per_task
+    - mol_properties.workers
+    outs:
+    - datasets/cleaned/rich_mol_properties.parquet
+    - datasets/cleaned/rich_mol_properties_report.json

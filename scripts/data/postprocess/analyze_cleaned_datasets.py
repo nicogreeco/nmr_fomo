@@ -32,8 +32,14 @@ from data.console import (
 )
 from data.reporting import prepare_report_output, write_processing_report
 
-MAIN_DATASETS = ("train_val", "test_benchmark")
-ADMET_ENDPOINTS = ("ames", "ld50_zhu", "solubility_aqsoldb")
+MAIN_DATASETS = ("rich", "test_benchmark")
+ADMET_ENDPOINTS = (
+    "ames",
+    "ld50_zhu",
+    "solubility_aqsoldb",
+    "lipophilicity_astrazeneca",
+    "sangster_logp",
+)
 ADMET_SPLITS = ("train_val", "test")
 
 PROPERTY_COLUMNS = (
@@ -70,6 +76,8 @@ ENDPOINT_DISPLAY_NAMES = {
     "ames": "Ames",
     "ld50_zhu": "LD50 Zhu",
     "solubility_aqsoldb": "AqSolDB solubility",
+    "lipophilicity_astrazeneca": "AstraZeneca lipophilicity",
+    "sangster_logp": "Sangster logP",
 }
 
 
@@ -104,9 +112,9 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
-        "--train-val-parquet",
+        "--rich-parquet",
         type=Path,
-        help="custom cleaned train/validation Parquet",
+        help="custom cleaned rich Parquet",
     )
     parser.add_argument(
         "--test-benchmark-parquet",
@@ -1260,7 +1268,7 @@ def main() -> None:
     analytics_dir = args.analytics_dir or cleaned_root / "analytics"
     analytics_dir.mkdir(parents=True, exist_ok=True)
     main_dataset_paths = {
-        "train_val": args.train_val_parquet or cleaned_root / "train_val.parquet",
+        "rich": args.rich_parquet or cleaned_root / "rich.parquet",
         "test_benchmark": (
             args.test_benchmark_parquet
             or cleaned_root / "test_benchmark.parquet"

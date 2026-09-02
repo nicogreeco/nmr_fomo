@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import csv
 import tempfile
 import unittest
 from pathlib import Path
@@ -16,20 +15,14 @@ try:
     )
     from data.postprocess.calculate_mol_properties import (
         FUNCTIONAL_GROUP_SMARTS,
-        LEGACY_CSV_FIELDS,
-        LEGACY_MORGAN_HEX_FIELD,
         MACCS_OUTPUT_BITS,
         MOLECULAR_PROPERTY_FIELDS,
         MORGAN_FIELD,
         MORGAN_FP_BYTES,
         MORGAN_FP_SIZE,
-        calculate_row,
         default_output_path,
         export_molecular_properties,
         molecular_properties_schema,
-    )
-    from data.postprocess.convert_mol_properties_csv_to_parquet import (
-        convert_molecular_properties_csv,
     )
 except ModuleNotFoundError:
     pa = None
@@ -76,27 +69,6 @@ class CalculateMolecularPropertiesTest(unittest.TestCase):
             ),
         )
         parquet.write_table(table, path, row_group_size=2)
-
-    def write_legacy_csv(self, path: Path) -> None:
-        rows = []
-        for record_id, smiles in (
-            ("ethanol", "CCO"),
-            ("heteroaromatic", "c1ccncc1"),
-            ("amide", "CC(=O)N"),
-            ("invalid", "not-a-smiles"),
-            ("missing", None),
-        ):
-            row = calculate_row(record_id, smiles)
-            fingerprint = row.pop(MORGAN_FIELD)
-            row[LEGACY_MORGAN_HEX_FIELD] = (
-                None if fingerprint is None else fingerprint.hex()
-            )
-            rows.append(row)
-
-        with path.open("w", newline="", encoding="utf-8") as handle:
-            writer = csv.DictWriter(handle, fieldnames=LEGACY_CSV_FIELDS)
-            writer.writeheader()
-            writer.writerows(rows)
 
     def test_export_has_expected_schema_values_and_row_groups(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -190,71 +162,6 @@ class CalculateMolecularPropertiesTest(unittest.TestCase):
             parallel = parquet.read_table(parallel_path)
 
         self.assertTrue(sequential.equals(parallel, check_metadata=True))
-
-    def test_legacy_converter_matches_direct_calculation(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            input_path = root / "fixture.parquet"
-            direct_path = root / "direct.parquet"
-            legacy_path = root / "legacy.csv"
-            converted_path = root / "converted.parquet"
-            log_path = root / "migration.log"
-            self.write_fixture(input_path)
-            self.write_legacy_csv(legacy_path)
-
-            export_molecular_properties(
-                input_path,
-                direct_path,
-                records_per_task=2,
-                workers=1,
-                show_progress=False,
-            )
-            result = convert_molecular_properties_csv(
-                legacy_path,
-                input_path,
-                converted_path,
-                csv_block_size=2048,
-                log_every_row_groups=1,
-                log_output=log_path,
-                show_progress=False,
-            )
-            direct = parquet.read_table(direct_path)
-            converted = parquet.read_table(converted_path)
-            converted_file = parquet.ParquetFile(converted_path)
-            log_text = log_path.read_text(encoding="utf-8")
-
-        self.assertTrue(direct.equals(converted, check_metadata=True))
-        self.assertEqual(result["counts"]["output_records"], 5)
-        self.assertEqual(
-            [
-                converted_file.metadata.row_group(index).num_rows
-                for index in range(converted_file.num_row_groups)
-            ],
-            [2, 2, 1],
-        )
-        self.assertIn("COMPLETE", log_text)
-
-    def test_converter_rejects_record_id_mismatch(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            input_path = root / "fixture.parquet"
-            legacy_path = root / "legacy.csv"
-            self.write_fixture(input_path)
-            self.write_legacy_csv(legacy_path)
-
-            text = legacy_path.read_text(encoding="utf-8")
-            legacy_path.write_text(
-                text.replace("\nheteroaromatic,", "\nwrong-record,", 1),
-                encoding="utf-8",
-            )
-
-            with self.assertRaisesRegex(ValueError, "record_id mismatch"):
-                convert_molecular_properties_csv(
-                    legacy_path,
-                    input_path,
-                    csv_block_size=2048,
-                    show_progress=False,
-                )
 
     def test_existing_output_requires_overwrite_and_parquet_suffix(self):
         with tempfile.TemporaryDirectory() as directory:

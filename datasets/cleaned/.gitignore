@@ -1,7 +1,6 @@
 /test_benchmark_report.json
 /simnmr_report.json
 /nmrgym_report.json
-/train_val_mol_properties_report.json
 /test_benchmark_mol_properties_report.json
 /simnmr_mol_properties_report.json
 /nmrgym_mol_properties_report.json
@@ -11,3 +10,4 @@
 /analyze_nmrgym_report.json
 /admet/preparation_report.json
 /*_processor_compatibility.json
+/rich_mol_properties_report.json

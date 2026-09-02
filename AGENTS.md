@@ -77,7 +77,7 @@ La raccolta pubblicata e già materializzata con la pipeline DVC contiene:
 
 | Componente | Record | Ruolo |
 |---|---:|---|
-| Rich train/validation | 1.945.688 | pretraining ricco dopo trasferimento SimNMR, filtro e disgiunzione ADMET |
+| Rich | 1.941.847 | pretraining ricco dopo trasferimento SimNMR, filtro e disgiunzione dai cinque property dataset |
 | Rich benchmark test | 87.897 | disgiunto da rich train esteso, SimNMR e NMRGym per `smiles_canonical` esatto |
 | SimNMR-PubChem | 105.509.616 | grande pool shift-only simulato |
 | NMRGym | 265.095 | fonte shift-only sperimentale separata |
@@ -85,8 +85,9 @@ La raccolta pubblicata e già materializzata con la pipeline DVC contiene:
 La pipeline DVC mantenuta usa exact `smiles_canonical` per tutti gli overlap
 NMR–NMR. Prima sposta dal benchmark al train gli spettri rich le cui molecole
 sono in SimNMR; poi rimuove dal test residuo le molecole presenti nel train
-esteso o in NMRGym. Dopo il filtro comune, prepara ADMET dal train pulito usando
-full InChIKey, risolve le label ripetute e rimuove i match dal pretraining.
+esteso o in NMRGym. Dopo il filtro comune, prepara quattro endpoint TDC e
+Sangster logP usando full InChIKey, risolve le label ripetute e rimuove i match
+dal pretraining.
 Proprietà molecolari e analytics vengono generate soltanto sui file finali.
 
 I raw source sono centralizzati in `datasets/raw/`, identificati da pointer
@@ -95,8 +96,8 @@ I raw source sono centralizzati in `datasets/raw/`, identificati da pointer
 umana. I Parquet canonici, gli intermedi e gli audit di rimozione sono output
 ricostruibili con `push: false`; dataset finali, coorti ADMET, sidecar di
 proprietà, analytics e report strutturati usano il normale push. La pipeline è
-stata materializzata end-to-end: i finali correnti contengono 1.945.688 record
-rich train/validation, 87.897 benchmark, 105.509.616 SimNMR e 265.095 NMRGym.
+stata materializzata end-to-end: i finali correnti contengono 1.941.847 record
+rich, 87.897 benchmark, 105.509.616 SimNMR e 265.095 NMRGym.
 `dvc.lock` e i report sono l'autorità per hash e conteggi; le cifre di release
 precedenti nelle note sono solo confronti storici esplicitamente etichettati.
 

@@ -10,7 +10,17 @@ sources:
     fallback_snapshot: https://zenodo.org/records/20180944
     content: 22 TDC ADMET endpoints with official train_val and test splits
     files: "<endpoint>/{train_val,test}.csv"
-    pipeline_endpoints: [ames, ld50_zhu, solubility_aqsoldb]
+    pipeline_endpoints: [ames, ld50_zhu, solubility_aqsoldb, lipophilicity_astrazeneca]
+    used_by: scripts/data/postprocess/prepare_admet_datasets.py
+
+  sangster_logp:
+    path: datasets/raw/sangster_logp
+    upstream: https://zenodo.org/records/19387552
+    file: Datasets.xlsx
+    file_sha256: a5f998a690ff48d820afe11b23d2522e95ff11764f6d13c773749750f3ea8d42
+    content: curated experimental and adjusted logP values for 23,520 compounds
+    pipeline_subset: Ionisation-based class P
+    license: CC-BY-4.0
     used_by: scripts/data/postprocess/prepare_admet_datasets.py
 
   mst_nmr:

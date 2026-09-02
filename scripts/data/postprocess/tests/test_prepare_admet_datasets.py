@@ -7,6 +7,7 @@ from pathlib import Path
 
 try:
     import pyarrow as pa
+    from openpyxl import Workbook
     from pyarrow import parquet
 
     from data.canonicalize.common import (
@@ -15,9 +16,12 @@ try:
     )
     from data.postprocess.prepare_admet_datasets import (
         ENDPOINTS,
+        TDC_ENDPOINTS,
         full_inchikey,
+        load_sangster_release,
         prepare_admet_datasets,
         prepare_property_release,
+        split_molecule_keys,
     )
 except ModuleNotFoundError:
     pa = None
@@ -99,7 +103,7 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
         parquet.write_table(pa.Table.from_pylist(records, schema=schema), path)
 
     def write_tdc_fixture(self, root: Path) -> None:
-        for endpoint in ENDPOINTS:
+        for endpoint in TDC_ENDPOINTS:
             endpoint_dir = root / endpoint
             endpoint_dir.mkdir(parents=True)
             (endpoint_dir / "train_val.csv").write_text(
@@ -111,21 +115,50 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                 encoding="utf-8",
             )
 
+    def write_sangster_fixture(self, path: Path) -> None:
+        workbook = Workbook()
+        worksheet = workbook.active
+        worksheet.title = "SangsterLogP"
+        worksheet.append(["SMILES", "logP", "Ionisation-based class"])
+        worksheet.append(["CCO", 1.1, "P"])
+        worksheet.append(["CCC", 2.2, "P"])
+        worksheet.append(["N", -0.5, "N"])
+        workbook.save(path)
+
+    def test_sangster_filter_and_split_are_deterministic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            workbook_path = Path(directory) / "Datasets.xlsx"
+            self.write_sangster_fixture(workbook_path)
+            release = load_sangster_release(workbook_path)
+
+        self.assertEqual(len(release["rows"]), 2)
+        keys = [key for _, key in release["keyed_rows"]]
+        first = split_molecule_keys(keys, train_fraction=0.8, seed=42)
+        second = split_molecule_keys(
+            reversed(keys), train_fraction=0.8, seed=42
+        )
+        self.assertEqual(first, second)
+        self.assertFalse(first["train_val"] & first["test"])
+        self.assertEqual(first["train_val"] | first["test"], set(keys))
+
     def test_streams_input_and_writes_aligned_cohorts(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             input_path = root / "rich_train.parquet"
             tdc_root = root / "tdc"
             output_root = root / "admet"
-            train_output = root / "train_val.parquet"
+            train_output = root / "rich.parquet"
+            sangster_workbook = root / "Datasets.xlsx"
             self.write_canonical_fixture(input_path)
             self.write_tdc_fixture(tdc_root)
+            self.write_sangster_fixture(sangster_workbook)
 
             report = prepare_admet_datasets(
                 input_path,
                 tdc_root,
                 output_root,
                 train_output,
+                sangster_workbook_path=sangster_workbook,
                 batch_size=1,
                 show_progress=False,
             )
@@ -138,7 +171,7 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                 parquet.read_table(train_output)["record_id"].to_pylist(),
                 ["nitrogen"],
             )
-            for endpoint in ENDPOINTS:
+            for endpoint in TDC_ENDPOINTS:
                 for split, expected_id in (
                     ("train_val", "ethanol"),
                     ("test", "propane"),
@@ -156,15 +189,28 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                     self.assertEqual(parquet_ids, [expected_id])
                     self.assertEqual(csv_ids, parquet_ids)
 
+            sangster_train = parquet.read_table(
+                output_root / "sangster_logp/train_val.parquet"
+            )["record_id"].to_pylist()
+            sangster_test = parquet.read_table(
+                output_root / "sangster_logp/test.parquet"
+            )["record_id"].to_pylist()
+            self.assertEqual(
+                set(sangster_train + sangster_test), {"ethanol", "propane"}
+            )
+            self.assertFalse(set(sangster_train) & set(sangster_test))
+
     def test_excludes_cross_split_identity_from_cohorts_and_pretraining(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             input_path = root / "rich_train.parquet"
             tdc_root = root / "tdc"
             output_root = root / "admet"
-            train_output = root / "train_val.parquet"
+            train_output = root / "rich.parquet"
+            sangster_workbook = root / "Datasets.xlsx"
             self.write_canonical_fixture(input_path)
             self.write_tdc_fixture(tdc_root)
+            self.write_sangster_fixture(sangster_workbook)
 
             (tdc_root / "ames" / "test.csv").write_text(
                 "Drug,Y\nCCO,0.0\nCCC,2.0\n",
@@ -176,6 +222,7 @@ class PrepareAdmetDatasetsTest(unittest.TestCase):
                 tdc_root,
                 output_root,
                 train_output,
+                sangster_workbook_path=sangster_workbook,
                 batch_size=1,
                 show_progress=False,
             )
