@@ -2,8 +2,8 @@
 
 import argparse
 import csv
-import inspect
 import os
+import tempfile
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -148,21 +148,18 @@ class FinalModelLogger(L.Callback):
         )
         best_model.eval()
 
-        if self.tracking_uri:
-            mlflow.set_tracking_uri(self.tracking_uri)
-        with mlflow.start_run(run_id=trainer.logger.run_id):
-            log_model_parameters = inspect.signature(
-                mlflow.pytorch.log_model
-            ).parameters
-            log_model_options = {"pytorch_model": best_model}
-            if "name" in log_model_parameters:
-                log_model_options["name"] = "model"
-            else:
-                log_model_options["artifact_path"] = "model"
-            if "serialization_format" in log_model_parameters:
-                log_model_options["serialization_format"] = "pickle"
-
-            mlflow.pytorch.log_model(**log_model_options)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            model_path = Path(temp_dir) / "model"
+            mlflow.pytorch.save_model(
+                best_model,
+                model_path,
+                serialization_format="pickle",
+            )
+            trainer.logger.experiment.log_artifacts(
+                trainer.logger.run_id,
+                str(model_path),
+                artifact_path="model",
+            )
 
 
 def parse_args():
@@ -200,7 +197,16 @@ def parse_args():
     return parser.parse_args()
 
 
-def paired_dataset(source, split, shuffle, shift_only, seed):
+def paired_dataset(
+    source,
+    split,
+    shuffle,
+    shift_only,
+    seed,
+    *,
+    shard_across_ranks=True,
+    replicate_when_too_small=False,
+):
     root = Path("datasets/train_splits")
     return PairedFoundationDataset(
         root / f"{source}_{split}.parquet",
@@ -210,6 +216,8 @@ def paired_dataset(source, split, shuffle, shift_only, seed):
         seed=seed,
         shift_only=shift_only,
         source_name=source,
+        shard_across_ranks=shard_across_ranks,
+        replicate_when_too_small=replicate_when_too_small,
     )
 
 
@@ -218,8 +226,22 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
         train_data = MixedFoundationDataset(
             datasets=[
                 paired_dataset("simnmr", "train", True, True, seed),
-                paired_dataset("rich", "train", True, True, seed),
-                paired_dataset("nmrgym", "train", True, True, seed),
+                paired_dataset(
+                    "rich",
+                    "train",
+                    True,
+                    True,
+                    seed,
+                    replicate_when_too_small=True,
+                ),
+                paired_dataset(
+                    "nmrgym",
+                    "train",
+                    True,
+                    True,
+                    seed,
+                    replicate_when_too_small=True,
+                ),
             ],
             proportions=[0.90, 0.09, 0.01],
             shift_only=[True, True, True],
@@ -229,8 +251,22 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
         train_data = MixedFoundationDataset(
             datasets=[
                 paired_dataset("rich", "train", True, False, seed),
-                paired_dataset("simnmr", "train", True, True, seed),
-                paired_dataset("nmrgym", "train", True, True, seed),
+                paired_dataset(
+                    "simnmr",
+                    "train",
+                    True,
+                    True,
+                    seed,
+                    replicate_when_too_small=True,
+                ),
+                paired_dataset(
+                    "nmrgym",
+                    "train",
+                    True,
+                    True,
+                    seed,
+                    replicate_when_too_small=True,
+                ),
             ],
             proportions=[0.90, 0.05, 0.05],
             shift_only=[False, True, True],
@@ -238,14 +274,35 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
         )
 
     validation_data = [
-        paired_dataset("rich", "val", False, False, seed),
+        paired_dataset(
+            "rich",
+            "val",
+            False,
+            False,
+            seed,
+            shard_across_ranks=False,
+        ),
     ]
     if stage == "pretrain":
         validation_data.append(
-            paired_dataset("simnmr", "val", False, True, seed)
+            paired_dataset(
+                "simnmr",
+                "val",
+                False,
+                True,
+                seed,
+                shard_across_ranks=False,
+            )
         )
     validation_data.append(
-        paired_dataset("nmrgym", "val", False, True, seed)
+        paired_dataset(
+            "nmrgym",
+            "val",
+            False,
+            True,
+            seed,
+            shard_across_ranks=False,
+        )
     )
 
     processor = FoundationNMRProcessor()
@@ -260,10 +317,9 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
 
     val_loader_options = {
         "batch_size": 2048,
-        "num_workers": num_workers,
+        "num_workers": 0,
         "collate_fn": processor,
         "pin_memory": torch.cuda.is_available(),
-        "persistent_workers": num_workers > 0,
     }
 
     val_loaders = [
@@ -285,12 +341,14 @@ def make_probe_dataloaders(batch_size, num_workers, seed):
             seed=seed,
             shift_only=True,
             source_name=f"maccs_probe_{split}",
+            shard_across_ranks=False,
         )
+        probe_workers = min(num_workers, dataset.num_row_groups)
         loaders.append(
             DataLoader(
                 dataset,
                 batch_size=batch_size,
-                num_workers=num_workers,
+                num_workers=probe_workers,
                 collate_fn=processor,
                 pin_memory=torch.cuda.is_available(),
                 drop_last=False,
@@ -425,6 +483,7 @@ def main():
 
     validation_batches = args.validation_interval * args.accumulate_grad_batches
 
+    # The training mixture is infinite; max_steps is the authoritative limit.
     trainer = L.Trainer(
         accelerator=args.accelerator,
         devices=args.devices,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import random
 from dataclasses import dataclass, fields
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Iterable, Iterator
 
 import pyarrow as pa
 import pyarrow.parquet as parquet
+import torch.distributed as dist
 from torch.utils.data import IterableDataset, get_worker_info
 
 from data.schema import CanonicalRecord, ensure_record
@@ -64,13 +66,24 @@ def _buffered_shuffle(
     yield from buffer
 
 
+def _distributed_info():
+    if dist.is_available() and dist.is_initialized():
+        return dist.get_rank(), dist.get_world_size()
+
+    # useful also inside DataLoader worker processes
+    rank = int(os.environ.get("RANK", 0))
+    world_size = int(os.environ.get("WORLD_SIZE", 1))
+    return rank, world_size
+
+
 class PairedFoundationDataset(IterableDataset):
     """Stream aligned NMR records and Morgan fingerprints from two Parquets.
 
     The two files must have identical row counts, row-group boundaries, and
-    record IDs. DataLoader workers receive disjoint row groups, so each worker
-    can read both files independently without loading the full dataset.
-    Training shuffle is enabled by default and uses a bounded record buffer.
+    record IDs. Workers receive disjoint row groups by default; small datasets
+    can explicitly replicate row groups, and rank sharding can be disabled.
+    Every worker reads both files independently without loading the full
+    dataset. Training shuffle uses a bounded record buffer.
     """
 
     def __init__(
@@ -85,6 +98,8 @@ class PairedFoundationDataset(IterableDataset):
         shift_only: bool = False,
         source_name: str | None = None,
         include_unimol: bool = False,
+        shard_across_ranks: bool = True,
+        replicate_when_too_small: bool = False,
     ):
         if include_unimol:
             raise NotImplementedError(
@@ -104,6 +119,8 @@ class PairedFoundationDataset(IterableDataset):
         self.seed = seed
         self.shift_only = shift_only
         self.source_name = source_name or self.nmr_path.stem
+        self.shard_across_ranks = shard_across_ranks
+        self.replicate_when_too_small = replicate_when_too_small
         self._shuffle_random = None
         self._shuffle_random_context = None
 
@@ -270,21 +287,59 @@ class PairedFoundationDataset(IterableDataset):
 
         return self._shuffle_random
 
+    def _assigned_row_group_indices(
+        self,
+        *,
+        rank: int,
+        world_size: int,
+        worker_id: int,
+        num_workers: int,
+    ) -> list[int]:
+        """Return this process-worker pair's row groups."""
+
+        shard_rank = rank if self.shard_across_ranks else 0
+        shard_world_size = world_size if self.shard_across_ranks else 1
+        global_worker_id = shard_rank * num_workers + worker_id
+        global_num_workers = shard_world_size * num_workers
+
+        if self.num_row_groups < global_num_workers:
+            if self.replicate_when_too_small:
+                return list(range(self.num_row_groups))
+            raise RuntimeError(
+                f"dataset {self.source_name!r} has {self.num_row_groups} Parquet "
+                f"row groups but must be sharded across {global_num_workers} "
+                f"workers ({shard_world_size} ranks x {num_workers} DataLoader "
+                "workers); reduce the worker count or explicitly enable "
+                "small-dataset replication"
+            )
+
+        return list(
+            range(
+                global_worker_id,
+                self.num_row_groups,
+                global_num_workers,
+            )
+        )
+
     def __iter__(self) -> Iterator[PairedFoundationRecord]:
         nmr_file = parquet.ParquetFile(self.nmr_path)
         molecular_file = parquet.ParquetFile(self.molecular_properties_path)
 
+        rank, world_size = _distributed_info()
         worker = get_worker_info()
         if worker is None:
-            row_group_indices = list(range(self.num_row_groups))
+            worker_id = 0
+            num_workers = 1
         else:
-            row_group_indices = list(
-                range(
-                    worker.id,
-                    self.num_row_groups,
-                    worker.num_workers,
-                )
-            )
+            worker_id = worker.id
+            num_workers = worker.num_workers
+
+        row_group_indices = self._assigned_row_group_indices(
+            rank=rank,
+            world_size=world_size,
+            worker_id=worker_id,
+            num_workers=num_workers,
+        )
 
         if not self.shuffle:
             yield from self._iter_row_groups(
@@ -309,7 +364,7 @@ class PairedFoundationDataset(IterableDataset):
 
 
 class MixedFoundationDataset(IterableDataset):
-    """Mix paired datasets until the first dataset is exhausted."""
+    """Mix paired datasets indefinitely, cycling each source as needed."""
 
     def __init__(self, datasets, proportions, shift_only, seed=0):
         if not (len(datasets) == len(proportions) == len(shift_only)):
@@ -321,9 +376,6 @@ class MixedFoundationDataset(IterableDataset):
         self.proportions = list(proportions)
         self.shift_only = list(shift_only)
         self.seed = seed
-
-    def __len__(self):
-        return round(len(self.datasets[0]) / self.proportions[0])
 
     def __iter__(self):
         iterators = [iter(dataset) for dataset in self.datasets]
@@ -340,10 +392,19 @@ class MixedFoundationDataset(IterableDataset):
             try:
                 sample = next(iterators[source])
             except StopIteration:
-                if source == 0:
-                    return
                 iterators[source] = iter(self.datasets[source])
-                sample = next(iterators[source])
+                try:
+                    sample = next(iterators[source])
+                except StopIteration as error:
+                    source_name = getattr(
+                        self.datasets[source],
+                        "source_name",
+                        f"source {source}",
+                    )
+                    raise RuntimeError(
+                        f"mixed-dataset source {source_name!r} yielded no samples "
+                        "after its iterator was restarted"
+                    ) from error
 
             yield PairedFoundationRecord(
                 record=sample.record,

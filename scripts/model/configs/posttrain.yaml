@@ -33,6 +33,8 @@ h_jitter_sigma: 0.05
 c_jitter_sigma: 0.5
 modality_dropout_probability: 0.1
 annotation_mask_probability: 0.15
+use_rich_input: true
+use_annotation_loss: true
 h_soft_label_sigma: 0.05
 c_soft_label_sigma: 0.5
 

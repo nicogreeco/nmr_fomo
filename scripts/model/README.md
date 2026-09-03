@@ -94,7 +94,13 @@ one batch.
 `PairedFoundationDataset` is an `IterableDataset`. It validates that its two
 files have the same number of rows and identical row-group sizes. Each worker
 then receives a disjoint subset of complete row groups, avoiding duplicate
-records and full-file materialization.
+records and full-file materialization. DDP ranks are included in this sharding.
+If there are fewer row groups than global workers, the default is to fail with
+a clear error. Small auxiliary training sources can instead opt into
+`replicate_when_too_small=True`, which gives every worker a complete copy of
+their row groups. Validation and rank-zero-only diagnostics use
+`shard_across_ranks=False` so every participating rank sees the complete
+dataset.
 
 Do not set `shuffle=True` on the DataLoader and do not attach a sampler:
 iterable datasets do not support those map-style options. Instead,
@@ -102,9 +108,9 @@ iterable datasets do not support those map-style options. Instead,
 changes the order of its assigned row groups and then uses a bounded record
 buffer. This gives useful mixing without loading the complete dataset in RAM.
 
-The random-generator state advances whenever the loader is iterated again, so
-ordinary successive training epochs receive a different order. This also works
-with persistent workers. `seed` makes the sequence reproducible; for exact
+The random-generator state advances whenever a source iterator is restarted,
+so repeated passes receive a different order. This also works with persistent
+workers. `seed` makes the sequence reproducible; for exact
 multi-worker reproducibility, also pass a seeded `torch.Generator` to the
 DataLoader.
 
@@ -129,7 +135,7 @@ Build the pretraining mixture with SimNMR as the primary dataset:
 from model import MixedFoundationDataset, PairedFoundationDataset
 
 
-def paired(name, split, shuffle, shift_only=False):
+def paired(name, split, shuffle, shift_only=False, replicate=False, shard_ranks=True):
     root = "datasets/train_splits"
     return PairedFoundationDataset(
         f"{root}/{name}_{split}.parquet",
@@ -138,14 +144,16 @@ def paired(name, split, shuffle, shift_only=False):
         seed=42,
         shift_only=shift_only,
         source_name=name,
+        replicate_when_too_small=replicate,
+        shard_across_ranks=shard_ranks,
     )
 
 
 pretrain_data = MixedFoundationDataset(
     datasets=[
         paired("simnmr", "train", True),
-        paired("rich", "train", True),
-        paired("nmrgym", "train", True),
+        paired("rich", "train", True, replicate=True),
+        paired("nmrgym", "train", True, replicate=True),
     ],
     proportions=[0.90, 0.09, 0.01],
     shift_only=[True, False, True],
@@ -154,15 +162,15 @@ pretrain_data = MixedFoundationDataset(
 ```
 
 `stage="pretrain"` hides rich annotations for every row, so the flags do not
-change pretraining behavior. For continued pretraining, put rich data first so
-its exhaustion defines the epoch:
+change pretraining behavior. Continued pretraining keeps rich data first as its
+primary source:
 
 ```python
 posttrain_data = MixedFoundationDataset(
     datasets=[
         paired("rich", "train", True),
-        paired("simnmr", "train", True),
-        paired("nmrgym", "train", True),
+        paired("simnmr", "train", True, replicate=True),
+        paired("nmrgym", "train", True, replicate=True),
     ],
     proportions=[0.90, 0.05, 0.05],
     shift_only=[False, True, True],
@@ -180,24 +188,23 @@ groups automatically follow whichever datasets are passed:
 
 ```python
 validation_data = [
-    paired("rich", "val", False, shift_only=False),
+    paired("rich", "val", False, shift_only=False, shard_ranks=False),
 ]
 if stage == "pretrain":
     validation_data.append(
-        paired("simnmr", "val", False, shift_only=True)
+        paired("simnmr", "val", False, shift_only=True, shard_ranks=False)
     )
 validation_data.append(
-    paired("nmrgym", "val", False, shift_only=True)
+    paired("nmrgym", "val", False, shift_only=True, shard_ranks=False)
 )
 
 val_loaders = [
     DataLoader(
         dataset,
         batch_size=128,
-        num_workers=4,
+        num_workers=0,
         collate_fn=FoundationNMRProcessor(),
         pin_memory=True,
-        persistent_workers=True,
         drop_last=False,
     )
     for dataset in validation_data
@@ -206,9 +213,9 @@ val_loaders = [
 
 Pass the training mixture to the ordinary `DataLoader` shown above. Training
 source selection is reproducible, underlying datasets retain their existing
-bounded shuffle, and a dataset epoch ends when the primary dataset is
-exhausted. The training script instead uses a fixed number of optimization
-steps, so this natural exhaustion does not define the end of the run.
+bounded shuffle, and every source iterator is restarted when exhausted. The
+mixture is intentionally unsized and effectively infinite. The training
+script's `max_steps` setting is the authoritative stopping condition.
 
 ## Lightning
 

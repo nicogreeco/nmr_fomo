@@ -60,6 +60,8 @@ class ModelConfig:
     c_jitter_sigma: float = 0.5
     modality_dropout_probability: float = 0.1
     annotation_mask_probability: float = 0.15
+    use_rich_input: bool = True
+    use_annotation_loss: bool = True
     h_soft_label_sigma: float = 0.05
     c_soft_label_sigma: float = 0.5
 
@@ -344,6 +346,9 @@ class FoMoNMR(L.LightningModule):
                 h,
                 self.config.annotation_mask_probability,
             )
+            if not self.config.use_rich_input:
+                h["availability"].fill_(False)
+                h["j_mask"].fill_(False)
 
         corruption = {
             "h_shift_mask": h_shift_mask,
@@ -498,7 +503,7 @@ class FoMoNMR(L.LightningModule):
         j_value_loss = zero
         annotation_loss = zero
 
-        if self.config.stage == "posttrain":
+        if self.config.stage == "posttrain" and self.config.use_annotation_loss:
             h = clean_batch["h"]
             annotation_mask = corruption["annotation_mask"]
             annotation_losses = []
@@ -562,7 +567,7 @@ class FoMoNMR(L.LightningModule):
                 annotation_loss = torch.stack(annotation_losses).mean()
 
         total_loss = shift_loss + self.config.lambda_fp * fingerprint_loss
-        if self.config.stage == "posttrain":
+        if self.config.stage == "posttrain" and self.config.use_annotation_loss:
             total_loss += self.config.lambda_annotation * annotation_loss
 
         return {
@@ -587,7 +592,11 @@ class FoMoNMR(L.LightningModule):
         names = list(self.base_loss_names)
         if self.config.logging_mode == "complete":
             names.extend(self.shift_component_names)
-        if self.config.stage == "posttrain" and include_annotations:
+        if (
+            self.config.stage == "posttrain"
+            and self.config.use_annotation_loss
+            and include_annotations
+        ):
             names.append("annotation")
             if self.config.logging_mode == "complete":
                 names.extend(self.rich_loss_names[1:])
@@ -646,6 +655,7 @@ class FoMoNMR(L.LightningModule):
         batch_size = batch["h"]["shift"].shape[0]
         annotations_active = (
             self.config.stage == "posttrain"
+            and self.config.use_annotation_loss
             and not batch["shift_only"].all().item()
         )
         global_names = [*self.base_loss_names, *self.shift_component_names]
