@@ -169,6 +169,46 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             [f"record-{index}" for index in range(4)],
         )
 
+    def test_ranks_and_workers_receive_disjoint_interleaved_row_groups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nmr_path, molecular_path, _ = self.write_pair(
+                Path(directory),
+                num_records=8,
+                nmr_row_group_size=1,
+            )
+            dataset = PairedFoundationDataset(
+                nmr_path,
+                molecular_path,
+                shuffle=False,
+            )
+
+            rank_records = []
+            for rank in range(2):
+                records = []
+                for worker_id in range(2):
+                    with patch(
+                        "model.dataset._distributed_info",
+                        return_value=(rank, 2),
+                    ), patch(
+                        "model.dataset.get_worker_info",
+                        return_value=SimpleNamespace(id=worker_id, num_workers=2),
+                    ):
+                        records.extend(
+                            sample.record.record_id for sample in dataset
+                        )
+                rank_records.append(records)
+
+        self.assertEqual(sorted(rank_records[0]), [
+            "record-0", "record-2", "record-4", "record-6"
+        ])
+        self.assertEqual(sorted(rank_records[1]), [
+            "record-1", "record-3", "record-5", "record-7"
+        ])
+        self.assertEqual(
+            sorted(rank_records[0] + rank_records[1]),
+            [f"record-{index}" for index in range(8)],
+        )
+
     def test_dataset_attaches_shift_only_flag(self):
         with tempfile.TemporaryDirectory() as directory:
             nmr_path, molecular_path, _ = self.write_pair(Path(directory))

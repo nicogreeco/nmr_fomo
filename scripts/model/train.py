@@ -19,6 +19,7 @@ from lightning.pytorch.callbacks import (
     ModelCheckpoint,
 )
 from lightning.pytorch.loggers import MLFlowLogger
+from lightning.pytorch.strategies import DDPStrategy
 from torch.utils.data import DataLoader
 
 from model import (
@@ -28,6 +29,17 @@ from model import (
 )
 from model.FoMoNMR import FoMoNMR, ModelConfig
 from model.maccs_probe import MaccsLinearProbe
+
+
+class ResumedRunLogger(L.Callback):
+    def on_train_start(self, trainer, model):
+        if not trainer.is_global_zero:
+            return
+        logger = trainer.logger
+        logger.experiment.update_run(logger.run_id, status="RUNNING")
+        logger.experiment.set_tag(logger.run_id, "resume_step", trainer.global_step)
+        logger.experiment.set_tag(logger.run_id, "slurm_job_id", os.getenv("SLURM_JOB_ID", ""))
+        print(f"[FoMoNMR] Resumed MLflow run {logger.run_id} at step {trainer.global_step}", flush=True)
 
 
 class MemoryLogger(L.Callback):
@@ -51,6 +63,7 @@ class MemoryLogger(L.Callback):
             },
             on_step=False,
             on_epoch=True,
+            sync_dist=True,
         )
 
 
@@ -58,7 +71,7 @@ class FingerprintValidationLogger(L.Callback):
     def __init__(self, run_dir):
         self.output_dir = run_dir / "artifacts/fingerprint_validation"
 
-    def on_validation_epoch_end(self, trainer, model):
+    def on_validation_end(self, trainer, model):
         if trainer.sanity_checking or not trainer.is_global_zero:
             return
 
@@ -84,7 +97,7 @@ class ShiftValidationLogger(L.Callback):
     def __init__(self, run_dir):
         self.output_dir = run_dir / "artifacts/shift_validation"
 
-    def on_validation_epoch_end(self, trainer, model):
+    def on_validation_end(self, trainer, model):
         if trainer.sanity_checking or not trainer.is_global_zero:
             return
 
@@ -191,6 +204,7 @@ def parse_args():
     )
     parser.add_argument("--experiment-name")
     parser.add_argument("--run-name")
+    parser.add_argument("--mlflow-run-id", help="Existing MLflow run ID for checkpoint resume")
     parser.add_argument("--no-mlflow", action="store_true")
     parser.add_argument("--no-maccs-probe", action="store_true")
     parser.add_argument("--maccs-probe-every-n-validations", type=int, default=1)
@@ -280,7 +294,7 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
             False,
             False,
             seed,
-            shard_across_ranks=False,
+            shard_across_ranks=True,
         ),
     ]
     if stage == "pretrain":
@@ -291,7 +305,7 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
                 False,
                 True,
                 seed,
-                shard_across_ranks=False,
+                shard_across_ranks=True,
             )
         )
     validation_data.append(
@@ -301,7 +315,7 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
             False,
             True,
             seed,
-            shard_across_ranks=False,
+            shard_across_ranks=True,
         )
     )
 
@@ -341,7 +355,7 @@ def make_probe_dataloaders(batch_size, num_workers, seed):
             seed=seed,
             shift_only=True,
             source_name=f"maccs_probe_{split}",
-            shard_across_ranks=False,
+            shard_across_ranks=True,
         )
         probe_workers = min(num_workers, dataset.num_row_groups)
         loaders.append(
@@ -359,6 +373,8 @@ def make_probe_dataloaders(batch_size, num_workers, seed):
 
 def main():
     args = parse_args()
+    if args.mlflow_run_id and (not args.resume or not args.run_name or args.no_mlflow):
+        raise ValueError("--mlflow-run-id requires --resume, --run-name and MLflow logging")
     if args.pretrained_checkpoint and args.resume:
         raise ValueError("Use --pretrained-checkpoint or --resume, not both")
     if args.pretrained_checkpoint and args.stage != "posttrain":
@@ -449,10 +465,13 @@ def main():
         logger = MLFlowLogger(
             experiment_name=args.experiment_name or f"fomonmr-{args.stage}",
             run_name=run_name,
+            run_id=args.mlflow_run_id,
             tracking_uri=args.tracking_uri,
             log_model=False,
             tags={"stage": args.stage},
         )
+        if args.mlflow_run_id:
+            callbacks.append(ResumedRunLogger())
         logger.log_hyperparams(
             {
                 **asdict(config),
@@ -482,11 +501,22 @@ def main():
         )
 
     validation_batches = args.validation_interval * args.accumulate_grad_batches
+    strategy = "auto"
+    if int(os.getenv("SLURM_NTASKS", "1")) > 1:
+        # Sharded IterableDatasets can yield a different final batch count on
+        # each rank, so validation forwards must not broadcast DDP buffers.
+        strategy = DDPStrategy(
+            broadcast_buffers=False,
+            # Posttraining losses are conditional on the annotations/tasks
+            # present in each batch, so some heads can be unused on a rank.
+            find_unused_parameters=args.stage == "posttrain",
+        )
 
     # The training mixture is infinite; max_steps is the authoritative limit.
     trainer = L.Trainer(
         accelerator=args.accelerator,
         devices=args.devices,
+        strategy=strategy,
         precision=args.precision,
         max_steps=config.max_steps,
         max_epochs=-1,

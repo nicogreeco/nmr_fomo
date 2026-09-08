@@ -70,6 +70,7 @@ class MaccsLinearProbeTests(unittest.TestCase):
 
         callback.run.assert_called_once_with(model)
         model.log.assert_called_once()
+        self.assertTrue(model.log.call_args.kwargs["sync_dist"])
 
 
 if __name__ == "__main__":

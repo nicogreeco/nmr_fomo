@@ -1,0 +1,52 @@
+stage: pretrain
+
+d_model: 512
+fourier_strategy: log_spaced
+num_fourier_freqs: 256
+num_multiplicities: null
+j_min: 0.0
+j_max: 20.0
+num_rbf_centers: 32
+rbf_sigma: 2.0
+
+nhead: 8
+num_encoder_layers: 12
+dim_feedforward: 2048
+dropout: 0.1
+
+h_min: -5.5
+h_max: 20.0
+h_bin_size: 0.02
+c_min: -40.0
+c_max: 300.0
+c_bin_size: 0.2
+
+fp_sim_bin_size: 0.05
+fp_focal_gamma: 5.0
+balanced_fp_pairs: true
+
+global_shift_probability: 0.2
+h_global_shift_max: 0.01
+c_global_shift_max: 0.1
+local_jitter_probability: 0.5
+h_jitter_sigma: 0.05
+c_jitter_sigma: 0.5
+modality_dropout_probability: 0.1
+annotation_mask_probability: 0.15
+use_rich_input: false
+use_annotation_loss: false
+h_soft_label_sigma: 0.05
+c_soft_label_sigma: 0.5
+
+lambda_fp: 0.15
+lambda_annotation: 0.0
+
+lr: 0.0001
+min_lr: 0.000001
+weight_decay: 0.0001
+warmup_steps: 2500
+plateau_factor: 0.5
+plateau_patience: 3
+early_stopping_patience: 10
+max_steps: 1000000
+validation_seed: 42

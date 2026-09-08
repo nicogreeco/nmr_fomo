@@ -299,7 +299,10 @@ class PairedFoundationDataset(IterableDataset):
 
         shard_rank = rank if self.shard_across_ranks else 0
         shard_world_size = world_size if self.shard_across_ranks else 1
-        global_worker_id = shard_rank * num_workers + worker_id
+        # Interleave ranks before workers so adjacent row groups are spread
+        # across ranks instead of assigning each rank a contiguous worker block.
+        # This matters when row-group sizes are not uniform.
+        global_worker_id = worker_id * shard_world_size + shard_rank
         global_num_workers = shard_world_size * num_workers
 
         if self.num_row_groups < global_num_workers:

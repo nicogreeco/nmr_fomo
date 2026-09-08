@@ -3,6 +3,7 @@ import yaml
 
 import lightning as L
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -142,6 +143,8 @@ class FoMoNMR(L.LightningModule):
         self.save_hyperparameters({"config": asdict(config)}, logger=False)
         self.validation_metric_sums = {}
         self.validation_metric_counts = {}
+        self.validation_source_metric_sums = {}
+        self.validation_source_metric_counts = {}
 
         self.validation_source_names = []
         self.fp_source_range_error_sums = {}
@@ -623,6 +626,7 @@ class FoMoNMR(L.LightningModule):
                 on_epoch=False,
                 prog_bar=name == "loss",
                 batch_size=batch_size,
+                sync_dist=True,
             )
         return losses["loss"]
 
@@ -631,6 +635,17 @@ class FoMoNMR(L.LightningModule):
             source = self.validation_source_names[dataloader_idx]
         else:
             source = f"dataloader_{dataloader_idx}"
+
+        if source not in self.validation_source_metric_sums:
+            metric_names = tuple(self.validation_metric_names)
+            self.validation_source_metric_sums[source] = {
+                name: torch.zeros((), device=self.device)
+                for name in metric_names
+            }
+            self.validation_source_metric_counts[source] = {
+                name: torch.zeros((), device=self.device, dtype=torch.long)
+                for name in metric_names
+            }
 
         # The same validation record receives the same corruption every run.
         with torch.random.fork_rng():
@@ -698,15 +713,10 @@ class FoMoNMR(L.LightningModule):
 
         for name, value in source_metrics.items():
             weight = metric_weights.get(name, batch_size)
-            self.log(
-                f"val/datasets/{source}/{self.validation_metric_names[name]}",
-                value,
-                on_step=False,
-                on_epoch=True,
-                prog_bar=name == "loss",
-                batch_size=weight,
-                add_dataloader_idx=False,
+            self.validation_source_metric_sums[source][name] += (
+                value.detach() * weight
             )
+            self.validation_source_metric_counts[source][name] += weight
         return losses
 
     def on_validation_epoch_start(self):
@@ -718,6 +728,29 @@ class FoMoNMR(L.LightningModule):
                 loader.dataset.source_name
                 for loader in loaders
             ]
+        metric_names = tuple(self.validation_metric_names)
+        self.validation_metric_sums = {
+            name: torch.zeros((), device=self.device)
+            for name in metric_names
+        }
+        self.validation_metric_counts = {
+            name: torch.zeros((), device=self.device, dtype=torch.long)
+            for name in metric_names
+        }
+        self.validation_source_metric_sums = {
+            source: {
+                name: torch.zeros((), device=self.device)
+                for name in metric_names
+            }
+            for source in self.validation_source_names
+        }
+        self.validation_source_metric_counts = {
+            source: {
+                name: torch.zeros((), device=self.device, dtype=torch.long)
+                for name in metric_names
+            }
+            for source in self.validation_source_names
+        }
         self.fp_source_range_error_sums = {
             source: torch.zeros_like(self.fp_range_error_sums)
             for source in self.validation_source_names
@@ -726,8 +759,6 @@ class FoMoNMR(L.LightningModule):
             source: torch.zeros_like(self.fp_range_counts)
             for source in self.validation_source_names
         }
-        self.validation_metric_sums = {}
-        self.validation_metric_counts = {}
         self.fp_range_error_sums.zero_()
         self.fp_range_prediction_sums.zero_()
         self.fp_range_counts.zero_()
@@ -788,14 +819,74 @@ class FoMoNMR(L.LightningModule):
         return rows
 
     def on_validation_epoch_end(self):
+        if dist.is_available() and dist.is_initialized():
+            for name in self.validation_metric_sums:
+                dist.all_reduce(
+                    self.validation_metric_sums[name],
+                    op=dist.ReduceOp.SUM,
+                )
+                dist.all_reduce(
+                    self.validation_metric_counts[name],
+                    op=dist.ReduceOp.SUM,
+                )
+
+            for source in self.validation_source_names:
+                for name in self.validation_source_metric_sums[source]:
+                    dist.all_reduce(
+                        self.validation_source_metric_sums[source][name],
+                        op=dist.ReduceOp.SUM,
+                    )
+                    dist.all_reduce(
+                        self.validation_source_metric_counts[source][name],
+                        op=dist.ReduceOp.SUM,
+                    )
+                dist.all_reduce(
+                    self.fp_source_range_error_sums[source],
+                    op=dist.ReduceOp.SUM,
+                )
+                dist.all_reduce(
+                    self.fp_source_range_counts[source],
+                    op=dist.ReduceOp.SUM,
+                )
+
+            for tensor in (
+                self.fp_range_error_sums,
+                self.fp_range_prediction_sums,
+                self.fp_range_counts,
+                self.shift_range_error_sums,
+                self.shift_range_prediction_sums,
+                self.shift_range_counts,
+            ):
+                dist.all_reduce(tensor, op=dist.ReduceOp.SUM)
+
         mean_metrics = {}
         for name, total in self.validation_metric_sums.items():
-            mean_metrics[name] = total / self.validation_metric_counts[name]
+            count = self.validation_metric_counts[name]
+            if count == 0:
+                continue
+            mean_metrics[name] = total / count
             self.log(
                 f"val/{self.validation_metric_names[name]}",
                 mean_metrics[name],
                 prog_bar=name == "loss",
+                sync_dist=True,
             )
+
+        for source in self.validation_source_names:
+            names = ["loss"]
+            if self.config.logging_mode == "complete":
+                names = list(self.validation_metric_names)
+            for name in names:
+                count = self.validation_source_metric_counts[source][name]
+                if count == 0:
+                    continue
+                value = self.validation_source_metric_sums[source][name] / count
+                self.log(
+                    f"val/datasets/{source}/{self.validation_metric_names[name]}",
+                    value,
+                    prog_bar=name == "loss",
+                    sync_dist=True,
+                )
 
         valid_ranges = self.fp_range_counts > 0
         if valid_ranges.any():
@@ -807,8 +898,8 @@ class FoMoNMR(L.LightningModule):
                 self.fp_range_error_sums.sum()
                 / self.fp_range_counts.sum()
             )
-            self.log("val/fp_mae", fingerprint_mae)
-            self.log("val/fp_macro_mae", range_maes.mean())
+            self.log("val/fp_mae", fingerprint_mae, sync_dist=True)
+            self.log("val/fp_macro_mae", range_maes.mean(), sync_dist=True)
 
         mean_loss = mean_metrics.get("loss")
         if self.config.logging_mode == "complete":
@@ -820,7 +911,9 @@ class FoMoNMR(L.LightningModule):
                         / counts[valid_ranges]
                     )
                     self.log(
-                        f"val/datasets/{source}/fp_macro_mae", range_maes.mean()
+                        f"val/datasets/{source}/fp_macro_mae",
+                        range_maes.mean(),
+                        sync_dist=True,
                     )
         if mean_loss is not None:
 
