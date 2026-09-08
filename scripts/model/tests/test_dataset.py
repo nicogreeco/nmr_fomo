@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from itertools import islice
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -350,7 +351,7 @@ class PairedFoundationDatasetTest(unittest.TestCase):
         with self.assertRaisesRegex(TypeError, "mix paired and unpaired"):
             FoundationNMRProcessor()([record, paired])
 
-    def test_mixed_dataset_uses_primary_epoch_and_shift_only_flags(self):
+    def test_mixed_dataset_cycles_sources_and_preserves_proportions(self):
         fingerprint = bytes(MORGAN_FP_BYTES)
         maccs_fingerprint = "0" * MACCS_OUTPUT_BITS
         primary = [
@@ -382,7 +383,9 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             seed=5,
         )
 
-        samples = list(dataset)
+        with self.assertRaises(TypeError):
+            len(dataset)
+        samples = list(islice(dataset, 10_000))
         primary_samples = [
             sample for sample in samples if sample.record.record_id.startswith("primary")
         ]
@@ -390,21 +393,85 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             sample for sample in samples if sample.record.record_id.startswith("auxiliary")
         ]
 
-        self.assertEqual(len(primary_samples), 20)
-        self.assertGreater(len(auxiliary_samples), 2)
+        self.assertGreater(len(primary_samples), len(primary))
+        self.assertGreater(len(auxiliary_samples), len(auxiliary))
         self.assertAlmostEqual(
             len(primary_samples) / len(samples),
             0.5,
-            delta=0.15,
+            delta=0.02,
         )
         self.assertTrue(all(not sample.shift_only for sample in primary_samples))
         self.assertTrue(all(sample.shift_only for sample in auxiliary_samples))
-        self.assertEqual(len(dataset), 40)
 
         batch = FoundationNMRProcessor()(samples[:8])
         expected_flags = [sample.shift_only for sample in samples[:8]]
         self.assertEqual(batch["shift_only"].dtype, torch.bool)
         self.assertEqual(batch["shift_only"].tolist(), expected_flags)
+
+    def test_mixed_dataset_rejects_a_source_that_stays_empty(self):
+        dataset = MixedFoundationDataset(
+            datasets=[[]],
+            proportions=[1.0],
+            shift_only=[False],
+        )
+
+        with self.assertRaisesRegex(RuntimeError, "source 0.*yielded no samples"):
+            next(iter(dataset))
+
+    def test_two_ranks_can_keep_producing_full_batches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            primary_root = root / "primary"
+            auxiliary_root = root / "auxiliary"
+            primary_root.mkdir()
+            auxiliary_root.mkdir()
+            primary_paths = self.write_pair(
+                primary_root,
+                num_records=6,
+                nmr_row_group_size=1,
+            )[:2]
+            auxiliary_paths = self.write_pair(
+                auxiliary_root,
+                num_records=2,
+                nmr_row_group_size=2,
+            )[:2]
+
+            for rank in range(2):
+                primary = PairedFoundationDataset(
+                    *primary_paths,
+                    shuffle=False,
+                    source_name="primary",
+                )
+                auxiliary = PairedFoundationDataset(
+                    *auxiliary_paths,
+                    shuffle=False,
+                    source_name="auxiliary",
+                    replicate_when_too_small=True,
+                )
+                mixed = MixedFoundationDataset(
+                    [primary, auxiliary],
+                    proportions=[0.5, 0.5],
+                    shift_only=[False, True],
+                    seed=7,
+                )
+                loader = DataLoader(
+                    mixed,
+                    batch_size=2,
+                    num_workers=0,
+                    collate_fn=FoundationNMRProcessor(),
+                    drop_last=True,
+                )
+
+                with patch(
+                    "model.dataset._distributed_info",
+                    return_value=(rank, 2),
+                ):
+                    batches = list(islice(loader, 10))
+
+                self.assertEqual(len(batches), 10)
+                self.assertTrue(
+                    all(batch["h"]["shift"].shape[0] == 2 for batch in batches)
+                )
 
 
 if __name__ == "__main__":
