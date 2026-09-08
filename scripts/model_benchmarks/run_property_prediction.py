@@ -363,7 +363,7 @@ def run_classification(
     return search, parameter, classification_metrics(test_y, predictions, scores)
 
 
-def main():
+def main(argv=None, cohort_representations=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--models", nargs="+", required=True)
     parser.add_argument("--datasets", nargs="+", required=True)
@@ -375,7 +375,7 @@ def main():
     parser.add_argument("--cv-folds", type=int, default=5)
     parser.add_argument("--epochs", type=int, default=300, help="Maximum MLP iterations")
     parser.add_argument("--device", choices=("auto", "cuda", "cpu"), default="auto")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.device == "cuda" and not CUML_ACCEL_ENABLED:
         raise RuntimeError("--device cuda requested, but cuml.accel is not installed")
@@ -383,6 +383,8 @@ def main():
         raise RuntimeError("Use an environment without cuML for --device cpu")
 
     representations = parse_names(args.models)
+    if cohort_representations is None:
+        cohort_representations = representations
     backend = "cuml.accel" if CUML_ACCEL_ENABLED else "scikit-learn CPU"
     print(f"Backend: {backend}", flush=True)
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -390,7 +392,7 @@ def main():
     for dataset in parse_names(args.datasets):
         common = {
             split: common_record_ids(
-                dataset, representations, split, args.embeddings_dir
+                dataset, cohort_representations, split, args.embeddings_dir
             )
             for split in ("train", "test")
         }

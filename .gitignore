@@ -17,7 +17,9 @@ __pycache__
 /embeddings
 /logs/lightning_logs/
 /lightning_logs/
+/results/
 
+*.npy
 *.png
 *.parquet
 *.lmdb

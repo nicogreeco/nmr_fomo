@@ -1,0 +1,11 @@
+# Predict annotations without giving rich annotations to the encoder.
+stage: posttrain
+balanced_fp_pairs: true
+use_rich_input: false
+use_annotation_loss: true
+lambda_fp: 0.1
+lambda_annotation: 0.2
+warmup_steps: 500
+plateau_patience: 100
+early_stopping_patience: 100
+
