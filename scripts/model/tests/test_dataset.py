@@ -210,6 +210,81 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             [f"record-{index}" for index in range(8)],
         )
 
+    def test_primary_fails_when_there_are_too_few_row_groups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nmr_path, molecular_path, _ = self.write_pair(
+                Path(directory),
+                num_records=12,
+                nmr_row_group_size=2,
+            )
+            dataset = PairedFoundationDataset(
+                nmr_path,
+                molecular_path,
+                shuffle=False,
+                source_name="primary",
+            )
+
+            for world_size in (2, 4, 8):
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    rf"primary.*6 Parquet row groups.*{world_size * 4} workers",
+                ):
+                    dataset._assigned_row_group_indices(
+                        rank=0,
+                        world_size=world_size,
+                        worker_id=0,
+                        num_workers=4,
+                    )
+
+    def test_small_dataset_replication_gives_every_worker_all_row_groups(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nmr_path, molecular_path, _ = self.write_pair(
+                Path(directory),
+                num_records=12,
+                nmr_row_group_size=2,
+            )
+            dataset = PairedFoundationDataset(
+                nmr_path,
+                molecular_path,
+                shuffle=False,
+                replicate_when_too_small=True,
+            )
+
+            for world_size in (2, 4, 8):
+                for rank in range(world_size):
+                    for worker_id in range(4):
+                        indices = dataset._assigned_row_group_indices(
+                            rank=rank,
+                            world_size=world_size,
+                            worker_id=worker_id,
+                            num_workers=4,
+                        )
+                        self.assertEqual(indices, list(range(6)))
+
+    def test_rank_replication_keeps_local_worker_sharding(self):
+        with tempfile.TemporaryDirectory() as directory:
+            nmr_path, molecular_path, _ = self.write_pair(
+                Path(directory),
+                num_records=16,
+                nmr_row_group_size=2,
+            )
+            dataset = PairedFoundationDataset(
+                nmr_path,
+                molecular_path,
+                shuffle=False,
+                shard_across_ranks=False,
+            )
+
+            rank_zero = dataset._assigned_row_group_indices(
+                rank=0, world_size=8, worker_id=1, num_workers=4
+            )
+            rank_seven = dataset._assigned_row_group_indices(
+                rank=7, world_size=8, worker_id=1, num_workers=4
+            )
+
+        self.assertEqual(rank_zero, rank_seven)
+        self.assertEqual(rank_zero, [1, 5])
+
     def test_dataset_attaches_shift_only_flag(self):
         with tempfile.TemporaryDirectory() as directory:
             nmr_path, molecular_path, _ = self.write_pair(Path(directory))
