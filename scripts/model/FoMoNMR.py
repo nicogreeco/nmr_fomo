@@ -7,11 +7,15 @@ import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
 
+from .dataset import MORGAN_FP_SIZE
 from .embedding import NmrEmbedder
 from .losses import (
+    balanced_binary_cross_entropy_with_logits,
+    binary_tanimoto_from_logits,
     focal_cross_entropy,
     gaussian_soft_cross_entropy,
     symmetric_fingerprint_pairs,
+    relational_cosine_loss,
     tanimoto_to_bins,
 )
 from .processor import MULTIPLICITY_TO_ID
@@ -52,6 +56,9 @@ class ModelConfig:
     fp_sim_bin_size: float = 0.05
     fp_focal_gamma: float = 5.0
     balanced_fp_pairs: bool = False
+    fingerprint_objective: str = "similarity"
+    molecular_target: str = "morgan"
+    unimol_sidecar_dir: str | None = None
 
     global_shift_probability: float = 0.2
     h_global_shift_max: float = 0.01
@@ -88,6 +95,9 @@ class FoMoNMR(L.LightningModule):
         "shift_c": "shift_c",
         "fingerprint": "fp_loss",
         "fingerprint_mae": "fp_mae",
+        "fingerprint_positive": "fp_positive_loss",
+        "fingerprint_negative": "fp_negative_loss",
+        "fingerprint_tanimoto": "fp_tanimoto",
         "annotation": "annotation",
         "integration": "annotation/integration",
         "multiplicity": "annotation/multiplicity",
@@ -104,6 +114,9 @@ class FoMoNMR(L.LightningModule):
         "shift_h": "train/shift/h",
         "shift_c": "train/shift/c",
         "fingerprint": "train/fp_loss",
+        "fingerprint_positive": "train/fp_positive_loss",
+        "fingerprint_negative": "train/fp_negative_loss",
+        "fingerprint_tanimoto": "train/fp_tanimoto",
         "annotation": "train/rich",
         "integration": "train/rich/integration",
         "multiplicity": "train/rich/multiplicity",
@@ -113,6 +126,11 @@ class FoMoNMR(L.LightningModule):
         "j_value": "train/rich/j_value",
     }
     base_loss_names = ("loss", "shift", "fingerprint")
+    fingerprint_bit_metric_names = (
+        "fingerprint_positive",
+        "fingerprint_negative",
+        "fingerprint_tanimoto",
+    )
     shift_component_names = ("shift_h", "shift_c")
     rich_loss_names = (
         "annotation",
@@ -140,7 +158,21 @@ class FoMoNMR(L.LightningModule):
         self.config = config
         if config.logging_mode not in ("minimal", "complete"):
             raise ValueError("logging_mode must be minimal or complete")
+        if config.fingerprint_objective not in ("similarity", "bits"):
+            raise ValueError(
+                "fingerprint_objective must be similarity or bits"
+            )
         self.save_hyperparameters({"config": asdict(config)}, logger=False)
+        if config.molecular_target not in ("morgan", "unimol"):
+            raise ValueError("molecular_target must be morgan or unimol")
+        if config.molecular_target == "unimol":
+            if config.stage != "posttrain" or config.fingerprint_objective != "similarity":
+                raise ValueError("UniMol is experimental: use posttrain and similarity")
+            self.training_metric_names = dict(self.training_metric_names)
+            self.validation_metric_names = dict(self.validation_metric_names)
+            self.training_metric_names["fingerprint"] = "train/unimol_loss"
+            self.validation_metric_names["fingerprint"] = "unimol_loss"
+            self.validation_metric_names["fingerprint_mae"] = "unimol_cosine_mae"
         self.validation_metric_sums = {}
         self.validation_metric_counts = {}
         self.validation_source_metric_sums = {}
@@ -209,13 +241,20 @@ class FoMoNMR(L.LightningModule):
         self.h_classification_head = nn.Linear(self.config.d_model, h_num_bins)
         self.c_classification_head = nn.Linear(self.config.d_model, c_num_bins)
 
-        self.fp_sim_num_bins = int(1.0 / self.config.fp_sim_bin_size) + 1
-        self.fp_sim_classifier = nn.Sequential(
-            nn.Linear(2 * self.config.d_model, self.config.d_model),
-            nn.ReLU(),
-            nn.Dropout(self.config.dropout),
-            nn.Linear(self.config.d_model, self.fp_sim_num_bins),
-        )
+        if self.config.molecular_target == "unimol":
+            pass  # Relational distillation acts directly on pooled embeddings.
+        elif self.config.fingerprint_objective == "similarity":
+            self.fp_sim_num_bins = int(1.0 / self.config.fp_sim_bin_size) + 1
+            self.fp_sim_classifier = nn.Sequential(
+                nn.Linear(2 * self.config.d_model, self.config.d_model),
+                nn.ReLU(),
+                nn.Dropout(self.config.dropout),
+                nn.Linear(self.config.d_model, self.fp_sim_num_bins),
+            )
+        else:
+            self.fp_bit_classifier = nn.Linear(
+                self.config.d_model, MORGAN_FP_SIZE
+            )
 
         self.i_regression_head = nn.Linear(self.config.d_model, 1)
         self.m_classification_head = nn.Linear(
@@ -435,68 +474,102 @@ class FoMoNMR(L.LightningModule):
             shift_losses.append(c_shift_loss)
         shift_loss = torch.stack(shift_losses).mean() if shift_losses else zero
 
-        # Validation keeps every natural pair and the fixed weights for comparison.
-        balance_fp_pairs = self.training and self.config.balanced_fp_pairs
-        pair_features, similarities = symmetric_fingerprint_pairs(
-            pooled,
-            clean_batch["fingerprints"],
-            bin_size=self.config.fp_sim_bin_size,
-            max_pairs_per_bin=1024 if balance_fp_pairs else None,
-        )
         fingerprint_loss = zero
         fingerprint_mae = zero
-        if similarities.numel() > 0:
-            fp_logits = self.fp_sim_classifier(pair_features)
-            fp_targets = tanimoto_to_bins(
-                similarities,
-                self.config.fp_sim_bin_size,
-                self.fp_sim_num_bins,
-            )
-            pair_weights = None
-            if not balance_fp_pairs:
-                range_idx = (similarities / 0.2).long().clamp(max=4)
-                range_weights = similarities.new_tensor([
-                    1.0,   # 0.0 - 0.2
-                    2.0,   # 0.2 - 0.4
-                    5.0,   # 0.4 - 0.6
-                    10.0,  # 0.6 - 0.8
-                    20.0,  # 0.8 - 1.0
-                ])
-                pair_weights = range_weights[range_idx]
-            fingerprint_loss = focal_cross_entropy(
+        fingerprint_positive_loss = zero
+        fingerprint_negative_loss = zero
+        fingerprint_tanimoto = zero
+        if self.config.molecular_target == "unimol":
+            teacher_mask = clean_batch["unimol_mask"]
+            if teacher_mask.sum() >= 2:
+                fingerprint_loss, fingerprint_mae = relational_cosine_loss(
+                    pooled[teacher_mask],
+                    clean_batch["unimol_embeddings"][teacher_mask],
+                    bin_size=self.config.fp_sim_bin_size,
+                    max_pairs_per_bin=(
+                        1024 if self.training and self.config.balanced_fp_pairs else None
+                    ),
+                )
+        elif self.config.fingerprint_objective == "bits":
+            fp_logits = self.fp_bit_classifier(pooled)
+            (
+                fingerprint_loss,
+                fingerprint_positive_loss,
+                fingerprint_negative_loss,
+            ) = balanced_binary_cross_entropy_with_logits(
                 fp_logits,
-                fp_targets,
-                self.config.fp_focal_gamma,
-                pair_weights
+                clean_batch["fingerprints"],
+                return_components=True,
             )
-            if compute_mae:
-                fp_values = (
-                    torch.arange(self.fp_sim_num_bins, device=fp_logits.device) + 0.5
-                ) * self.config.fp_sim_bin_size
-                fp_values = fp_values.clamp_max(1.0)
-                fp_prediction = (
-                    F.softmax(fp_logits.float(), dim=1) * fp_values
-                ).sum(dim=1)
-                fp_errors = (fp_prediction - similarities).abs()
-                fingerprint_mae = fp_errors.mean()
+            fingerprint_tanimoto = binary_tanimoto_from_logits(
+                fp_logits,
+                clean_batch["fingerprints"],
+            )
+        else:
+            # Validation keeps every natural pair and the fixed weights for
+            # comparison with existing similarity-objective runs.
+            balance_fp_pairs = self.training and self.config.balanced_fp_pairs
+            pair_features, similarities = symmetric_fingerprint_pairs(
+                pooled,
+                clean_batch["fingerprints"],
+                bin_size=self.config.fp_sim_bin_size,
+                max_pairs_per_bin=1024 if balance_fp_pairs else None,
+            )
+            if similarities.numel() > 0:
+                fp_logits = self.fp_sim_classifier(pair_features)
+                fp_targets = tanimoto_to_bins(
+                    similarities,
+                    self.config.fp_sim_bin_size,
+                    self.fp_sim_num_bins,
+                )
+                pair_weights = None
+                if not balance_fp_pairs:
+                    range_idx = (similarities / 0.2).long().clamp(max=4)
+                    range_weights = similarities.new_tensor([
+                        1.0,
+                        2.0,
+                        5.0,
+                        10.0,
+                        20.0,
+                    ])
+                    pair_weights = range_weights[range_idx]
+                fingerprint_loss = focal_cross_entropy(
+                    fp_logits,
+                    fp_targets,
+                    self.config.fp_focal_gamma,
+                    pair_weights,
+                )
+                if compute_mae:
+                    fp_values = (
+                        torch.arange(
+                            self.fp_sim_num_bins,
+                            device=fp_logits.device,
+                        ) + 0.5
+                    ) * self.config.fp_sim_bin_size
+                    fp_values = fp_values.clamp_max(1.0)
+                    fp_prediction = (
+                        F.softmax(fp_logits.float(), dim=1) * fp_values
+                    ).sum(dim=1)
+                    fp_errors = (fp_prediction - similarities).abs()
+                    fingerprint_mae = fp_errors.mean()
 
-                range_indices = (similarities / 0.2).long().clamp(max=4)
-                self.fp_range_error_sums.scatter_add_(
-                    0, range_indices, fp_errors.detach()
-                )
-                self.fp_range_prediction_sums.scatter_add_(
-                    0, range_indices, fp_prediction.detach()
-                )
-                self.fp_range_counts.scatter_add_(
-                    0, range_indices, torch.ones_like(range_indices)
-                )
-                if fp_source is not None:
-                    self.fp_source_range_error_sums[fp_source].scatter_add_(
+                    range_indices = (similarities / 0.2).long().clamp(max=4)
+                    self.fp_range_error_sums.scatter_add_(
                         0, range_indices, fp_errors.detach()
                     )
-                    self.fp_source_range_counts[fp_source].scatter_add_(
+                    self.fp_range_prediction_sums.scatter_add_(
+                        0, range_indices, fp_prediction.detach()
+                    )
+                    self.fp_range_counts.scatter_add_(
                         0, range_indices, torch.ones_like(range_indices)
                     )
+                    if fp_source is not None:
+                        self.fp_source_range_error_sums[fp_source].scatter_add_(
+                            0, range_indices, fp_errors.detach()
+                        )
+                        self.fp_source_range_counts[fp_source].scatter_add_(
+                            0, range_indices, torch.ones_like(range_indices)
+                        )
 
         integration_loss = zero
         multiplicity_loss = zero
@@ -580,6 +653,9 @@ class FoMoNMR(L.LightningModule):
             "shift_c": c_shift_loss,
             "fingerprint": fingerprint_loss,
             "fingerprint_mae": fingerprint_mae,
+            "fingerprint_positive": fingerprint_positive_loss,
+            "fingerprint_negative": fingerprint_negative_loss,
+            "fingerprint_tanimoto": fingerprint_tanimoto,
             "annotation": annotation_loss,
             "integration": integration_loss,
             "multiplicity": multiplicity_loss,
@@ -593,6 +669,8 @@ class FoMoNMR(L.LightningModule):
 
     def losses_to_log(self, losses, include_annotations=True):
         names = list(self.base_loss_names)
+        if self.config.fingerprint_objective == "bits":
+            names.extend(self.fingerprint_bit_metric_names)
         if self.config.logging_mode == "complete":
             names.extend(self.shift_component_names)
         if (
@@ -681,8 +759,27 @@ class FoMoNMR(L.LightningModule):
         metric_counts = {
             "shift_h_mae": int(corruption["h_shift_mask"].sum()),
             "shift_c_mae": int(corruption["c_shift_mask"].sum()),
-            "fingerprint_mae": batch_size * (batch_size - 1) // 2,
         }
+        if self.config.fingerprint_objective == "bits":
+            positive_bits = int((batch["fingerprints"] > 0.5).sum())
+            metric_counts.update(
+                {
+                    "fingerprint_positive": positive_bits,
+                    "fingerprint_negative": (
+                        batch["fingerprints"].numel() - positive_bits
+                    ),
+                    "fingerprint_tanimoto": batch_size,
+                }
+            )
+        if self.config.molecular_target == "unimol":
+            teacher_count = int(batch["unimol_mask"].sum())
+            pair_count = teacher_count * (teacher_count - 1) // 2
+            metric_counts["fingerprint_mae"] = pair_count
+            metric_weights["fingerprint"] = pair_count
+        elif self.config.fingerprint_objective == "similarity":
+            metric_counts["fingerprint_mae"] = (
+                batch_size * (batch_size - 1) // 2
+            )
         for name, count in metric_counts.items():
             if count > 0:
                 global_metrics[name] = losses[name]
@@ -690,7 +787,8 @@ class FoMoNMR(L.LightningModule):
 
         for name, value in global_metrics.items():
             weight = metric_weights[name]
-            if name == "fingerprint_mae":
+            if weight == 0 or (name == "fingerprint_mae"
+                               and self.config.molecular_target == "morgan"):
                 continue
             self.validation_metric_sums[name] = (
                 self.validation_metric_sums.get(name, 0.0)
@@ -713,6 +811,8 @@ class FoMoNMR(L.LightningModule):
 
         for name, value in source_metrics.items():
             weight = metric_weights.get(name, batch_size)
+            if weight == 0:
+                continue
             self.validation_source_metric_sums[source][name] += (
                 value.detach() * weight
             )

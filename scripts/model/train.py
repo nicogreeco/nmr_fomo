@@ -10,6 +10,7 @@ from pathlib import Path
 
 import lightning as L
 import mlflow
+import pyarrow.parquet as pq
 import torch
 import yaml
 from dotenv import load_dotenv
@@ -118,6 +119,14 @@ class ShiftValidationLogger(L.Callback):
                 )
 
 
+def validation_artifact_callbacks(config, run_dir):
+    callbacks = []
+    if config.molecular_target == "morgan" and config.fingerprint_objective == "similarity":
+        callbacks.append(FingerprintValidationLogger(run_dir))
+    callbacks.append(ShiftValidationLogger(run_dir))
+    return callbacks
+
+
 class FinalModelLogger(L.Callback):
     def __init__(self, latest_checkpoints, best_checkpoints, tracking_uri):
         self.latest_checkpoints = latest_checkpoints
@@ -220,11 +229,15 @@ def paired_dataset(
     *,
     shard_across_ranks=True,
     replicate_when_too_small=False,
+    unimol_sidecar_dir=None,
 ):
     root = Path("datasets/train_splits")
+    include_unimol = source == "rich" and unimol_sidecar_dir is not None
+    properties_root = Path(unimol_sidecar_dir) if include_unimol else root
     return PairedFoundationDataset(
         root / f"{source}_{split}.parquet",
-        root / f"{source}_{split}_mol_properties.parquet",
+        properties_root / f"{source}_{split}_mol_properties.parquet",
+        include_unimol=include_unimol,
         shuffle=shuffle,
         shuffle_buffer_size=65536,
         seed=seed,
@@ -235,7 +248,20 @@ def paired_dataset(
     )
 
 
-def make_dataloaders(stage, batch_size, num_workers, seed):
+def make_dataloaders(stage, batch_size, num_workers, seed, config=None):
+    unimol_dir = None
+    if config is not None and config.molecular_target == "unimol":
+        if stage != "posttrain" or not config.unimol_sidecar_dir:
+            raise ValueError("UniMol requires posttrain and unimol_sidecar_dir")
+        unimol_dir = config.unimol_sidecar_dir
+        # Both splits must use the same train-fitted teacher geometry.
+        centers = []
+        for split in ("train", "val"):
+            path = Path(unimol_dir) / f"rich_{split}_mol_properties.parquet"
+            metadata = pq.ParquetFile(path).schema_arrow.metadata or {}
+            centers.append(metadata.get(b"unimol_center_sha256"))
+        if centers[0] is None or centers[0] != centers[1]:
+            raise ValueError("Rich train and validation must share the UniMol training center")
     if stage == "pretrain":
         train_data = MixedFoundationDataset(
             datasets=[
@@ -264,7 +290,8 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
     else:
         train_data = MixedFoundationDataset(
             datasets=[
-                paired_dataset("rich", "train", True, False, seed),
+                paired_dataset("rich", "train", True, False, seed,
+                               unimol_sidecar_dir=unimol_dir),
                 paired_dataset(
                     "simnmr",
                     "train",
@@ -295,6 +322,7 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
             False,
             seed,
             shard_across_ranks=True,
+            unimol_sidecar_dir=unimol_dir,
         ),
     ]
     if stage == "pretrain":
@@ -319,7 +347,9 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
         )
     )
 
-    processor = FoundationNMRProcessor()
+    processor = FoundationNMRProcessor(
+        molecular_target=config.molecular_target if config is not None else "morgan"
+    )
     train_loader_options = {
         "batch_size": batch_size,
         "num_workers": num_workers,
@@ -371,6 +401,21 @@ def make_probe_dataloaders(batch_size, num_workers, seed):
     return loaders
 
 
+def load_pretrained_model(path, config):
+    if config.molecular_target != "unimol":
+        return FoMoNMR.load_from_checkpoint(path, config=config)
+    # UniMol has no molecular head. Only discard old Morgan heads; keep strict
+    # checks on every encoder and spectral prediction parameter.
+    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    state = {
+        name: value for name, value in checkpoint["state_dict"].items()
+        if not name.startswith(("fp_sim_classifier.", "fp_bit_classifier."))
+    }
+    model = FoMoNMR(config)
+    model.load_state_dict(state, strict=True)
+    return model
+
+
 def main():
     args = parse_args()
     if args.mlflow_run_id and (not args.resume or not args.run_name or args.no_mlflow):
@@ -397,13 +442,11 @@ def main():
         args.batch_size,
         args.num_workers,
         args.seed,
+        config=config,
     )
 
     if args.pretrained_checkpoint:
-        model = FoMoNMR.load_from_checkpoint(
-            args.pretrained_checkpoint,
-            config=config,
-        )
+        model = load_pretrained_model(args.pretrained_checkpoint, config)
     else:
         model = FoMoNMR(config)
 
@@ -442,9 +485,8 @@ def main():
         latest_checkpoints,
         best_checkpoints,
         early_stopping,
-        FingerprintValidationLogger(run_dir),
-        ShiftValidationLogger(run_dir),
     ]
+    callbacks.extend(validation_artifact_callbacks(config, run_dir))
     if not args.no_maccs_probe:
         probe_train_loader, probe_eval_loader = make_probe_dataloaders(
             args.batch_size,

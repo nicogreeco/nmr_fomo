@@ -1,6 +1,7 @@
 """Focused tests for FoMoNMR pretraining and continued pretraining."""
 
 import copy
+import math
 import unittest
 from types import SimpleNamespace
 
@@ -13,6 +14,8 @@ from model.FoMoNMR import (
     ModelConfig,
 )
 from model.losses import (
+    balanced_binary_cross_entropy_with_logits,
+    binary_tanimoto_from_logits,
     gaussian_soft_cross_entropy,
     symmetric_fingerprint_pairs,
     tanimoto_to_bins,
@@ -398,6 +401,112 @@ class FoMoNMRTests(unittest.TestCase):
         self.assertFalse(corrupted["h"]["availability"][1].any().item())
         self.assertFalse(corrupted["h"]["j_mask"][1].any().item())
 
+    def test_posttrain_can_hide_rich_input_and_keep_annotation_targets(self):
+        model = FoMoNMR(
+            small_config(
+                stage="posttrain",
+                use_rich_input=False,
+                use_annotation_loss=True,
+                annotation_mask_probability=1.0,
+            )
+        )
+
+        corrupted, info = model.corrupt_batch(example_batch())
+
+        self.assertTrue(info["annotation_mask"].any().item())
+        self.assertFalse(corrupted["h"]["availability"].any().item())
+        self.assertFalse(corrupted["h"]["j_mask"].any().item())
+
+    def test_balanced_bit_loss_prevents_all_zero_solution(self):
+        targets = torch.tensor([[1.0, 0.0, 1.0, 0.0]])
+        logits = torch.zeros_like(targets, requires_grad=True)
+
+        loss = balanced_binary_cross_entropy_with_logits(logits, targets)
+        self.assertAlmostEqual(loss.item(), math.log(2), places=6)
+        loss.backward()
+        self.assertTrue((logits.grad[targets.bool()] < 0).all().item())
+        self.assertTrue((logits.grad[~targets.bool()] > 0).all().item())
+
+        collapsed = torch.full_like(targets, -10.0)
+        collapsed_loss = balanced_binary_cross_entropy_with_logits(
+            collapsed,
+            targets,
+        )
+        self.assertGreater(collapsed_loss.item(), 4.0)
+
+        for single_class_targets in (
+            torch.zeros_like(targets),
+            torch.ones_like(targets),
+        ):
+            edge_loss = balanced_binary_cross_entropy_with_logits(
+                torch.zeros_like(targets),
+                single_class_targets,
+            )
+            self.assertTrue(torch.isfinite(edge_loss).item())
+
+        loss, positive_loss, negative_loss = (
+            balanced_binary_cross_entropy_with_logits(
+                logits.detach(), targets, return_components=True
+            )
+        )
+        self.assertAlmostEqual(loss.item(), math.log(2), places=6)
+        self.assertAlmostEqual(positive_loss.item(), math.log(2), places=6)
+        self.assertAlmostEqual(negative_loss.item(), math.log(2), places=6)
+
+    def test_binary_tanimoto_uses_half_probability_threshold(self):
+        targets = torch.tensor([[1.0, 0.0, 1.0, 0.0]])
+        perfect_logits = torch.tensor([[10.0, -10.0, 10.0, -10.0]])
+        empty_logits = torch.full_like(targets, -10.0)
+
+        self.assertEqual(
+            binary_tanimoto_from_logits(perfect_logits, targets).item(), 1.0
+        )
+        self.assertEqual(
+            binary_tanimoto_from_logits(empty_logits, targets).item(), 0.0
+        )
+
+    def test_bit_objective_uses_linear_head_and_supports_batch_size_one(self):
+        model = FoMoNMR(small_config(fingerprint_objective="bits"))
+        self.assertIsInstance(model.fp_bit_classifier, torch.nn.Linear)
+        self.assertEqual(model.fp_bit_classifier.out_features, 2048)
+        self.assertFalse(hasattr(model, "fp_sim_classifier"))
+
+        batch = example_batch()
+        batch["h"] = {name: value[:1] for name, value in batch["h"].items()}
+        batch["c"] = {name: value[:1] for name, value in batch["c"].items()}
+        batch["fingerprints"] = batch["fingerprints"][:1]
+        batch["shift_only"] = batch["shift_only"][:1]
+        batch["record_ids"] = batch["record_ids"][:1]
+
+        corrupted, corruption = model.corrupt_batch(batch)
+        outputs = model(
+            corrupted,
+            h_shift_prediction_mask=corruption["h_shift_mask"],
+            c_shift_prediction_mask=corruption["c_shift_mask"],
+        )
+        losses = model.compute_losses(outputs, batch, corruption)
+
+        self.assertEqual(model.fp_bit_classifier(outputs[0]).shape, (1, 2048))
+        self.assertGreater(losses["fingerprint"].item(), 0.0)
+        self.assertGreater(losses["fingerprint_positive"].item(), 0.0)
+        self.assertGreater(losses["fingerprint_negative"].item(), 0.0)
+        self.assertGreaterEqual(losses["fingerprint_tanimoto"].item(), 0.0)
+        self.assertLessEqual(losses["fingerprint_tanimoto"].item(), 1.0)
+        self.assertEqual(
+            set(model.fingerprint_bit_metric_names),
+            {
+                "fingerprint_positive",
+                "fingerprint_negative",
+                "fingerprint_tanimoto",
+            },
+        )
+        losses["fingerprint"].backward()
+        self.assertIsNotNone(model.fp_bit_classifier.weight.grad)
+
+    def test_rejects_unknown_fingerprint_objective(self):
+        with self.assertRaisesRegex(ValueError, "fingerprint_objective"):
+            FoMoNMR(small_config(fingerprint_objective="unknown"))
+
     def test_fingerprint_pairs_are_complete_symmetric_and_include_identity_bin(self):
         first = torch.tensor([[1.0, 2.0], [3.0, 5.0], [7.0, 11.0]])
         fingerprints = torch.tensor(
@@ -626,12 +735,26 @@ class FoMoNMRTests(unittest.TestCase):
             minimal_names | {"annotation"},
         )
 
+        no_annotation_loss = FoMoNMR(
+            small_config(stage="posttrain", use_annotation_loss=False)
+        )
+        self.assertEqual(
+            set(no_annotation_loss.losses_to_log(losses)),
+            minimal_names,
+        )
+
         complete = FoMoNMR(
             small_config(stage="posttrain", logging_mode="complete")
         )
         self.assertEqual(
             set(complete.losses_to_log(losses)),
-            set(losses),
+            set(losses) - set(complete.fingerprint_bit_metric_names),
+        )
+
+        bits = FoMoNMR(small_config(fingerprint_objective="bits"))
+        self.assertEqual(
+            set(bits.losses_to_log(losses)),
+            minimal_names | set(bits.fingerprint_bit_metric_names),
         )
         self.assertEqual(
             set(complete.losses_to_log(losses, include_annotations=False)),

@@ -1,0 +1,8 @@
+# Predict Morgan bits directly from the pooled FoMoNMR embedding.
+stage: pretrain
+fingerprint_objective: bits
+lambda_fp: 0.1
+warmup_steps: 5000
+plateau_patience: 3
+early_stopping_patience: 100
+max_steps: 40000

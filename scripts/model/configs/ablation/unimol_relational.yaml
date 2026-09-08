@@ -1,0 +1,16 @@
+# Experimental: Rich-only relational distillation from singleton UniMol2 84M.
+# Architecture and corruption settings inherit ModelConfig defaults.
+stage: posttrain
+molecular_target: unimol
+fingerprint_objective: similarity
+unimol_sidecar_dir: datasets/experimental/unimol2_rich
+balanced_fp_pairs: true
+fp_sim_bin_size: 0.05  # Bins of width 0.1 in cosine space [-1, 1].
+lambda_fp: 0.1        # Weight of the relational MSE; not a Morgan loss here.
+use_rich_input: true
+use_annotation_loss: false
+lambda_annotation: 0.0
+warmup_steps: 2500
+plateau_patience: 3
+early_stopping_patience: 100
+max_steps: 30000

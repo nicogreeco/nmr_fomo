@@ -1,5 +1,6 @@
 """Collate canonical NMR records for the new foundation model."""
 
+import numpy as np
 import torch
 
 from data.limits import MAX_J_VALUES_PER_PEAK, MAX_PEAKS_PER_MODALITY
@@ -66,6 +67,9 @@ def _maccs_fingerprints_to_tensor(fingerprints):
 class FoundationNMRProcessor:
     """Validate, pad, and collate canonical peak records into dense tensors."""
 
+    def __init__(self, molecular_target="morgan"):
+        self.molecular_target = molecular_target
+
     def __call__(self, records):
         records = list(records)
         if not records:
@@ -81,8 +85,10 @@ class FoundationNMRProcessor:
 
         fingerprints = None
         maccs_fingerprints = None
+        unimol_embeddings = None
         shift_only = torch.zeros(len(records), dtype=torch.bool)
         if all(paired_flags):
+            unimol_embeddings = [record.unimol_embedding for record in records]
             fingerprints = [record.morgan_fingerprint for record in records]
             maccs_fingerprints = [record.maccs_fingerprint for record in records]
             shift_only = torch.tensor(
@@ -212,10 +218,23 @@ class FoundationNMRProcessor:
             },
         }
         if fingerprints is not None:
-            batch["fingerprints"] = _unpack_morgan_fingerprints(fingerprints)
+            if self.molecular_target == "morgan":
+                batch["fingerprints"] = _unpack_morgan_fingerprints(fingerprints)
             batch["maccs_fingerprints"] = _maccs_fingerprints_to_tensor(
                 maccs_fingerprints
             )
+            # Only Rich records have a teacher; missing teachers are never targets.
+            batch["unimol_mask"] = torch.tensor(
+                [value is not None for value in unimol_embeddings], dtype=torch.bool
+            )
+            if batch["unimol_mask"].any():
+                batch["unimol_embeddings"] = torch.from_numpy(np.stack(
+                    [value if value is not None else np.zeros(768, dtype=np.float32)
+                     for value in unimol_embeddings]
+                ).astype(np.float32))
+                valid = batch["unimol_embeddings"][batch["unimol_mask"]]
+                if not torch.isfinite(valid).all() or (valid.norm(dim=1) == 0).any():
+                    raise ValueError("UniMol embeddings must be finite and nonzero")
         return batch
 
 

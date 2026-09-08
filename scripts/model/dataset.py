@@ -8,6 +8,7 @@ from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Iterable, Iterator
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as parquet
 import torch.distributed as dist
@@ -34,6 +35,7 @@ class PairedFoundationRecord:
     morgan_fingerprint: bytes
     maccs_fingerprint: str
     shift_only: bool = False
+    unimol_embedding: np.ndarray | None = None
 
 
 def _checked_record(value: object) -> CanonicalRecord:
@@ -101,11 +103,7 @@ class PairedFoundationDataset(IterableDataset):
         shard_across_ranks: bool = True,
         replicate_when_too_small: bool = False,
     ):
-        if include_unimol:
-            raise NotImplementedError(
-                "UniMol inputs are reserved for a future PairedFoundationDataset "
-                "implementation"
-            )
+        self.include_unimol = include_unimol
         if arrow_batch_size < 1:
             raise ValueError("arrow_batch_size must be at least 1")
         if shuffle_buffer_size < 1:
@@ -142,6 +140,8 @@ class PairedFoundationDataset(IterableDataset):
             raise ValueError(f"{self.nmr_path} is missing required field: record_id")
 
         required_fields = {"record_id", "rdkit_status", MORGAN_FIELD}
+        if self.include_unimol:
+            required_fields.add("unimol_embedding")
         missing_fields = required_fields.difference(molecular_file.schema_arrow.names)
         if missing_fields:
             missing = ", ".join(sorted(missing_fields))
@@ -158,6 +158,14 @@ class PairedFoundationDataset(IterableDataset):
             )
 
         metadata = molecular_file.schema_arrow.metadata or {}
+        if self.include_unimol:
+            embedding_type = molecular_file.schema_arrow.field("unimol_embedding").type
+            if embedding_type != pa.list_(pa.float32(), 768):
+                raise ValueError("unimol_embedding must contain 768 float32 values")
+            if metadata.get(b"unimol_batch_size") != b"1":
+                raise ValueError("UniMol sidecar must be extracted with batch size 1")
+            if metadata.get(b"unimol_transform") != b"rich_train_center_l2":
+                raise ValueError("UniMol sidecar must use the Rich train center")
         expected_metadata = {
             b"molecular_properties_schema_version": (
                 MOLECULAR_PROPERTIES_SCHEMA_VERSION.encode("utf-8")
@@ -208,15 +216,27 @@ class PairedFoundationDataset(IterableDataset):
         ]
 
         for row_group_index in row_group_indices:
+            columns = ["record_id", "rdkit_status", MORGAN_FIELD, MACCS_FIELD]
+            if self.include_unimol:
+                columns.append("unimol_embedding")
             molecular_table = molecular_file.read_row_group(
                 row_group_index,
-                columns=["record_id", "rdkit_status", MORGAN_FIELD, MACCS_FIELD],
+                columns=columns,
                 use_threads=True,
             )
             molecular_ids = molecular_table.column("record_id").to_pylist()
             statuses = molecular_table.column("rdkit_status").to_pylist()
             fingerprints = molecular_table.column(MORGAN_FIELD).to_pylist()
             maccs_vectors = molecular_table.column(MACCS_FIELD).to_pylist()
+            unimol_vectors = None
+            if self.include_unimol:
+                column = molecular_table.column("unimol_embedding").combine_chunks()
+                if column.null_count or column.values.null_count:
+                    raise ValueError("Rich sidecar contains missing UniMol embeddings")
+                unimol_vectors = column.values.to_numpy().reshape(-1, 768)
+                if (not np.isfinite(unimol_vectors).all()
+                        or (np.linalg.norm(unimol_vectors, axis=1) == 0).any()):
+                    raise ValueError("Rich sidecar contains invalid UniMol embeddings")
 
             offset = 0
             for nmr_batch in nmr_file.iter_batches(
@@ -264,6 +284,9 @@ class PairedFoundationDataset(IterableDataset):
                         morgan_fingerprint=fingerprint,
                         maccs_fingerprint=maccs_vector,
                         shift_only=self.shift_only,
+                        unimol_embedding=(
+                            unimol_vectors[offset] if unimol_vectors is not None else None
+                        ),
                     )
                     offset += 1
 
@@ -414,6 +437,7 @@ class MixedFoundationDataset(IterableDataset):
                 morgan_fingerprint=sample.morgan_fingerprint,
                 maccs_fingerprint=sample.maccs_fingerprint,
                 shift_only=self.shift_only[source],
+                unimol_embedding=sample.unimol_embedding,
             )
 
 
