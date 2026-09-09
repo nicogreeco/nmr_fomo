@@ -55,6 +55,23 @@ class ExtractEmbeddingArgumentTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 parse_for_model("nmrtrans", "--model-size", "164M")
 
+    def test_fomonmr_requires_one_model_source(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_for_model("fomonmr")
+
+    def test_fomonmr_accepts_a_checkpoint_or_run_id(self):
+        checkpoint = parse_for_model("fomonmr", "--checkpoint", "model.ckpt")
+        run = parse_for_model("fomonmr", "--run-id", "abc123")
+
+        self.assertEqual(str(checkpoint.checkpoint), "model.ckpt")
+        self.assertEqual(run.run_id, "abc123")
+
+    def test_run_id_is_only_available_for_fomonmr(self):
+        with contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                parse_for_model("nmrtrans", "--run-id", "abc123")
+
 
 if __name__ == "__main__":
     unittest.main()

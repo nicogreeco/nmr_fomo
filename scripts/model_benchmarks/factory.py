@@ -33,9 +33,13 @@ def build_processor(model_name: str, **options):
         from .processors.morgan import MorganProcessor
 
         return MorganProcessor(**options)
+    if name == "fomonmr":
+        from .processors.fomonmr import FoMoNMRProcessor
+
+        return FoMoNMRProcessor(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, nmrsolver, unimol2, or morgan"
+        "ultranmr, nmrsolver, unimol2, morgan, or fomonmr"
     )
 
 
@@ -67,9 +71,13 @@ def build_embedder(model_name: str, **options):
         from .embedders.morgan import MorganEmbedder
 
         return MorganEmbedder(**options)
+    if name == "fomonmr":
+        from .embedders.fomonmr import FoMoNMREmbedder
+
+        return FoMoNMREmbedder(**options)
     raise ValueError(
         f"unknown model {model_name!r}; choose nmrpeak, nmrtrans, "
-        "ultranmr, nmrsolver, unimol2, or morgan"
+        "ultranmr, nmrsolver, unimol2, morgan, or fomonmr"
     )
 
 

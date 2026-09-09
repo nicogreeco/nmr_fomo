@@ -1,7 +1,7 @@
 # Existing-model benchmarks
 
-This package adapts canonical records to four NMR representations and two
-structure-only molecular comparisons: UniMol2 and Morgan ECFP4.
+This package adapts canonical records to published NMR representations,
+FoMoNMR, and two structure-only molecular comparisons: UniMol2 and Morgan ECFP4.
 
 Inputs come from the DVC-managed canonical or cleaned collection. This package
 does not belong to the raw-to-cleaned DAG and must never convert, filter, split,

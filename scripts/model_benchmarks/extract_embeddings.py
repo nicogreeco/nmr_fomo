@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import os
 from itertools import islice
 from pathlib import Path
 
@@ -19,6 +20,7 @@ MODEL_NAMES = (
     "unimol2",
     "uni-mol2",
     "morgan",
+    "fomonmr",
 )
 
 
@@ -58,6 +60,11 @@ def parse_arguments() -> argparse.Namespace:
         help="multiplicity mode (a no-op for shift-only and molecular models)",
     )
     parser.add_argument("--checkpoint", type=Path)
+    parser.add_argument("--run-id")
+    parser.add_argument(
+        "--tracking-uri",
+        default=os.getenv("MLFLOW_TRACKING_URI"),
+    )
     parser.add_argument(
         "--on-incompatible",
         choices=("error", "skip"),
@@ -76,6 +83,13 @@ def parse_arguments() -> argparse.Namespace:
     parser.add_argument("--overwrite", action="store_true")
 
     arguments = parser.parse_args()
+    if arguments.model == "fomonmr":
+        from dotenv import load_dotenv
+
+        load_dotenv("mlflow.env")
+        if arguments.tracking_uri is None:
+            arguments.tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+
     if arguments.input_option and arguments.legacy_input:
         parser.error("give the input with --input or as a positional path, not both")
     arguments.input = arguments.input_option or arguments.legacy_input
@@ -88,6 +102,11 @@ def parse_arguments() -> argparse.Namespace:
             arguments.model_size = "84M"
     elif arguments.model_size is not None:
         parser.error("--model-size is only valid with UniMol2")
+    if arguments.model == "fomonmr":
+        if (arguments.checkpoint is None) == (arguments.run_id is None):
+            parser.error("FoMoNMR requires exactly one of --checkpoint or --run-id")
+    elif arguments.run_id is not None:
+        parser.error("--run-id is only valid with --model fomonmr")
     return arguments
 
 
@@ -175,6 +194,9 @@ def main() -> None:
     embedder_options = {"device": arguments.device}
     if arguments.checkpoint is not None:
         embedder_options["checkpoint_path"] = arguments.checkpoint
+    if arguments.model == "fomonmr":
+        embedder_options["run_id"] = arguments.run_id
+        embedder_options["tracking_uri"] = arguments.tracking_uri
     if arguments.model in {"unimol2", "uni-mol2"}:
         embedder_options["model_size"] = arguments.model_size
     embedder = build_embedder(arguments.model, **embedder_options)
