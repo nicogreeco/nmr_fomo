@@ -239,9 +239,15 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
     if stage == "pretrain":
         train_data = MixedFoundationDataset(
             datasets=[
-                paired_dataset("simnmr", "train", True, True, seed),
                 paired_dataset(
-                    "rich",
+                    "simnmr", 
+                    "train", 
+                    True, 
+                    True, 
+                    seed
+                ),
+                paired_dataset(
+                    "rich_shuffle",
                     "train",
                     True,
                     True,
@@ -264,7 +270,13 @@ def make_dataloaders(stage, batch_size, num_workers, seed):
     else:
         train_data = MixedFoundationDataset(
             datasets=[
-                paired_dataset("rich", "train", True, False, seed),
+                paired_dataset(
+                    "rich_shuffle", 
+                    "train", 
+                    True, 
+                    False, 
+                    seed
+                ),
                 paired_dataset(
                     "simnmr",
                     "train",
@@ -369,7 +381,6 @@ def make_probe_dataloaders(batch_size, num_workers, seed):
             )
         )
     return loaders
-
 
 def main():
     args = parse_args()
