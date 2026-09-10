@@ -47,8 +47,7 @@ def parse_arguments(argv=None):
     )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--patience", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=50)
     parser.add_argument("--validation-fraction", type=float, default=0.2)
     parser.add_argument("--backbone-lr", type=float, default=1e-5)
     parser.add_argument("--head-lr", type=float, default=1e-4)
@@ -261,8 +260,6 @@ def fine_tune_property(
     best_loss = float("inf")
     best_model_state = None
     best_head_state = None
-    epochs_without_improvement = 0
-
     for epoch in range(1, arguments.epochs + 1):
         model.train()
         head.train()
@@ -298,11 +295,6 @@ def fine_tune_property(
             best_loss = validation_loss
             best_model_state = copy.deepcopy(model.state_dict())
             best_head_state = copy.deepcopy(head.state_dict())
-            epochs_without_improvement = 0
-        else:
-            epochs_without_improvement += 1
-            if epochs_without_improvement >= arguments.patience:
-                break
 
     model.load_state_dict(best_model_state)
     head.load_state_dict(best_head_state)
