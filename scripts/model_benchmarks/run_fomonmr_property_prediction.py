@@ -50,6 +50,11 @@ def parse_arguments(argv=None):
     )
     parser.add_argument("--datasets", nargs="+", required=True)
     parser.add_argument("--experiment-name", required=True)
+    parser.add_argument(
+        "--shift-only",
+        action="store_true",
+        help="hide rich 1H annotations, even for a posttrain checkpoint",
+    )
     parser.add_argument("--runs-dir", type=Path, default=Path("runs/fomonmr"))
     parser.add_argument(
         "--datasets-dir", type=Path, default=Path("datasets/cleaned/admet")
@@ -129,10 +134,10 @@ def resolve_device(name):
     return torch.device(name)
 
 
-def apply_checkpoint_input_policy(batch, model):
+def apply_checkpoint_input_policy(batch, model, shift_only=False):
     """Match the rich-input policy used while training this checkpoint."""
 
-    if model.config.stage == "pretrain" or not model.config.use_rich_input:
+    if shift_only or model.config.stage == "pretrain" or not model.config.use_rich_input:
         batch["h"]["availability"].zero_()
         batch["h"]["j_mask"].zero_()
 
@@ -161,6 +166,7 @@ def extract_embeddings(
     selected_ids,
     batch_size,
     device,
+    shift_only=False,
     overwrite=False,
 ):
     """Extract one FoMoNMR split into the standard embedding Parquet schema."""
@@ -193,7 +199,7 @@ def extract_embeddings(
         for records in batched_selected_records(input_path, selected_ids, batch_size):
             batch = processor(records)
             batch = model.transfer_batch_to_device(batch, device, 0)
-            apply_checkpoint_input_policy(batch, model)
+            apply_checkpoint_input_policy(batch, model, shift_only=shift_only)
             with torch.inference_mode():
                 pooled, _, _ = model(batch)
             embeddings = pooled.detach().to(device="cpu", dtype=torch.float32)
@@ -212,7 +218,9 @@ def extract_embeddings(
             )
 
         uses_rich_input = (
-            model.config.stage != "pretrain" and model.config.use_rich_input
+            not shift_only
+            and model.config.stage != "pretrain"
+            and model.config.use_rich_input
         )
         metadata = {
             "model_name": run_name,
@@ -292,14 +300,21 @@ def main(argv=None):
         model, run_name, model_source = load_mlflow_model(
             arguments.run_id, arguments.tracking_uri
         )
+        if arguments.shift_only:
+            run_name = f"{run_name}-shift-only"
         models = [(model, run_name, model_source)]
         run_names = [run_name]
     else:
         models = []
+        model_names = []
         for checkpoint, run_name in zip(checkpoints, run_names):
+            if arguments.shift_only:
+                run_name = f"{run_name}-shift-only"
             print(f"loading {run_name}: {checkpoint}", flush=True)
             model = FoMoNMR.load_from_checkpoint(checkpoint, map_location="cpu")
             models.append((model, run_name, checkpoint))
+            model_names.append(run_name)
+        run_names = model_names
 
     for model, run_name, model_source in models:
         model.eval().to(device)
@@ -324,6 +339,7 @@ def main(argv=None):
                     selected_ids=common[dataset][split],
                     batch_size=arguments.batch_size,
                     device=device,
+                    shift_only=arguments.shift_only,
                     overwrite=arguments.overwrite,
                 )
 
@@ -331,9 +347,10 @@ def main(argv=None):
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
-    output_dir = Path(
-        f"results/property_prediction_fomonmr_{arguments.experiment_name}"
-    )
+    experiment_name = arguments.experiment_name
+    if arguments.shift_only and not experiment_name.endswith("-shift-only"):
+        experiment_name = f"{experiment_name}-shift-only"
+    output_dir = Path(f"results/property_prediction_fomonmr_{experiment_name}")
     run_property_prediction(
         [
             "--models",

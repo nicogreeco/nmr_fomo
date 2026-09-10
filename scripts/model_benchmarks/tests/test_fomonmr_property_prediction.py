@@ -62,6 +62,21 @@ class FoMoNMRPropertyPredictionTests(unittest.TestCase):
         self.assertEqual(arguments.checkpoints[0].suffix, ".ckpt")
         self.assertEqual(arguments.experiment_name, "comparison")
 
+    def test_cli_accepts_shift_only(self):
+        arguments = parse_arguments(
+            [
+                "--run-id",
+                "abc123",
+                "--datasets",
+                "ames",
+                "--experiment-name",
+                "comparison",
+                "--shift-only",
+            ]
+        )
+
+        self.assertTrue(arguments.shift_only)
+
     def test_cli_accepts_mlflow_run_id_without_checkpoint(self):
         arguments = parse_arguments(
             [
@@ -108,6 +123,19 @@ class FoMoNMRPropertyPredictionTests(unittest.TestCase):
         }
 
         apply_checkpoint_input_policy(batch, FakeFoMoNMR(stage="pretrain"))
+
+        self.assertFalse(batch["h"]["availability"].any())
+        self.assertFalse(batch["h"]["j_mask"].any())
+
+    def test_forced_shift_only_hides_posttrain_annotations(self):
+        batch = {
+            "h": {
+                "availability": torch.ones(1, 2, 4, dtype=torch.bool),
+                "j_mask": torch.ones(1, 2, 6, dtype=torch.bool),
+            }
+        }
+
+        apply_checkpoint_input_policy(batch, FakeFoMoNMR(), shift_only=True)
 
         self.assertFalse(batch["h"]["availability"].any())
         self.assertFalse(batch["h"]["j_mask"].any())
