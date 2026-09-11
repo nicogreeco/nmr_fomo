@@ -387,6 +387,62 @@ required fields, row counts, and row-group boundaries. Iteration checks IDs,
 RDKit status, and the 256-byte fingerprint for every row. Invalid input raises
 a descriptive error; records are never silently discarded.
 
-`include_unimol` defaults to `False`. Passing `include_unimol=True` currently
-raises `NotImplementedError`; the argument reserves a simple future extension
-without pretending that UniMol collation is already available.
+`include_unimol=True` reads aligned, precomputed UniMol2 teacher embeddings
+from a separate properties sidecar. See the posttraining instructions below.
+
+
+## UniMol2 relational posttraining
+
+Set `molecular_target: unimol` to replace the Morgan similarity objective with
+MSE between pairwise cosines of pooled NMR embeddings and fixed UniMol2 teacher
+embeddings. No projection or prediction head is added. Only Rich records with
+teachers contribute; SimNMR/NMRGym replay keeps its shift loss. `lambda_fp`
+weights distillation. `balanced_fp_pairs` caps training pairs per cosine bin;
+validation uses all teacher pairs and aggregates their metrics by pair count.
+The default `molecular_target: morgan` retains the existing training behavior.
+Direct Morgan-bit prediction is not supported. The saved
+`fingerprint_objective: similarity` field is retained for checkpoint compatibility.
+
+Use the existing teacher sidecars in `datasets/experimental/unimol2_rich`, or
+point `unimol_sidecar_dir` at equivalent prepared sidecars named
+`rich_{train,val}_mol_properties.parquet`. They must align with the original
+`datasets/train_splits/rich_{train,val}.parquet`, including IDs and row groups.
+UniMol training uses these original Rich files with the existing streaming
+shuffle; Morgan posttraining continues to use `rich_shuffle_train.parquet`.
+Teachers must be 768 float32 values, extracted with batch size 1, centered on
+the Rich training mean and L2-normalized. Both splits must carry the same
+`unimol_center_sha256`; the dataset checks the teacher schema and provenance.
+Teacher extraction remains a separate preparation step; training and inference
+do not import or run UniMol2. Existing canonical data and sidecars are unchanged.
+
+```bash
+nmr-env main
+PYTHONPATH=scripts python scripts/model/train.py \
+    --stage posttrain \
+    --config scripts/model/configs/final_posttrain_unimol_relational.yaml \
+    --pretrained-checkpoint runs/fomonmr/PRETRAIN_RUN/checkpoints/best/BEST.ckpt \
+    --run-name unimol-relational-posttrain
+```
+
+This recipe uses the run's distillation weight of 0.25 and disables annotation
+reconstruction. Pretrained transfer discards only the Morgan similarity head
+and strictly loads all remaining weights. Resume requires the same UniMol
+configuration via `--config` and the checkpoint via `--resume`.
+Metrics use `train/unimol_loss`, `val/unimol_loss`, `val/unimol_cosine_mae`, and
+`val/unimol_macro_cosine_mae`; cosine-range CSVs go to `artifacts/unimol_validation`.
+
+Existing relational checkpoints load directly, without teacher sidecars:
+
+```python
+import torch
+from model.FoMoNMR import FoMoNMR
+
+model = FoMoNMR.load_from_checkpoint(checkpoint_path, map_location="cpu")
+model.eval()
+# batch = FoundationNMRProcessor()(canonical_records)
+with torch.inference_mode():
+    embeddings, peak_embeddings, peak_mask = model(batch)
+```
+
+The ordinary canonical processor and forward API are unchanged. No checkpoint
+conversion or relaxed state-dict loading is needed.

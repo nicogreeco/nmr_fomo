@@ -12,6 +12,7 @@ from .losses import (
     focal_cross_entropy,
     gaussian_soft_cross_entropy,
     symmetric_fingerprint_pairs,
+    relational_cosine_loss,
     tanimoto_to_bins,
 )
 from .processor import MULTIPLICITY_TO_ID
@@ -52,6 +53,10 @@ class ModelConfig:
     fp_sim_bin_size: float = 0.05
     fp_focal_gamma: float = 5.0
     balanced_fp_pairs: bool = False
+    # Retained for compatibility with experimental relational checkpoints.
+    fingerprint_objective: str = "similarity"
+    molecular_target: str = "morgan"
+    unimol_sidecar_dir: str | None = None
 
     global_shift_probability: float = 0.2
     h_global_shift_max: float = 0.01
@@ -130,6 +135,8 @@ class FoMoNMR(L.LightningModule):
         "0.6-0.8",
         "0.8-1.0",
     )
+    unimol_num_ranges = 10
+    unimol_range_width = 2.0 / unimol_num_ranges
 
     def __init__(self, config=None):
         super().__init__()
@@ -140,7 +147,21 @@ class FoMoNMR(L.LightningModule):
         self.config = config
         if config.logging_mode not in ("minimal", "complete"):
             raise ValueError("logging_mode must be minimal or complete")
+        if config.fingerprint_objective != "similarity":
+            raise ValueError(
+                "Only fingerprint_objective=similarity is supported"
+            )
         self.save_hyperparameters({"config": asdict(config)}, logger=False)
+        if config.molecular_target not in ("morgan", "unimol"):
+            raise ValueError("molecular_target must be morgan or unimol")
+        if config.molecular_target == "unimol":
+            if config.stage != "posttrain":
+                raise ValueError("UniMol relational distillation requires posttrain")
+            self.training_metric_names = dict(self.training_metric_names)
+            self.validation_metric_names = dict(self.validation_metric_names)
+            self.training_metric_names["fingerprint"] = "train/unimol_loss"
+            self.validation_metric_names["fingerprint"] = "unimol_loss"
+            self.validation_metric_names["fingerprint_mae"] = "unimol_cosine_mae"
         self.validation_metric_sums = {}
         self.validation_metric_counts = {}
         self.validation_source_metric_sums = {}
@@ -157,6 +178,31 @@ class FoMoNMR(L.LightningModule):
         )
         self.register_buffer(
             "fp_range_counts", torch.zeros(5, dtype=torch.long), persistent=False
+        )
+        self.register_buffer(
+            "unimol_range_abs_error_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_squared_error_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_target_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_prediction_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_counts",
+            torch.zeros(self.unimol_num_ranges, dtype=torch.long),
+            persistent=False,
         )
         self.register_buffer(
             "shift_range_error_sums", torch.zeros(2, 20), persistent=False
@@ -209,13 +255,14 @@ class FoMoNMR(L.LightningModule):
         self.h_classification_head = nn.Linear(self.config.d_model, h_num_bins)
         self.c_classification_head = nn.Linear(self.config.d_model, c_num_bins)
 
-        self.fp_sim_num_bins = int(1.0 / self.config.fp_sim_bin_size) + 1
-        self.fp_sim_classifier = nn.Sequential(
-            nn.Linear(2 * self.config.d_model, self.config.d_model),
-            nn.ReLU(),
-            nn.Dropout(self.config.dropout),
-            nn.Linear(self.config.d_model, self.fp_sim_num_bins),
-        )
+        if self.config.molecular_target == "morgan":
+            self.fp_sim_num_bins = int(1.0 / self.config.fp_sim_bin_size) + 1
+            self.fp_sim_classifier = nn.Sequential(
+                nn.Linear(2 * self.config.d_model, self.config.d_model),
+                nn.ReLU(),
+                nn.Dropout(self.config.dropout),
+                nn.Linear(self.config.d_model, self.fp_sim_num_bins),
+            )
 
         self.i_regression_head = nn.Linear(self.config.d_model, 1)
         self.m_classification_head = nn.Linear(
@@ -435,68 +482,85 @@ class FoMoNMR(L.LightningModule):
             shift_losses.append(c_shift_loss)
         shift_loss = torch.stack(shift_losses).mean() if shift_losses else zero
 
-        # Validation keeps every natural pair and the fixed weights for comparison.
-        balance_fp_pairs = self.training and self.config.balanced_fp_pairs
-        pair_features, similarities = symmetric_fingerprint_pairs(
-            pooled,
-            clean_batch["fingerprints"],
-            bin_size=self.config.fp_sim_bin_size,
-            max_pairs_per_bin=1024 if balance_fp_pairs else None,
-        )
         fingerprint_loss = zero
         fingerprint_mae = zero
-        if similarities.numel() > 0:
-            fp_logits = self.fp_sim_classifier(pair_features)
-            fp_targets = tanimoto_to_bins(
-                similarities,
-                self.config.fp_sim_bin_size,
-                self.fp_sim_num_bins,
+        if self.config.molecular_target == "unimol":
+            teacher_mask = clean_batch["unimol_mask"]
+            if teacher_mask.sum() >= 2:
+                relational_result = relational_cosine_loss(
+                    pooled[teacher_mask],
+                    clean_batch["unimol_embeddings"][teacher_mask],
+                    bin_size=self.config.fp_sim_bin_size,
+                    max_pairs_per_bin=(
+                        1024 if self.training and self.config.balanced_fp_pairs else None
+                    ),
+                    return_pairs=compute_mae,
+                )
+                fingerprint_loss, fingerprint_mae = relational_result[:2]
+                if compute_mae:
+                    predictions, targets = relational_result[2:]
+                    self.update_unimol_range_statistics(targets, predictions)
+        else:
+            # Validation keeps every natural pair and the fixed weights for comparison.
+            balance_fp_pairs = self.training and self.config.balanced_fp_pairs
+            pair_features, similarities = symmetric_fingerprint_pairs(
+                pooled,
+                clean_batch["fingerprints"],
+                bin_size=self.config.fp_sim_bin_size,
+                max_pairs_per_bin=1024 if balance_fp_pairs else None,
             )
-            pair_weights = None
-            if not balance_fp_pairs:
-                range_idx = (similarities / 0.2).long().clamp(max=4)
-                range_weights = similarities.new_tensor([
-                    1.0,   # 0.0 - 0.2
-                    2.0,   # 0.2 - 0.4
-                    5.0,   # 0.4 - 0.6
-                    10.0,  # 0.6 - 0.8
-                    20.0,  # 0.8 - 1.0
-                ])
-                pair_weights = range_weights[range_idx]
-            fingerprint_loss = focal_cross_entropy(
-                fp_logits,
-                fp_targets,
-                self.config.fp_focal_gamma,
-                pair_weights
-            )
-            if compute_mae:
-                fp_values = (
-                    torch.arange(self.fp_sim_num_bins, device=fp_logits.device) + 0.5
-                ) * self.config.fp_sim_bin_size
-                fp_values = fp_values.clamp_max(1.0)
-                fp_prediction = (
-                    F.softmax(fp_logits.float(), dim=1) * fp_values
-                ).sum(dim=1)
-                fp_errors = (fp_prediction - similarities).abs()
-                fingerprint_mae = fp_errors.mean()
+            if similarities.numel() > 0:
+                fp_logits = self.fp_sim_classifier(pair_features)
+                fp_targets = tanimoto_to_bins(
+                    similarities,
+                    self.config.fp_sim_bin_size,
+                    self.fp_sim_num_bins,
+                )
+                pair_weights = None
+                if not balance_fp_pairs:
+                    range_idx = (similarities / 0.2).long().clamp(max=4)
+                    range_weights = similarities.new_tensor([
+                        1.0,   # 0.0 - 0.2
+                        2.0,   # 0.2 - 0.4
+                        5.0,   # 0.4 - 0.6
+                        10.0,  # 0.6 - 0.8
+                        20.0,  # 0.8 - 1.0
+                    ])
+                    pair_weights = range_weights[range_idx]
+                fingerprint_loss = focal_cross_entropy(
+                    fp_logits,
+                    fp_targets,
+                    self.config.fp_focal_gamma,
+                    pair_weights
+                )
+                if compute_mae:
+                    fp_values = (
+                        torch.arange(self.fp_sim_num_bins, device=fp_logits.device) + 0.5
+                    ) * self.config.fp_sim_bin_size
+                    fp_values = fp_values.clamp_max(1.0)
+                    fp_prediction = (
+                        F.softmax(fp_logits.float(), dim=1) * fp_values
+                    ).sum(dim=1)
+                    fp_errors = (fp_prediction - similarities).abs()
+                    fingerprint_mae = fp_errors.mean()
 
-                range_indices = (similarities / 0.2).long().clamp(max=4)
-                self.fp_range_error_sums.scatter_add_(
-                    0, range_indices, fp_errors.detach()
-                )
-                self.fp_range_prediction_sums.scatter_add_(
-                    0, range_indices, fp_prediction.detach()
-                )
-                self.fp_range_counts.scatter_add_(
-                    0, range_indices, torch.ones_like(range_indices)
-                )
-                if fp_source is not None:
-                    self.fp_source_range_error_sums[fp_source].scatter_add_(
+                    range_indices = (similarities / 0.2).long().clamp(max=4)
+                    self.fp_range_error_sums.scatter_add_(
                         0, range_indices, fp_errors.detach()
                     )
-                    self.fp_source_range_counts[fp_source].scatter_add_(
+                    self.fp_range_prediction_sums.scatter_add_(
+                        0, range_indices, fp_prediction.detach()
+                    )
+                    self.fp_range_counts.scatter_add_(
                         0, range_indices, torch.ones_like(range_indices)
                     )
+                    if fp_source is not None:
+                        self.fp_source_range_error_sums[fp_source].scatter_add_(
+                            0, range_indices, fp_errors.detach()
+                        )
+                        self.fp_source_range_counts[fp_source].scatter_add_(
+                            0, range_indices, torch.ones_like(range_indices)
+                        )
 
         integration_loss = zero
         multiplicity_loss = zero
@@ -681,8 +745,16 @@ class FoMoNMR(L.LightningModule):
         metric_counts = {
             "shift_h_mae": int(corruption["h_shift_mask"].sum()),
             "shift_c_mae": int(corruption["c_shift_mask"].sum()),
-            "fingerprint_mae": batch_size * (batch_size - 1) // 2,
         }
+        if self.config.molecular_target == "unimol":
+            teacher_count = int(batch["unimol_mask"].sum())
+            pair_count = teacher_count * (teacher_count - 1) // 2
+            metric_counts["fingerprint_mae"] = pair_count
+            metric_weights["fingerprint"] = pair_count
+        else:
+            metric_counts["fingerprint_mae"] = (
+                batch_size * (batch_size - 1) // 2
+            )
         for name, count in metric_counts.items():
             if count > 0:
                 global_metrics[name] = losses[name]
@@ -690,7 +762,8 @@ class FoMoNMR(L.LightningModule):
 
         for name, value in global_metrics.items():
             weight = metric_weights[name]
-            if name == "fingerprint_mae":
+            if weight == 0 or (name == "fingerprint_mae"
+                               and self.config.molecular_target == "morgan"):
                 continue
             self.validation_metric_sums[name] = (
                 self.validation_metric_sums.get(name, 0.0)
@@ -713,6 +786,8 @@ class FoMoNMR(L.LightningModule):
 
         for name, value in source_metrics.items():
             weight = metric_weights.get(name, batch_size)
+            if weight == 0:
+                continue
             self.validation_source_metric_sums[source][name] += (
                 value.detach() * weight
             )
@@ -762,6 +837,11 @@ class FoMoNMR(L.LightningModule):
         self.fp_range_error_sums.zero_()
         self.fp_range_prediction_sums.zero_()
         self.fp_range_counts.zero_()
+        self.unimol_range_abs_error_sums.zero_()
+        self.unimol_range_squared_error_sums.zero_()
+        self.unimol_range_target_sums.zero_()
+        self.unimol_range_prediction_sums.zero_()
+        self.unimol_range_counts.zero_()
         self.shift_range_error_sums.zero_()
         self.shift_range_prediction_sums.zero_()
         self.shift_range_counts.zero_()
@@ -795,6 +875,52 @@ class FoMoNMR(L.LightningModule):
             mae = error_sum / count if count else float("nan")
             mean_prediction = prediction_sum / count if count else float("nan")
             rows.append((label, mae, int(count), mean_prediction))
+        return rows
+
+    def update_unimol_range_statistics(self, targets, predictions):
+        range_indices = (
+            ((targets + 1.0) / self.unimol_range_width)
+            .long()
+            .clamp(0, self.unimol_num_ranges - 1)
+        )
+        errors = predictions - targets
+        ones = torch.ones_like(range_indices)
+        self.unimol_range_abs_error_sums.scatter_add_(
+            0, range_indices, errors.abs().detach()
+        )
+        self.unimol_range_squared_error_sums.scatter_add_(
+            0, range_indices, errors.square().detach()
+        )
+        self.unimol_range_target_sums.scatter_add_(
+            0, range_indices, targets.detach()
+        )
+        self.unimol_range_prediction_sums.scatter_add_(
+            0, range_indices, predictions.detach()
+        )
+        self.unimol_range_counts.scatter_add_(0, range_indices, ones)
+
+    def unimol_validation_rows(self):
+        rows = []
+        for index in range(self.unimol_num_ranges):
+            lower = -1.0 + index * self.unimol_range_width
+            upper = lower + self.unimol_range_width
+            count = int(self.unimol_range_counts[index].item())
+            label = f"{lower:.1f}-{upper:.1f}"
+            if not count:
+                rows.append((label, 0, float("nan"), float("nan"),
+                             float("nan"), float("nan"), float("nan")))
+                continue
+            mean_target = self.unimol_range_target_sums[index].item() / count
+            mean_prediction = self.unimol_range_prediction_sums[index].item() / count
+            rows.append((
+                label,
+                count,
+                self.unimol_range_abs_error_sums[index].item() / count,
+                self.unimol_range_squared_error_sums[index].item() / count,
+                mean_target,
+                mean_prediction,
+                mean_prediction - mean_target,
+            ))
         return rows
 
     def shift_validation_rows(self, nucleus):
@@ -853,6 +979,11 @@ class FoMoNMR(L.LightningModule):
                 self.fp_range_error_sums,
                 self.fp_range_prediction_sums,
                 self.fp_range_counts,
+                self.unimol_range_abs_error_sums,
+                self.unimol_range_squared_error_sums,
+                self.unimol_range_target_sums,
+                self.unimol_range_prediction_sums,
+                self.unimol_range_counts,
                 self.shift_range_error_sums,
                 self.shift_range_prediction_sums,
                 self.shift_range_counts,
@@ -900,6 +1031,19 @@ class FoMoNMR(L.LightningModule):
             )
             self.log("val/fp_mae", fingerprint_mae, sync_dist=True)
             self.log("val/fp_macro_mae", range_maes.mean(), sync_dist=True)
+
+        if self.config.molecular_target == "unimol":
+            valid_unimol_ranges = self.unimol_range_counts > 0
+            if valid_unimol_ranges.any():
+                unimol_range_maes = (
+                    self.unimol_range_abs_error_sums[valid_unimol_ranges]
+                    / self.unimol_range_counts[valid_unimol_ranges]
+                )
+                self.log(
+                    "val/unimol_macro_cosine_mae",
+                    unimol_range_maes.mean(),
+                    sync_dist=True,
+                )
 
         mean_loss = mean_metrics.get("loss")
         if self.config.logging_mode == "complete":

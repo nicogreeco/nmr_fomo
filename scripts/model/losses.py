@@ -3,6 +3,58 @@ import torch.nn.functional as F
 from typing import List
 
 
+def capped_similarity_indices(similarities, bin_size, max_pairs_per_bin):
+    """Keep at most N random pairs per bin for similarities scaled to [0, 1]."""
+    num_bins = int(1.0 / bin_size) + 1
+    bins = tanimoto_to_bins(similarities, bin_size, num_bins)
+    selected = []
+    for bin_index in range(num_bins):
+        indices = torch.where(bins == bin_index)[0]
+        if len(indices) > max_pairs_per_bin:
+            order = torch.randperm(len(indices), device=indices.device)
+            indices = indices[order[:max_pairs_per_bin]]
+        selected.append(indices)
+    return torch.cat(selected)
+
+
+def relational_cosine_loss(
+    pooled,
+    teacher,
+    bin_size=0.05,
+    max_pairs_per_bin=None,
+    return_pairs=False,
+):
+    """Match off-diagonal cosine geometry; teacher is train-centered upstream.
+
+    No learned pair head: the loss constrains the reusable NMR embedding itself.
+    Calculate in float32 even under autocast; the teacher never gets gradients.
+    Binning maps [-1, 1] to [0, 1] only for sampling, not for the MSE target.
+    """
+    if len(pooled) < 2:
+        zero = pooled.sum() * 0.0
+        if return_pairs:
+            empty = pooled.new_empty(0, dtype=torch.float32)
+            return zero, zero, empty, empty
+        return zero, zero
+    with torch.autocast(device_type=pooled.device.type, enabled=False):
+        student = F.normalize(pooled.float(), dim=1)
+        teacher = F.normalize(teacher.detach().float(), dim=1)
+        pairs = torch.triu_indices(len(student), len(student), offset=1, device=student.device)
+        targets = (teacher @ teacher.T)[pairs[0], pairs[1]].clamp(-1, 1)
+        if max_pairs_per_bin is not None:
+            selected = capped_similarity_indices(
+                (targets + 1) / 2, bin_size, max_pairs_per_bin
+            )
+            pairs = pairs[:, selected]
+            targets = targets[selected]
+        predictions = (student @ student.T)[pairs[0], pairs[1]].clamp(-1, 1)
+        loss = F.mse_loss(predictions, targets)
+        mae = (predictions - targets).abs().mean()
+        if return_pairs:
+            return loss, mae, predictions, targets
+        return loss, mae
+
+
 def gaussian_soft_cross_entropy(
     logits: torch.Tensor,
     targets: torch.Tensor,
@@ -52,16 +104,7 @@ def symmetric_fingerprint_pairs(
     similarities = tanimoto[pair_indices[0], pair_indices[1]]
 
     if max_pairs_per_bin is not None:
-        num_bins = int(1.0 / bin_size) + 1
-        bins = tanimoto_to_bins(similarities, bin_size, num_bins)
-        selected = []
-        for bin_index in range(num_bins):
-            indices = torch.where(bins == bin_index)[0]
-            if len(indices) > max_pairs_per_bin:
-                order = torch.randperm(len(indices), device=indices.device)
-                indices = indices[order[:max_pairs_per_bin]]
-            selected.append(indices)
-        selected = torch.cat(selected)
+        selected = capped_similarity_indices(similarities, bin_size, max_pairs_per_bin)
         pair_indices = pair_indices[:, selected]
         similarities = similarities[selected]
 

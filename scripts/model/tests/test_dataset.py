@@ -403,10 +403,10 @@ class PairedFoundationDatasetTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "row-group counts"):
                 PairedFoundationDataset(nmr_path, molecular_path)
 
-    def test_unimol_is_explicitly_not_implemented(self):
+    def test_unimol_requires_an_experimental_sidecar(self):
         with tempfile.TemporaryDirectory() as directory:
             nmr_path, molecular_path, _ = self.write_pair(Path(directory))
-            with self.assertRaises(NotImplementedError):
+            with self.assertRaisesRegex(ValueError, "unimol_embedding"):
                 PairedFoundationDataset(
                     nmr_path,
                     molecular_path,
