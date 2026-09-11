@@ -18,7 +18,12 @@ from model import FoundationNMRProcessor, MixedFoundationDataset, PairedFoundati
 from model.FoMoNMR import FoMoNMR
 from model.losses import capped_similarity_indices, relational_cosine_loss
 from model.prepare_unimol_sidecars import training_center, write_sidecar
-from model.train import load_pretrained_model, validation_artifact_callbacks, ShiftValidationLogger
+from model.train import (
+    load_pretrained_model,
+    validation_artifact_callbacks,
+    ShiftValidationLogger,
+    UniMolValidationLogger,
+)
 from model.tests.test_fomonmr import example_batch, small_config
 from model.tests import test_dataset
 
@@ -108,7 +113,10 @@ class UniMolDistillationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "posttrain"):
             FoMoNMR(small_config(molecular_target="unimol"))
         config = small_config(stage="posttrain", molecular_target="unimol")
-        self.assertEqual([type(c) for c in validation_artifact_callbacks(config, Path("unused"))], [ShiftValidationLogger])
+        self.assertEqual(
+            [type(c) for c in validation_artifact_callbacks(config, Path("unused"))],
+            [UniMolValidationLogger, ShiftValidationLogger],
+        )
         with tempfile.TemporaryDirectory() as directory:
             original = FoMoNMR(small_config())
             path = Path(directory) / "pretrained.ckpt"
@@ -173,8 +181,12 @@ class UniMolDistillationTests(unittest.TestCase):
             self.assertEqual(trainer.global_step, 3)
             self.assertIn("val/unimol_loss", trainer.callback_metrics)
             self.assertIn("val/unimol_cosine_mae", trainer.callback_metrics)
+            self.assertIn("val/unimol_macro_cosine_mae", trainer.callback_metrics)
             # Auxiliary validation batches must not dilute teacher metrics.
             self.assertEqual(model.validation_metric_counts["fingerprint"], 6)
+            rows = model.unimol_validation_rows()
+            self.assertEqual(len(rows), 10)
+            self.assertEqual(sum(row[1] for row in rows), 6)
 
 
 if __name__ == "__main__":

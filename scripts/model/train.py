@@ -94,6 +94,38 @@ class FingerprintValidationLogger(L.Callback):
             )
 
 
+class UniMolValidationLogger(L.Callback):
+    def __init__(self, run_dir):
+        self.output_dir = run_dir / "artifacts/unimol_validation"
+
+    def on_validation_end(self, trainer, model):
+        if trainer.sanity_checking or not trainer.is_global_zero:
+            return
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        filename = f"epoch_{trainer.current_epoch}_step_{trainer.global_step}.csv"
+        output_path = self.output_dir / filename
+        with output_path.open("w", newline="") as file:
+            writer = csv.writer(file)
+            writer.writerow((
+                "range",
+                "count",
+                "mae",
+                "mse",
+                "mean_unimol_similarity",
+                "mean_fomonmr_similarity",
+                "bias",
+            ))
+            writer.writerows(model.unimol_validation_rows())
+
+        if isinstance(trainer.logger, MLFlowLogger):
+            trainer.logger.experiment.log_artifact(
+                trainer.logger.run_id,
+                str(output_path),
+                artifact_path="unimol_validation",
+            )
+
+
 class ShiftValidationLogger(L.Callback):
     def __init__(self, run_dir):
         self.output_dir = run_dir / "artifacts/shift_validation"
@@ -123,6 +155,8 @@ def validation_artifact_callbacks(config, run_dir):
     callbacks = []
     if config.molecular_target == "morgan" and config.fingerprint_objective == "similarity":
         callbacks.append(FingerprintValidationLogger(run_dir))
+    elif config.molecular_target == "unimol":
+        callbacks.append(UniMolValidationLogger(run_dir))
     callbacks.append(ShiftValidationLogger(run_dir))
     return callbacks
 
@@ -234,9 +268,11 @@ def paired_dataset(
     root = Path("datasets/train_splits")
     include_unimol = source == "rich" and unimol_sidecar_dir is not None
     properties_root = Path(unimol_sidecar_dir) if include_unimol else root
+    use_shuffled_rich = include_unimol and split == "train"
+    file_source = "rich_shuffle" if use_shuffled_rich else source
     return PairedFoundationDataset(
-        root / f"{source}_{split}.parquet",
-        properties_root / f"{source}_{split}_mol_properties.parquet",
+        root / f"{file_source}_{split}.parquet",
+        properties_root / f"{file_source}_{split}_mol_properties.parquet",
         include_unimol=include_unimol,
         shuffle=shuffle,
         shuffle_buffer_size=65536,

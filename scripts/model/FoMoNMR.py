@@ -148,6 +148,8 @@ class FoMoNMR(L.LightningModule):
         "0.6-0.8",
         "0.8-1.0",
     )
+    unimol_num_ranges = 10
+    unimol_range_width = 2.0 / unimol_num_ranges
 
     def __init__(self, config=None):
         super().__init__()
@@ -189,6 +191,31 @@ class FoMoNMR(L.LightningModule):
         )
         self.register_buffer(
             "fp_range_counts", torch.zeros(5, dtype=torch.long), persistent=False
+        )
+        self.register_buffer(
+            "unimol_range_abs_error_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_squared_error_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_target_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_prediction_sums",
+            torch.zeros(self.unimol_num_ranges),
+            persistent=False,
+        )
+        self.register_buffer(
+            "unimol_range_counts",
+            torch.zeros(self.unimol_num_ranges, dtype=torch.long),
+            persistent=False,
         )
         self.register_buffer(
             "shift_range_error_sums", torch.zeros(2, 20), persistent=False
@@ -482,14 +509,19 @@ class FoMoNMR(L.LightningModule):
         if self.config.molecular_target == "unimol":
             teacher_mask = clean_batch["unimol_mask"]
             if teacher_mask.sum() >= 2:
-                fingerprint_loss, fingerprint_mae = relational_cosine_loss(
+                relational_result = relational_cosine_loss(
                     pooled[teacher_mask],
                     clean_batch["unimol_embeddings"][teacher_mask],
                     bin_size=self.config.fp_sim_bin_size,
                     max_pairs_per_bin=(
                         1024 if self.training and self.config.balanced_fp_pairs else None
                     ),
+                    return_pairs=compute_mae,
                 )
+                fingerprint_loss, fingerprint_mae = relational_result[:2]
+                if compute_mae:
+                    predictions, targets = relational_result[2:]
+                    self.update_unimol_range_statistics(targets, predictions)
         elif self.config.fingerprint_objective == "bits":
             fp_logits = self.fp_bit_classifier(pooled)
             (
@@ -862,6 +894,11 @@ class FoMoNMR(L.LightningModule):
         self.fp_range_error_sums.zero_()
         self.fp_range_prediction_sums.zero_()
         self.fp_range_counts.zero_()
+        self.unimol_range_abs_error_sums.zero_()
+        self.unimol_range_squared_error_sums.zero_()
+        self.unimol_range_target_sums.zero_()
+        self.unimol_range_prediction_sums.zero_()
+        self.unimol_range_counts.zero_()
         self.shift_range_error_sums.zero_()
         self.shift_range_prediction_sums.zero_()
         self.shift_range_counts.zero_()
@@ -895,6 +932,52 @@ class FoMoNMR(L.LightningModule):
             mae = error_sum / count if count else float("nan")
             mean_prediction = prediction_sum / count if count else float("nan")
             rows.append((label, mae, int(count), mean_prediction))
+        return rows
+
+    def update_unimol_range_statistics(self, targets, predictions):
+        range_indices = (
+            ((targets + 1.0) / self.unimol_range_width)
+            .long()
+            .clamp(0, self.unimol_num_ranges - 1)
+        )
+        errors = predictions - targets
+        ones = torch.ones_like(range_indices)
+        self.unimol_range_abs_error_sums.scatter_add_(
+            0, range_indices, errors.abs().detach()
+        )
+        self.unimol_range_squared_error_sums.scatter_add_(
+            0, range_indices, errors.square().detach()
+        )
+        self.unimol_range_target_sums.scatter_add_(
+            0, range_indices, targets.detach()
+        )
+        self.unimol_range_prediction_sums.scatter_add_(
+            0, range_indices, predictions.detach()
+        )
+        self.unimol_range_counts.scatter_add_(0, range_indices, ones)
+
+    def unimol_validation_rows(self):
+        rows = []
+        for index in range(self.unimol_num_ranges):
+            lower = -1.0 + index * self.unimol_range_width
+            upper = lower + self.unimol_range_width
+            count = int(self.unimol_range_counts[index].item())
+            label = f"{lower:.1f}-{upper:.1f}"
+            if not count:
+                rows.append((label, 0, float("nan"), float("nan"),
+                             float("nan"), float("nan"), float("nan")))
+                continue
+            mean_target = self.unimol_range_target_sums[index].item() / count
+            mean_prediction = self.unimol_range_prediction_sums[index].item() / count
+            rows.append((
+                label,
+                count,
+                self.unimol_range_abs_error_sums[index].item() / count,
+                self.unimol_range_squared_error_sums[index].item() / count,
+                mean_target,
+                mean_prediction,
+                mean_prediction - mean_target,
+            ))
         return rows
 
     def shift_validation_rows(self, nucleus):
@@ -953,6 +1036,11 @@ class FoMoNMR(L.LightningModule):
                 self.fp_range_error_sums,
                 self.fp_range_prediction_sums,
                 self.fp_range_counts,
+                self.unimol_range_abs_error_sums,
+                self.unimol_range_squared_error_sums,
+                self.unimol_range_target_sums,
+                self.unimol_range_prediction_sums,
+                self.unimol_range_counts,
                 self.shift_range_error_sums,
                 self.shift_range_prediction_sums,
                 self.shift_range_counts,
@@ -1000,6 +1088,19 @@ class FoMoNMR(L.LightningModule):
             )
             self.log("val/fp_mae", fingerprint_mae, sync_dist=True)
             self.log("val/fp_macro_mae", range_maes.mean(), sync_dist=True)
+
+        if self.config.molecular_target == "unimol":
+            valid_unimol_ranges = self.unimol_range_counts > 0
+            if valid_unimol_ranges.any():
+                unimol_range_maes = (
+                    self.unimol_range_abs_error_sums[valid_unimol_ranges]
+                    / self.unimol_range_counts[valid_unimol_ranges]
+                )
+                self.log(
+                    "val/unimol_macro_cosine_mae",
+                    unimol_range_maes.mean(),
+                    sync_dist=True,
+                )
 
         mean_loss = mean_metrics.get("loss")
         if self.config.logging_mode == "complete":

@@ -17,7 +17,13 @@ def capped_similarity_indices(similarities, bin_size, max_pairs_per_bin):
     return torch.cat(selected)
 
 
-def relational_cosine_loss(pooled, teacher, bin_size=0.05, max_pairs_per_bin=None):
+def relational_cosine_loss(
+    pooled,
+    teacher,
+    bin_size=0.05,
+    max_pairs_per_bin=None,
+    return_pairs=False,
+):
     """Match off-diagonal cosine geometry; teacher is train-centered upstream.
 
     No learned pair head: the loss constrains the reusable NMR embedding itself.
@@ -26,6 +32,9 @@ def relational_cosine_loss(pooled, teacher, bin_size=0.05, max_pairs_per_bin=Non
     """
     if len(pooled) < 2:
         zero = pooled.sum() * 0.0
+        if return_pairs:
+            empty = pooled.new_empty(0, dtype=torch.float32)
+            return zero, zero, empty, empty
         return zero, zero
     with torch.autocast(device_type=pooled.device.type, enabled=False):
         student = F.normalize(pooled.float(), dim=1)
@@ -39,7 +48,11 @@ def relational_cosine_loss(pooled, teacher, bin_size=0.05, max_pairs_per_bin=Non
             pairs = pairs[:, selected]
             targets = targets[selected]
         predictions = (student @ student.T)[pairs[0], pairs[1]].clamp(-1, 1)
-        return F.mse_loss(predictions, targets), (predictions - targets).abs().mean()
+        loss = F.mse_loss(predictions, targets)
+        mae = (predictions - targets).abs().mean()
+        if return_pairs:
+            return loss, mae, predictions, targets
+        return loss, mae
 
 def balanced_binary_cross_entropy_with_logits(
     logits: torch.Tensor,

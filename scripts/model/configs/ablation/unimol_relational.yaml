@@ -1,5 +1,4 @@
 # Experimental: Rich-only relational distillation from singleton UniMol2 84M.
-# Architecture and corruption settings inherit ModelConfig defaults.
 stage: posttrain
 molecular_target: unimol
 fingerprint_objective: similarity
