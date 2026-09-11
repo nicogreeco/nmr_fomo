@@ -1,3 +1,7 @@
 # Add patterns of files dvc should ignore, which could improve
 # the performance. Learn more at
 # https://dvc.org/doc/user-guide/dvcignore
+
+# Local-only shuffled training copies; not part of the DVC pipeline.
+/datasets/train_splits/rich_shuffle_train*.parquet
+/datasets/train_splits/.rich-shuffle-*/
