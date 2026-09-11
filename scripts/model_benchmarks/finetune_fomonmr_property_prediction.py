@@ -17,6 +17,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from data import CanonicalParquetDataset
+from model.FoMoNMR import FoMoNMR
 from model.processor import FoundationNMRProcessor
 from model_benchmarks.run_property_prediction import (
     CANONICAL_FILES,
@@ -33,7 +34,9 @@ def parse_arguments(argv=None):
     load_dotenv("mlflow.env")
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--run-id", required=True)
+    model_source = parser.add_mutually_exclusive_group(required=True)
+    model_source.add_argument("--run-id")
+    model_source.add_argument("--checkpoint-path", type=Path)
     parser.add_argument("--datasets", nargs="+", required=True)
     parser.add_argument(
         "--tracking-uri",
@@ -67,7 +70,16 @@ def resolve_device(name):
     return torch.device(name)
 
 
-def load_model(run_id, tracking_uri):
+def load_model(run_id, checkpoint_path, tracking_uri):
+    if checkpoint_path:
+        checkpoint_path = checkpoint_path.resolve()
+        run_name = checkpoint_path.stem
+        if (checkpoint_path.parent.name in ("best", "latest")
+                and checkpoint_path.parent.parent.name == "checkpoints"):
+            run_name = checkpoint_path.parent.parent.parent.name
+        print(f"Loading {run_name} from {checkpoint_path}", flush=True)
+        return FoMoNMR.load_from_checkpoint(checkpoint_path, map_location="cpu"), run_name
+
     if tracking_uri:
         mlflow.set_tracking_uri(tracking_uri)
 
@@ -316,7 +328,9 @@ def main(argv=None):
     device = resolve_device(arguments.device)
     datasets = parse_names(arguments.datasets)
 
-    model, run_name = load_model(arguments.run_id, arguments.tracking_uri)
+    model, run_name = load_model(
+        arguments.run_id, arguments.checkpoint_path, arguments.tracking_uri
+    )
     initial_state = copy.deepcopy(model.state_dict())
     output_dir = arguments.output_dir / run_name
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -355,7 +369,7 @@ def main(argv=None):
         row = {
             "dataset": dataset,
             "task": "classification" if classification else "regression",
-            "run_id": arguments.run_id,
+            "run_id": arguments.run_id or str(arguments.checkpoint_path),
             "run_name": run_name,
             "n_train": len(train_records),
             "n_validation": len(validation_records),

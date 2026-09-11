@@ -39,8 +39,8 @@ from sklearn.metrics import (
 from sklearn.model_selection import (
     GridSearchCV,
     GroupKFold,
+    GroupShuffleSplit,
     StratifiedGroupKFold,
-    train_test_split,
 )
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
@@ -54,6 +54,34 @@ CLASSIFICATION_DATASETS = {"ames"}
 CANONICAL_FILES = {"train": "train_val.parquet", "test": "test.parquet"}
 TARGET_FILES = {"train": "train_val.csv", "test": "test.csv"}
 MOLECULE_GROUP_CACHE = {}
+
+
+def split_mlp_train_validation(targets, groups, classification, fraction, seed):
+    """Keep every spectrum of a molecule on one side of the internal holdout."""
+
+    if groups is None:
+        raise ValueError("Molecular groups are required for MLP validation")
+    groups = np.asarray(groups)
+    if groups.ndim != 1 or len(groups) != len(targets):
+        raise ValueError("Provide one molecular group per MLP training record")
+    if not 0 < fraction < 1:
+        raise ValueError("validation_fraction must be between 0 and 1")
+    n_groups = len(np.unique(groups))
+    if n_groups < 2:
+        raise ValueError("MLP validation requires at least two molecular groups")
+
+    if classification:
+        # As in fine-tuning, one stratified group fold approximates the fraction.
+        splitter = StratifiedGroupKFold(
+            n_splits=min(max(2, round(1 / fraction)), n_groups),
+            shuffle=True,
+            random_state=seed,
+        )
+    else:
+        splitter = GroupShuffleSplit(
+            n_splits=1, test_size=fraction, random_state=seed,
+        )
+    return next(splitter.split(np.zeros(len(targets)), targets, groups))
 
 
 class TorchMLP(BaseEstimator):
@@ -81,17 +109,15 @@ class TorchMLP(BaseEstimator):
         self.random_state = random_state
         self.device = device
 
-    def fit(self, features, targets):
+    def fit(self, features, targets, groups=None):
         features = np.asarray(features, dtype=np.float32)
         targets = np.asarray(targets, dtype=np.float32)
-        stratify = targets if self.classification else None
-        train_x, validation_x, train_y, validation_y = train_test_split(
-            features,
-            targets,
-            test_size=self.validation_fraction,
-            random_state=self.random_state,
-            stratify=stratify,
+        train_indices, validation_indices = split_mlp_train_validation(
+            targets, groups, self.classification,
+            self.validation_fraction, self.random_state,
         )
+        train_x, validation_x = features[train_indices], features[validation_indices]
+        train_y, validation_y = targets[train_indices], targets[validation_indices]
 
         use_cuda = self.device != "cpu" and torch.cuda.is_available()
         if self.device == "cuda" and not use_cuda:
@@ -177,9 +203,9 @@ class TorchMLPRegressor(RegressorMixin, TorchMLP):
 class TorchMLPClassifier(ClassifierMixin, TorchMLP):
     classification = True
 
-    def fit(self, features, targets):
+    def fit(self, features, targets, groups=None):
         self.classes_ = np.asarray([0, 1])
-        return super().fit(features, targets)
+        return super().fit(features, targets, groups=groups)
 
     def predict_proba(self, features):
         features = torch.as_tensor(
@@ -309,7 +335,12 @@ def run_regression(
         refit=True,
         n_jobs=N_JOBS,
     )
-    search.fit(train_x, train_y, groups=groups)
+    fit_params = {}
+    if kind != "linear":
+        # GridSearchCV slices this per-record parameter for each training fold.
+        step_name = parameter.split("__")[0]
+        fit_params[f"{step_name}__groups"] = np.asarray(groups)
+    search.fit(train_x, train_y, groups=groups, **fit_params)
     metrics = regression_metrics(test_y, search.predict(test_x))
     return search, parameter, metrics
 
@@ -357,7 +388,12 @@ def run_classification(
         refit=True,
         n_jobs=N_JOBS,
     )
-    search.fit(train_x, train_y, groups=groups)
+    fit_params = {}
+    if kind != "linear":
+        # GridSearchCV slices this per-record parameter for each training fold.
+        step_name = parameter.split("__")[0]
+        fit_params[f"{step_name}__groups"] = np.asarray(groups)
+    search.fit(train_x, train_y, groups=groups, **fit_params)
     predictions = search.predict(test_x)
     scores = search.predict_proba(test_x)[:, 1]
     return search, parameter, classification_metrics(test_y, predictions, scores)

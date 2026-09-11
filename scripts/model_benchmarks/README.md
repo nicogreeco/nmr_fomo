@@ -40,3 +40,33 @@ read `smiles_canonical`. UniMol2 defaults to batch size one and `--model-size`
 selects `84M` or `164M`; Morgan is the fixed 2,048-bit radius-2 ECFP4
 baseline. Run one model family per process in its corresponding environment. Use the documented incompatibility handling for records missing
 the fields required by the selected path.
+
+## Property-probe validation
+
+The frozen MLP uses molecular groups (full InChIKey) for both outer
+cross-validation and its internal early-stopping holdout. Regression uses
+`GroupShuffleSplit`; classification uses one `StratifiedGroupKFold` fold to
+approximate the validation fraction. The per-record groups are passed through
+GridSearchCV to the MLP in each training fold and in the final refit. Direct
+calls to `TorchMLP.fit` must also supply `groups`.
+
+This fixes the earlier record-level internal holdout. Existing result CSVs
+were not regenerated; their MLP scores still describe the earlier protocol.
+The official train/test assignments and linear probes are unchanged.
+
+
+## Fine-tuning a local FoMoNMR checkpoint
+
+Use either `--run-id` for an MLflow model or `--checkpoint-path` for a local
+Lightning checkpoint, including UniMol2 relational posttraining checkpoints:
+
+```bash
+PYTHONPATH=scripts python scripts/model_benchmarks/finetune_fomonmr_property_prediction.py \
+  --checkpoint-path runs/fomonmr/RUN/checkpoints/best/MODEL.ckpt \
+  --datasets ames --device cuda
+```
+
+For the standard `RUN/checkpoints/{best,latest}/` layout, results use the run
+name. Other paths use the checkpoint filename without its extension. Fine-tuning
+runs for `--epochs` epochs and restores the weights with the best validation
+loss before testing; it does not currently implement patience-based stopping.
