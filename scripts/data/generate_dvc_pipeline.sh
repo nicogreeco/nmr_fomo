@@ -277,6 +277,7 @@ add_filter_stage() {
     dvc stage add --force --name "${stage_name}" \
         --deps "${input_path}" \
         --deps scripts/data/postprocess/filter_dataset.py \
+        --deps scripts/data/limits.py \
         "${postprocess_dep_args[@]}" \
         --params postprocess.batch_size \
         --outs "${output_path}" \
