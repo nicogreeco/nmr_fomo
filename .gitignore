@@ -37,3 +37,5 @@ __pycache__
 *.log
 *.env
 *.orig
+
+scripts/test_notebook.ipynb
