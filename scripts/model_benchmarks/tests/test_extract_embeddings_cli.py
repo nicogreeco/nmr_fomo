@@ -61,8 +61,8 @@ class ExtractEmbeddingArgumentTests(unittest.TestCase):
                 parse_for_model("fomonmr")
 
     def test_fomonmr_accepts_a_checkpoint_or_run_id(self):
-        checkpoint = parse_for_model("fomonmr", "--checkpoint", "model.ckpt")
-        run = parse_for_model("fomonmr", "--run-id", "abc123")
+        checkpoint = parse_for_model("fomonmr", "--checkpoint", "model.ckpt", "--input-mode", "shifts")
+        run = parse_for_model("fomonmr", "--run-id", "abc123", "--input-mode", "rich")
 
         self.assertEqual(str(checkpoint.checkpoint), "model.ckpt")
         self.assertEqual(run.run_id, "abc123")

@@ -61,6 +61,7 @@ def parse_arguments() -> argparse.Namespace:
     )
     parser.add_argument("--checkpoint", type=Path)
     parser.add_argument("--run-id")
+    parser.add_argument("--input-mode", choices=("shifts", "rich"))
     parser.add_argument(
         "--tracking-uri",
         default=os.getenv("MLFLOW_TRACKING_URI"),
@@ -105,8 +106,10 @@ def parse_arguments() -> argparse.Namespace:
     if arguments.model == "fomonmr":
         if (arguments.checkpoint is None) == (arguments.run_id is None):
             parser.error("FoMoNMR requires exactly one of --checkpoint or --run-id")
-    elif arguments.run_id is not None:
-        parser.error("--run-id is only valid with --model fomonmr")
+        if arguments.input_mode is None:
+            parser.error("FoMoNMR requires --input-mode shifts or rich")
+    elif arguments.run_id is not None or arguments.input_mode is not None:
+        parser.error("--run-id and --input-mode are only valid with --model fomonmr")
     return arguments
 
 
@@ -197,6 +200,7 @@ def main() -> None:
     if arguments.model == "fomonmr":
         embedder_options["run_id"] = arguments.run_id
         embedder_options["tracking_uri"] = arguments.tracking_uri
+        embedder_options["input_mode"] = arguments.input_mode
     if arguments.model in {"unimol2", "uni-mol2"}:
         embedder_options["model_size"] = arguments.model_size
     embedder = build_embedder(arguments.model, **embedder_options)

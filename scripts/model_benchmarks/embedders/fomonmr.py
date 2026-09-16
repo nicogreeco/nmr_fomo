@@ -12,12 +12,14 @@ class FoMoNMREmbedder:
     modality = "1H+13C"
     pooling = "mean of valid 1H+13C transformer peak states"
 
-    def __init__(self, checkpoint_path=None, run_id=None, device="cpu", tracking_uri=None):
+    def __init__(self, checkpoint_path=None, run_id=None, device="cpu", tracking_uri=None, input_mode=None):
         import torch
         from model.FoMoNMR import FoMoNMR
 
         if (checkpoint_path is None) == (run_id is None):
             raise ValueError("give exactly one of checkpoint_path or run_id")
+        if input_mode not in {"shifts", "rich"}:
+            raise ValueError("FoMoNMR input_mode must be shifts or rich")
 
         self._torch = torch
         self.device = torch.device(device)
@@ -38,12 +40,16 @@ class FoMoNMREmbedder:
 
         self.model.eval().to(self.device)
         self.dimension = int(self.model.config.d_model)
+        self.input_mode = input_mode
+        self.run_id = run_id
+        if input_mode == "rich" and (self.model.config.stage == "pretrain" or not self.model.config.use_rich_input):
+            raise ValueError("rich input requires a posttraining checkpoint with rich input enabled")
 
     def encode(self, batch):
         record_ids = list(batch["record_ids"])
         batch = self.model.transfer_batch_to_device(batch, self.device, 0)
 
-        if self.model.config.stage == "pretrain" or not self.model.config.use_rich_input:
+        if self.input_mode == "shifts":
             batch["h"]["availability"].zero_()
             batch["h"]["j_mask"].zero_()
 
@@ -61,6 +67,8 @@ class FoMoNMREmbedder:
                 "modality": self.modality,
                 "stage": self.model.config.stage,
                 "use_rich_input": bool(self.model.config.use_rich_input),
+                "input_mode": self.input_mode,
+                "run_id": self.run_id,
             },
         )
 

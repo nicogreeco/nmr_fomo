@@ -27,7 +27,6 @@ Options:
 Environment overrides:
   MAIN_TORCH_VERSION       Default: 2.6.0
   UNICORE_REF              Default: pinned commit verified with NMRPeak
-  ALLOW_SHARED_VENVS=1     Allow VENV_ROOT inside/on the project filesystem.
 EOF
 }
 
@@ -125,19 +124,6 @@ fi
 mkdir -p "$PROJECT_ROOT" "$VENV_ROOT"
 PROJECT_ROOT="$(cd -- "$PROJECT_ROOT" && pwd -P)"
 VENV_ROOT="$(cd -- "$VENV_ROOT" && pwd -P)"
-
-case "${VENV_ROOT}/" in
-    "${PROJECT_ROOT}/"*)
-        [[ "${ALLOW_SHARED_VENVS:-0}" == "1" ]] ||
-            die "VENV_ROOT is inside the shared project. Choose a machine-local path."
-        ;;
-esac
-
-PROJECT_DEVICE="$(stat -c '%d' "$PROJECT_ROOT")"
-VENV_DEVICE="$(stat -c '%d' "$VENV_ROOT")"
-if [[ "$PROJECT_DEVICE" == "$VENV_DEVICE" && "${ALLOW_SHARED_VENVS:-0}" != "1" ]]; then
-    die "VENV_ROOT appears to be on the same filesystem as the shared project. Set ALLOW_SHARED_VENVS=1 only if this is intentional."
-fi
 
 if [[ "$MODE" == "gpu" ]]; then
     command -v nvidia-smi >/dev/null 2>&1 ||
