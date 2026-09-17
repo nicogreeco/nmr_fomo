@@ -40,16 +40,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/mst_nmr/train.parquet
       hash: md5
-      md5: 54ef60651d59b0d82dfca35f92635966
-      size: 544244478
+      md5: e55721980d94ef31b13a3139611d8784
+      size: 544244467
     - path: datasets/canonical/mst_nmr/train_report.json
       hash: md5
       md5: 2c06b94c01fc8d939d2f1f6e310c17a6
@@ -94,15 +94,15 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/mst_nmr/val.parquet
       hash: md5
-      md5: 3c24530c85e032949751f706455d505e
+      md5: 2eed612e2b5153dfec771a69f4a5ea8d
       size: 29067782
     - path: datasets/canonical/mst_nmr/val_report.json
       hash: md5
@@ -148,15 +148,15 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/mst_nmr/test.parquet
       hash: md5
-      md5: 0773eece35cb66612011b894b692dd59
+      md5: 7269f19ebd3cb63ee234d50fb3fd193c
       size: 64123986
     - path: datasets/canonical/mst_nmr/test_report.json
       hash: md5
@@ -202,16 +202,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrexp/train.parquet
       hash: md5
-      md5: c7699128966915f0551ee09a5f63e8c8
-      size: 123642443
+      md5: b328a4482d92e12cac5b46a38bbb58e1
+      size: 123642800
     - path: datasets/canonical/nmrexp/train_report.json
       hash: md5
       md5: f9b1684f950eceac50008c398d123025
@@ -256,16 +256,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrexp/val.parquet
       hash: md5
-      md5: c6f0baeb91849c19c4b47a79bf9166d6
-      size: 6522638
+      md5: d9032029d946e915324f2b6c756e61c1
+      size: 6522655
     - path: datasets/canonical/nmrexp/val_report.json
       hash: md5
       md5: eddbf3aabb1b6c91200a1f30c863325b
@@ -310,16 +310,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrexp/test.parquet
       hash: md5
-      md5: bcca6bc92cd3295afd1452b858ad9236
-      size: 14522544
+      md5: 8cdc6ff4bf8073fad2cef50f2cc8650f
+      size: 14522366
     - path: datasets/canonical/nmrexp/test_report.json
       hash: md5
       md5: f7c779f2a80c4e7efffea41c3cb8c08c
@@ -364,15 +364,15 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrtrans/train.parquet
       hash: md5
-      md5: d0edc075bd0e6be0186c24c5ab8fb919
+      md5: 3099dd074576f2a7ea516140b9e47279
       size: 25570550
     - path: datasets/canonical/nmrtrans/train_report.json
       hash: md5
@@ -418,15 +418,15 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrtrans/val.parquet
       hash: md5
-      md5: f18db60eb00c04d22e0119e9807c7410
+      md5: dae50c6befd6c80fd112a920bd05b0f7
       size: 3271166
     - path: datasets/canonical/nmrtrans/val_report.json
       hash: md5
@@ -472,15 +472,15 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrtrans/test.parquet
       hash: md5
-      md5: d8d67c80c839d7e8a50d9c2f45f5a47b
+      md5: f1a8852aef1f0090f6abb8fd837442a2
       size: 3286500
     - path: datasets/canonical/nmrtrans/test_report.json
       hash: md5
@@ -526,16 +526,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
     outs:
     - path: datasets/canonical/nmrgym/all.parquet
       hash: md5
-      md5: 66b51c57492aee7af7835b6f1201123b
-      size: 35311587
+      md5: d64eb88362d9de1ca8257e73d3d35f37
+      size: 35311213
     - path: datasets/canonical/nmrgym/all_report.json
       hash: md5
       md5: 51e694b5ed67dcf9d97dd4b2df1ef51f
@@ -582,8 +582,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         canonicalize.row_group_size: 50000
@@ -592,8 +592,8 @@ stages:
     outs:
     - path: datasets/canonical/simnmr/all.parquet
       hash: md5
-      md5: c08df3cabcf828d8dffafd1ca9b1cb79
-      size: 17691156509
+      md5: c6b04a7d6aa3b69173300e5b1a27790b
+      size: 17691172469
     - path: datasets/canonical/simnmr/all_chemical_metadata_rejections.jsonl
       hash: md5
       md5: e2fd4ffc0a57bb6e34a2d6e3bc1e9b05
@@ -615,27 +615,27 @@ stages:
     deps:
     - path: datasets/canonical/mst_nmr/train.parquet
       hash: md5
-      md5: 54ef60651d59b0d82dfca35f92635966
-      size: 544244478
+      md5: e55721980d94ef31b13a3139611d8784
+      size: 544244467
     - path: datasets/canonical/mst_nmr/val.parquet
       hash: md5
-      md5: 3c24530c85e032949751f706455d505e
+      md5: 2eed612e2b5153dfec771a69f4a5ea8d
       size: 29067782
     - path: datasets/canonical/nmrexp/train.parquet
       hash: md5
-      md5: c7699128966915f0551ee09a5f63e8c8
-      size: 123642443
+      md5: b328a4482d92e12cac5b46a38bbb58e1
+      size: 123642800
     - path: datasets/canonical/nmrexp/val.parquet
       hash: md5
-      md5: c6f0baeb91849c19c4b47a79bf9166d6
-      size: 6522638
+      md5: d9032029d946e915324f2b6c756e61c1
+      size: 6522655
     - path: datasets/canonical/nmrtrans/train.parquet
       hash: md5
-      md5: d0edc075bd0e6be0186c24c5ab8fb919
+      md5: 3099dd074576f2a7ea516140b9e47279
       size: 25570550
     - path: datasets/canonical/nmrtrans/val.parquet
       hash: md5
-      md5: f18db60eb00c04d22e0119e9807c7410
+      md5: dae50c6befd6c80fd112a920bd05b0f7
       size: 3271166
     - path: scripts/data/__init__.py
       hash: md5
@@ -671,16 +671,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/intermediate/rich_train_val.parquet
       hash: md5
-      md5: da71efc90d69a25e1221ea6ef2c7b19f
-      size: 732304716
+      md5: a7bc82bbf5fa48729a26f9550f506d22
+      size: 732305079
     - path: datasets/intermediate/rich_train_val_report.json
       hash: md5
       md5: 1061ec5dfbc056bd8247a5be464085fa
@@ -695,15 +695,15 @@ stages:
     deps:
     - path: datasets/canonical/mst_nmr/test.parquet
       hash: md5
-      md5: 0773eece35cb66612011b894b692dd59
+      md5: 7269f19ebd3cb63ee234d50fb3fd193c
       size: 64123986
     - path: datasets/canonical/nmrexp/test.parquet
       hash: md5
-      md5: bcca6bc92cd3295afd1452b858ad9236
-      size: 14522544
+      md5: 8cdc6ff4bf8073fad2cef50f2cc8650f
+      size: 14522366
     - path: datasets/canonical/nmrtrans/test.parquet
       hash: md5
-      md5: d8d67c80c839d7e8a50d9c2f45f5a47b
+      md5: f1a8852aef1f0090f6abb8fd837442a2
       size: 3286500
     - path: scripts/data/__init__.py
       hash: md5
@@ -739,16 +739,16 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/intermediate/rich_test.parquet
       hash: md5
-      md5: aea33141204383e6a5b46f5d3a5dd551
-      size: 81927119
+      md5: 1b3c04ad9998508f2f8eeb939a2f8f11
+      size: 81926941
     - path: datasets/intermediate/rich_test_report.json
       hash: md5
       md5: f0c3da02ae7d8947e6da07b8b1a3b65d
@@ -766,16 +766,16 @@ stages:
     deps:
     - path: datasets/canonical/simnmr/all.parquet
       hash: md5
-      md5: c08df3cabcf828d8dffafd1ca9b1cb79
-      size: 17691156509
+      md5: c6b04a7d6aa3b69173300e5b1a27790b
+      size: 17691172469
     - path: datasets/intermediate/rich_test.parquet
       hash: md5
-      md5: aea33141204383e6a5b46f5d3a5dd551
-      size: 81927119
+      md5: 1b3c04ad9998508f2f8eeb939a2f8f11
+      size: 81926941
     - path: datasets/intermediate/rich_train_val.parquet
       hash: md5
-      md5: da71efc90d69a25e1221ea6ef2c7b19f
-      size: 732304716
+      md5: a7bc82bbf5fa48729a26f9550f506d22
+      size: 732305079
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -810,8 +810,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
@@ -822,12 +822,12 @@ stages:
       size: 636
     - path: datasets/intermediate/test_after_simnmr.parquet
       hash: md5
-      md5: 823d149779abf8dfbbc6e303191cd23b
-      size: 17556930
+      md5: 6ba8fb2e4cdefcfd25831609043a7513
+      size: 17557007
     - path: datasets/intermediate/train_val_extended.parquet
       hash: md5
-      md5: 32a001cc973f942f453dab0ad491ace2
-      size: 799152000
+      md5: 1e7b90dc1258a30b39cac6952943ec91
+      size: 799152218
   remove_benchmark_overlaps:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/remove_benchmark_overlaps.py 
@@ -840,16 +840,16 @@ stages:
     deps:
     - path: datasets/canonical/nmrgym/all.parquet
       hash: md5
-      md5: 66b51c57492aee7af7835b6f1201123b
-      size: 35311587
+      md5: d64eb88362d9de1ca8257e73d3d35f37
+      size: 35311213
     - path: datasets/intermediate/test_after_simnmr.parquet
       hash: md5
-      md5: 823d149779abf8dfbbc6e303191cd23b
-      size: 17556930
+      md5: 6ba8fb2e4cdefcfd25831609043a7513
+      size: 17557007
     - path: datasets/intermediate/train_val_extended.parquet
       hash: md5
-      md5: 32a001cc973f942f453dab0ad491ace2
-      size: 799152000
+      md5: 1e7b90dc1258a30b39cac6952943ec91
+      size: 799152218
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -884,8 +884,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
@@ -896,8 +896,8 @@ stages:
       size: 669
     - path: datasets/intermediate/test_benchmark_preclean.parquet
       hash: md5
-      md5: 151d5aef6295c3d6ec391f401e8eeaef
-      size: 16240095
+      md5: 516bf1f10dcb80b8447b5c8993fc1acb
+      size: 16240210
   filter_train:
     cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
       datasets/intermediate/train_val_extended.parquet --output 
@@ -908,8 +908,8 @@ stages:
     deps:
     - path: datasets/intermediate/train_val_extended.parquet
       hash: md5
-      md5: 32a001cc973f942f453dab0ad491ace2
-      size: 799152000
+      md5: 1e7b90dc1258a30b39cac6952943ec91
+      size: 799152218
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -922,14 +922,18 @@ stages:
       hash: md5
       md5: d3c1bbeb1bf68f67c78fccf3fcf83575
       size: 2396
+    - path: scripts/data/limits.py
+      hash: md5
+      md5: cbb5e517023d67e80962fea2a5bd8978
+      size: 180
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
       size: 8989
     - path: scripts/data/postprocess/filter_dataset.py
       hash: md5
-      md5: 1805dc047ca53ec39690b3e02b41eb5d
-      size: 18462
+      md5: 1c06929b10dc75aacd547be1c6801c66
+      size: 18478
     - path: scripts/data/reporting.py
       hash: md5
       md5: 5c03d141ee42ecbeaa30322e695f3f45
@@ -944,20 +948,20 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/intermediate/audits/train_val_removed.parquet
       hash: md5
-      md5: 931aee119410f3f96478dce241274805
+      md5: e350dd2b7c099cdda551fe0192442655
       size: 388427
     - path: datasets/intermediate/train_val_filtered.parquet
       hash: md5
-      md5: 54c92681cde78b815d6a88bdaa9b0b77
-      size: 781801701
+      md5: 574f78616fc73bd45c0200b8cf96b88f
+      size: 781801862
     - path: datasets/intermediate/train_val_filtered_report.json
       hash: md5
       md5: 7e914d82fe5b0ea815e24f04a6baac39
@@ -971,8 +975,8 @@ stages:
     deps:
     - path: datasets/intermediate/test_benchmark_preclean.parquet
       hash: md5
-      md5: 151d5aef6295c3d6ec391f401e8eeaef
-      size: 16240095
+      md5: 516bf1f10dcb80b8447b5c8993fc1acb
+      size: 16240210
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -985,14 +989,18 @@ stages:
       hash: md5
       md5: d3c1bbeb1bf68f67c78fccf3fcf83575
       size: 2396
+    - path: scripts/data/limits.py
+      hash: md5
+      md5: cbb5e517023d67e80962fea2a5bd8978
+      size: 180
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
       size: 8989
     - path: scripts/data/postprocess/filter_dataset.py
       hash: md5
-      md5: 1805dc047ca53ec39690b3e02b41eb5d
-      size: 18462
+      md5: 1c06929b10dc75aacd547be1c6801c66
+      size: 18478
     - path: scripts/data/reporting.py
       hash: md5
       md5: 5c03d141ee42ecbeaa30322e695f3f45
@@ -1007,23 +1015,23 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/cleaned/test_benchmark.parquet
       hash: md5
-      md5: d0de2f85632189af2fd3df594e42a271
-      size: 16138429
+      md5: ee30609243b51284e001b847b46f9c10
+      size: 16138455
     - path: datasets/cleaned/test_benchmark_report.json
       hash: md5
       md5: accee62fa6d1ff57ec4a97bf286eb75f
       size: 651
     - path: datasets/intermediate/audits/test_benchmark_removed.parquet
       hash: md5
-      md5: 409fed9608275e091dd26f1d56e1c8d8
+      md5: 861a9e922de4b27fdab1696bfdd9d993
       size: 5698
   filter_simnmr:
     cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
@@ -1034,8 +1042,8 @@ stages:
     deps:
     - path: datasets/canonical/simnmr/all.parquet
       hash: md5
-      md5: c08df3cabcf828d8dffafd1ca9b1cb79
-      size: 17691156509
+      md5: c6b04a7d6aa3b69173300e5b1a27790b
+      size: 17691172469
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1048,14 +1056,18 @@ stages:
       hash: md5
       md5: d3c1bbeb1bf68f67c78fccf3fcf83575
       size: 2396
+    - path: scripts/data/limits.py
+      hash: md5
+      md5: cbb5e517023d67e80962fea2a5bd8978
+      size: 180
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
       size: 8989
     - path: scripts/data/postprocess/filter_dataset.py
       hash: md5
-      md5: 1805dc047ca53ec39690b3e02b41eb5d
-      size: 18462
+      md5: 1c06929b10dc75aacd547be1c6801c66
+      size: 18478
     - path: scripts/data/reporting.py
       hash: md5
       md5: 5c03d141ee42ecbeaa30322e695f3f45
@@ -1070,23 +1082,23 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/cleaned/simnmr.parquet
       hash: md5
-      md5: 63cbcd45ec909014fbab74fb58d0d6da
-      size: 17728324521
+      md5: 184fdfb2a13a8e5cd1346c3e0baae012
+      size: 17728337713
     - path: datasets/cleaned/simnmr_report.json
       hash: md5
       md5: 1e9e5bac96816afa3ea1a5bfa1baebef
       size: 552
     - path: datasets/intermediate/audits/simnmr_removed.parquet
       hash: md5
-      md5: 1de340547b42b91d34633ff444f3909b
+      md5: 7989c6582e8eb66e7ca068901e4c3814
       size: 1101658
   filter_nmrgym:
     cmd: PYTHONPATH=scripts python scripts/data/postprocess/filter_dataset.py 
@@ -1097,8 +1109,8 @@ stages:
     deps:
     - path: datasets/canonical/nmrgym/all.parquet
       hash: md5
-      md5: 66b51c57492aee7af7835b6f1201123b
-      size: 35311587
+      md5: d64eb88362d9de1ca8257e73d3d35f37
+      size: 35311213
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1111,14 +1123,18 @@ stages:
       hash: md5
       md5: d3c1bbeb1bf68f67c78fccf3fcf83575
       size: 2396
+    - path: scripts/data/limits.py
+      hash: md5
+      md5: cbb5e517023d67e80962fea2a5bd8978
+      size: 180
     - path: scripts/data/postprocess/common.py
       hash: md5
       md5: 7b3ca03a089a7583a630989165c53a72
       size: 8989
     - path: scripts/data/postprocess/filter_dataset.py
       hash: md5
-      md5: 1805dc047ca53ec39690b3e02b41eb5d
-      size: 18462
+      md5: 1c06929b10dc75aacd547be1c6801c66
+      size: 18478
     - path: scripts/data/reporting.py
       hash: md5
       md5: 5c03d141ee42ecbeaa30322e695f3f45
@@ -1133,23 +1149,23 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 95d4bb78f4211d3bd83164e98724b34e
-      size: 496
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         postprocess.batch_size: 50000
     outs:
     - path: datasets/cleaned/nmrgym.parquet
       hash: md5
-      md5: 33a84bd0eab525d7195f5e23a447527c
-      size: 34395080
+      md5: 410e39191c162e5f87f760e01b4bfc9d
+      size: 34396000
     - path: datasets/cleaned/nmrgym_report.json
       hash: md5
       md5: 5a405dafbd75c70250ee401f5479320e
       size: 578
     - path: datasets/intermediate/audits/nmrgym_removed.parquet
       hash: md5
-      md5: 9719ae0f3daa2c817140791c1271a211
+      md5: e57f0a0362d15bdf2feafe4d10b0ea8d
       size: 26014
   prepare_admet:
     cmd: PYTHONPATH=scripts python 
@@ -1163,8 +1179,8 @@ stages:
     deps:
     - path: datasets/intermediate/train_val_filtered.parquet
       hash: md5
-      md5: 54c92681cde78b815d6a88bdaa9b0b77
-      size: 781801701
+      md5: 574f78616fc73bd45c0200b8cf96b88f
+      size: 781801862
     - path: datasets/raw/admet/ames/test.csv
       hash: md5
       md5: cbe9ac666f26b31213facfb4bf48ba06
@@ -1235,8 +1251,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         admet.sangster_seed: 42
@@ -1249,7 +1265,7 @@ stages:
       size: 30869
     - path: datasets/cleaned/admet/ames/test.parquet
       hash: md5
-      md5: a2872876c0619eb8cc25bc810f19825a
+      md5: 049f47d67a8b3779321681a48f3cc5d1
       size: 378810
     - path: datasets/cleaned/admet/ames/train_val.csv
       hash: md5
@@ -1257,7 +1273,7 @@ stages:
       size: 162355
     - path: datasets/cleaned/admet/ames/train_val.parquet
       hash: md5
-      md5: ce66604d5e74d8f4c89e7fd57b4a9c03
+      md5: adfb80b20d30b5123b4a4380a4e4bf2b
       size: 928925
     - path: datasets/cleaned/admet/ld50_zhu/test.csv
       hash: md5
@@ -1265,7 +1281,7 @@ stages:
       size: 63397
     - path: datasets/cleaned/admet/ld50_zhu/test.parquet
       hash: md5
-      md5: 1a3e6578673eaeaf4cd2f1b9757a1756
+      md5: ed416adba0c0c86803a8551a7fc2356e
       size: 456947
     - path: datasets/cleaned/admet/ld50_zhu/train_val.csv
       hash: md5
@@ -1273,7 +1289,7 @@ stages:
       size: 274914
     - path: datasets/cleaned/admet/ld50_zhu/train_val.parquet
       hash: md5
-      md5: 27f851214dc971fa134383d78b3c4162
+      md5: 5485e96503cdc746f9f5c9feb00d2252
       size: 1131058
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/test.csv
       hash: md5
@@ -1281,7 +1297,7 @@ stages:
       size: 16402
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/test.parquet
       hash: md5
-      md5: 46145e701d42c682f641ede4fc322bd7
+      md5: b9557815dd08be74e01ae15bbfa2a211
       size: 344401
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.csv
       hash: md5
@@ -1289,7 +1305,7 @@ stages:
       size: 73415
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.parquet
       hash: md5
-      md5: bd6ae402d058362343f3498648f4998b
+      md5: 7951e99dc09bed181a927534423bf828
       size: 786318
     - path: datasets/cleaned/admet/preparation_report.json
       hash: md5
@@ -1301,7 +1317,7 @@ stages:
       size: 102230
     - path: datasets/cleaned/admet/sangster_logp/test.parquet
       hash: md5
-      md5: b13c4735048e8d104e5d59a01163301c
+      md5: 6e4d3455ec7f1a2ca1505b75a2b87f59
       size: 583251
     - path: datasets/cleaned/admet/sangster_logp/train_val.csv
       hash: md5
@@ -1309,7 +1325,7 @@ stages:
       size: 406693
     - path: datasets/cleaned/admet/sangster_logp/train_val.parquet
       hash: md5
-      md5: 67ed5175dab8115b5e117e47598454bf
+      md5: bea2b1c7e1bbd2b0bb561d2aa85b1a87
       size: 1634367
     - path: datasets/cleaned/admet/solubility_aqsoldb/test.csv
       hash: md5
@@ -1317,7 +1333,7 @@ stages:
       size: 72893
     - path: datasets/cleaned/admet/solubility_aqsoldb/test.parquet
       hash: md5
-      md5: dfd24b65ac765cd78b1569e13ba9c3a9
+      md5: 04293108ef696656bf435cc58905acc4
       size: 546252
     - path: datasets/cleaned/admet/solubility_aqsoldb/train_val.csv
       hash: md5
@@ -1325,12 +1341,12 @@ stages:
       size: 336163
     - path: datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
       hash: md5
-      md5: 6f33456756d523d106afc5a0fb843dfa
+      md5: c2dfef5c6e3afe33ae06fe25f93fc455
       size: 1460465
     - path: datasets/cleaned/rich.parquet
       hash: md5
-      md5: 9fb226589ebeb183da234f8a1db9bae1
-      size: 778548111
+      md5: e4f6770590cb62562a14a4ef5a295269
+      size: 778547918
   calculate_test_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
@@ -1341,8 +1357,8 @@ stages:
     deps:
     - path: datasets/cleaned/test_benchmark.parquet
       hash: md5
-      md5: d0de2f85632189af2fd3df594e42a271
-      size: 16138429
+      md5: ee30609243b51284e001b847b46f9c10
+      size: 16138455
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1377,8 +1393,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         mol_properties.records_per_task: 1000
@@ -1386,12 +1402,12 @@ stages:
     outs:
     - path: datasets/cleaned/test_benchmark_mol_properties.parquet
       hash: md5
-      md5: c3847be8b93638d6094bfe4e6948608d
-      size: 10634760
+      md5: 4ea7c837ef38a8a0ecdfa197571319f7
+      size: 10634355
     - path: datasets/cleaned/test_benchmark_mol_properties_report.json
       hash: md5
-      md5: 67d469d8b837834c47e6e415d51300b6
-      size: 610
+      md5: ffe80c9a48d678070792487e1507a30a
+      size: 478
   calculate_simnmr_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
@@ -1402,8 +1418,8 @@ stages:
     deps:
     - path: datasets/cleaned/simnmr.parquet
       hash: md5
-      md5: 63cbcd45ec909014fbab74fb58d0d6da
-      size: 17728324521
+      md5: 184fdfb2a13a8e5cd1346c3e0baae012
+      size: 17728337713
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1438,8 +1454,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         mol_properties.records_per_task: 1000
@@ -1447,12 +1463,12 @@ stages:
     outs:
     - path: datasets/cleaned/simnmr_mol_properties.parquet
       hash: md5
-      md5: 8d3c7a6d35417a206bf6626547dd4456
-      size: 12205859421
+      md5: 6dd913336b4c7ca0b41702df19a02287
+      size: 12206044328
     - path: datasets/cleaned/simnmr_mol_properties_report.json
       hash: md5
-      md5: b2a4bc315593f2e9faaf85c7447b8727
-      size: 600
+      md5: dc031f148e87d5112a2991fa648688db
+      size: 477
   calculate_nmrgym_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
@@ -1463,8 +1479,8 @@ stages:
     deps:
     - path: datasets/cleaned/nmrgym.parquet
       hash: md5
-      md5: 33a84bd0eab525d7195f5e23a447527c
-      size: 34395080
+      md5: 410e39191c162e5f87f760e01b4bfc9d
+      size: 34396000
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1499,8 +1515,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         mol_properties.records_per_task: 1000
@@ -1508,12 +1524,12 @@ stages:
     outs:
     - path: datasets/cleaned/nmrgym_mol_properties.parquet
       hash: md5
-      md5: 0f255aeb259d4e1b866e605faecd96e5
-      size: 33650782
+      md5: 9b8b70b1ad978b8bc49562bc74629487
+      size: 33655001
     - path: datasets/cleaned/nmrgym_mol_properties_report.json
       hash: md5
-      md5: db8161eaa278108df4796eed22a381af
-      size: 588
+      md5: 6dfbc8a53d4f22a652f87596e645df03
+      size: 465
   analyze_cleaned_collection:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/analyze_cleaned_datasets.py --cleaned-root 
@@ -1533,7 +1549,7 @@ stages:
       size: 30869
     - path: datasets/cleaned/admet/ames/test.parquet
       hash: md5
-      md5: a2872876c0619eb8cc25bc810f19825a
+      md5: 049f47d67a8b3779321681a48f3cc5d1
       size: 378810
     - path: datasets/cleaned/admet/ames/train_val.csv
       hash: md5
@@ -1541,7 +1557,7 @@ stages:
       size: 162355
     - path: datasets/cleaned/admet/ames/train_val.parquet
       hash: md5
-      md5: ce66604d5e74d8f4c89e7fd57b4a9c03
+      md5: adfb80b20d30b5123b4a4380a4e4bf2b
       size: 928925
     - path: datasets/cleaned/admet/ld50_zhu/test.csv
       hash: md5
@@ -1549,7 +1565,7 @@ stages:
       size: 63397
     - path: datasets/cleaned/admet/ld50_zhu/test.parquet
       hash: md5
-      md5: 1a3e6578673eaeaf4cd2f1b9757a1756
+      md5: ed416adba0c0c86803a8551a7fc2356e
       size: 456947
     - path: datasets/cleaned/admet/ld50_zhu/train_val.csv
       hash: md5
@@ -1557,7 +1573,7 @@ stages:
       size: 274914
     - path: datasets/cleaned/admet/ld50_zhu/train_val.parquet
       hash: md5
-      md5: 27f851214dc971fa134383d78b3c4162
+      md5: 5485e96503cdc746f9f5c9feb00d2252
       size: 1131058
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/test.csv
       hash: md5
@@ -1565,7 +1581,7 @@ stages:
       size: 16402
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/test.parquet
       hash: md5
-      md5: 46145e701d42c682f641ede4fc322bd7
+      md5: b9557815dd08be74e01ae15bbfa2a211
       size: 344401
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.csv
       hash: md5
@@ -1573,7 +1589,7 @@ stages:
       size: 73415
     - path: datasets/cleaned/admet/lipophilicity_astrazeneca/train_val.parquet
       hash: md5
-      md5: bd6ae402d058362343f3498648f4998b
+      md5: 7951e99dc09bed181a927534423bf828
       size: 786318
     - path: datasets/cleaned/admet/sangster_logp/test.csv
       hash: md5
@@ -1581,7 +1597,7 @@ stages:
       size: 102230
     - path: datasets/cleaned/admet/sangster_logp/test.parquet
       hash: md5
-      md5: b13c4735048e8d104e5d59a01163301c
+      md5: 6e4d3455ec7f1a2ca1505b75a2b87f59
       size: 583251
     - path: datasets/cleaned/admet/sangster_logp/train_val.csv
       hash: md5
@@ -1589,7 +1605,7 @@ stages:
       size: 406693
     - path: datasets/cleaned/admet/sangster_logp/train_val.parquet
       hash: md5
-      md5: 67ed5175dab8115b5e117e47598454bf
+      md5: bea2b1c7e1bbd2b0bb561d2aa85b1a87
       size: 1634367
     - path: datasets/cleaned/admet/solubility_aqsoldb/test.csv
       hash: md5
@@ -1597,7 +1613,7 @@ stages:
       size: 72893
     - path: datasets/cleaned/admet/solubility_aqsoldb/test.parquet
       hash: md5
-      md5: dfd24b65ac765cd78b1569e13ba9c3a9
+      md5: 04293108ef696656bf435cc58905acc4
       size: 546252
     - path: datasets/cleaned/admet/solubility_aqsoldb/train_val.csv
       hash: md5
@@ -1605,40 +1621,40 @@ stages:
       size: 336163
     - path: datasets/cleaned/admet/solubility_aqsoldb/train_val.parquet
       hash: md5
-      md5: 6f33456756d523d106afc5a0fb843dfa
+      md5: c2dfef5c6e3afe33ae06fe25f93fc455
       size: 1460465
     - path: datasets/cleaned/nmrgym.parquet
       hash: md5
-      md5: 33a84bd0eab525d7195f5e23a447527c
-      size: 34395080
+      md5: 410e39191c162e5f87f760e01b4bfc9d
+      size: 34396000
     - path: datasets/cleaned/nmrgym_mol_properties.parquet
       hash: md5
-      md5: 0f255aeb259d4e1b866e605faecd96e5
-      size: 33650782
+      md5: 9b8b70b1ad978b8bc49562bc74629487
+      size: 33655001
     - path: datasets/cleaned/rich.parquet
       hash: md5
-      md5: 9fb226589ebeb183da234f8a1db9bae1
-      size: 778548111
+      md5: e4f6770590cb62562a14a4ef5a295269
+      size: 778547918
     - path: datasets/cleaned/rich_mol_properties.parquet
       hash: md5
-      md5: 8bc2570ee76a82476482853a1b9ce456
-      size: 229396761
+      md5: 809f8a9f6d01b95c0f1dbb4a44de5128
+      size: 229396639
     - path: datasets/cleaned/simnmr.parquet
       hash: md5
-      md5: 63cbcd45ec909014fbab74fb58d0d6da
-      size: 17728324521
+      md5: 184fdfb2a13a8e5cd1346c3e0baae012
+      size: 17728337713
     - path: datasets/cleaned/simnmr_mol_properties.parquet
       hash: md5
-      md5: 8d3c7a6d35417a206bf6626547dd4456
-      size: 12205859421
+      md5: 6dd913336b4c7ca0b41702df19a02287
+      size: 12206044328
     - path: datasets/cleaned/test_benchmark.parquet
       hash: md5
-      md5: d0de2f85632189af2fd3df594e42a271
-      size: 16138429
+      md5: ee30609243b51284e001b847b46f9c10
+      size: 16138455
     - path: datasets/cleaned/test_benchmark_mol_properties.parquet
       hash: md5
-      md5: c3847be8b93638d6094bfe4e6948608d
-      size: 10634760
+      md5: 4ea7c837ef38a8a0ecdfa197571319f7
+      size: 10634355
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1657,16 +1673,16 @@ stages:
       size: 1749
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         analytics.sample_per_group: 20000
     outs:
     - path: datasets/cleaned/analytics
       hash: md5
-      md5: 2a25370c510ce7532bfb52495d637640.dir
-      size: 5129675
+      md5: 72c0a93221245734b7ef0ab5cb4efbcb.dir
+      size: 5129428
       nfiles: 42
     - path: datasets/cleaned/analyze_main_report.json
       hash: md5
@@ -1691,28 +1707,28 @@ stages:
     deps:
     - path: datasets/cleaned/nmrgym.parquet
       hash: md5
-      md5: 33a84bd0eab525d7195f5e23a447527c
-      size: 34395080
+      md5: 410e39191c162e5f87f760e01b4bfc9d
+      size: 34396000
     - path: datasets/cleaned/nmrgym_mol_properties.parquet
       hash: md5
-      md5: 0f255aeb259d4e1b866e605faecd96e5
-      size: 33650782
+      md5: 9b8b70b1ad978b8bc49562bc74629487
+      size: 33655001
     - path: datasets/cleaned/rich.parquet
       hash: md5
-      md5: 9fb226589ebeb183da234f8a1db9bae1
-      size: 778548111
+      md5: e4f6770590cb62562a14a4ef5a295269
+      size: 778547918
     - path: datasets/cleaned/rich_mol_properties.parquet
       hash: md5
-      md5: 8bc2570ee76a82476482853a1b9ce456
-      size: 229396761
+      md5: 809f8a9f6d01b95c0f1dbb4a44de5128
+      size: 229396639
     - path: datasets/cleaned/simnmr.parquet
       hash: md5
-      md5: 63cbcd45ec909014fbab74fb58d0d6da
-      size: 17728324521
+      md5: 184fdfb2a13a8e5cd1346c3e0baae012
+      size: 17728337713
     - path: datasets/cleaned/simnmr_mol_properties.parquet
       hash: md5
-      md5: 8d3c7a6d35417a206bf6626547dd4456
-      size: 12205859421
+      md5: 6dd913336b4c7ca0b41702df19a02287
+      size: 12206044328
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1747,8 +1763,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         foundation_splits.batch_size: 50000
@@ -1759,55 +1775,55 @@ stages:
     outs:
     - path: datasets/train_splits/nmrgym_train.parquet
       hash: md5
-      md5: ba02172179737bce6d1fdf4faae14866
-      size: 33264639
+      md5: 472449645ba040c466e568dd0a113ebe
+      size: 33262080
     - path: datasets/train_splits/nmrgym_train_mol_properties.parquet
       hash: md5
-      md5: ffe78f52b3000fc1f5b3e668e1306d9c
-      size: 31798421
+      md5: 696d913175b47686f582ac111ad3fe3c
+      size: 31798059
     - path: datasets/train_splits/nmrgym_val.parquet
       hash: md5
-      md5: d977798c7d388d8865266900415658fd
-      size: 1562398
+      md5: 6888922192dba3059a1aed3d5e4d797e
+      size: 1561807
     - path: datasets/train_splits/nmrgym_val_mol_properties.parquet
       hash: md5
-      md5: 880ccff9095a803f4b745bef40173a65
-      size: 1408399
+      md5: 07805e31210265c6d3e5e7fe1b462c57
+      size: 1408811
     - path: datasets/train_splits/rich_train.parquet
       hash: md5
-      md5: 1efa3b75c37e1783ff82977b12b1d698
-      size: 759677442
+      md5: 6945cd4bc44b19cbb8696ee161531d04
+      size: 759651423
     - path: datasets/train_splits/rich_train_mol_properties.parquet
       hash: md5
-      md5: a281eb38bde42960371207f77685a0ca
-      size: 221950081
+      md5: 05ffcd27cacdf64f2377733979dad938
+      size: 221949127
     - path: datasets/train_splits/rich_val.parquet
       hash: md5
-      md5: 7f8466c07502f16761af05db7c55b31e
-      size: 23595170
+      md5: 45657833f8c469730afba357ade3f4d1
+      size: 23595110
     - path: datasets/train_splits/rich_val_mol_properties.parquet
       hash: md5
-      md5: 4d399482891434395b625c0d74f6169f
-      size: 6680577
+      md5: fc457cfffb51e5f90898759999c1a157
+      size: 6680445
     - path: datasets/train_splits/simnmr_train.parquet
       hash: md5
-      md5: b55892b5bbc3cc0bc19f28edaa7b382c
-      size: 17717225745
+      md5: 2a117c29d0ed3bc103b748ee37932c5d
+      size: 17717237681
     - path: datasets/train_splits/simnmr_train_mol_properties.parquet
       hash: md5
-      md5: 87e1dc3a5fe11caad387803bef642de3
-      size: 12156551185
+      md5: 16f9a0b2119359c8c1d8049e38643045
+      size: 12156580157
     - path: datasets/train_splits/simnmr_val.parquet
       hash: md5
-      md5: 1cec656aac5fdf607b04d7853b4db9b0
-      size: 33223630
+      md5: 1678216d8b4c257e23202225521c96ea
+      size: 33222963
     - path: datasets/train_splits/simnmr_val_mol_properties.parquet
       hash: md5
-      md5: 97f80fe1a8998c81466345e39e2f8e24
-      size: 27135786
+      md5: 6f94fa335ba660b267ea064e32b0417c
+      size: 27135150
     - path: datasets/train_splits/split_report.json
       hash: md5
-      md5: b136d5cd5a6249f5c4fd0b6f9c6ca0e5
+      md5: 96f588e9d4c30ce0043af1a451ae5ab8
       size: 1956
   split_maccs_probe:
     cmd: PYTHONPATH=scripts python scripts/data/postprocess/split_maccs_probe.py
@@ -1819,12 +1835,12 @@ stages:
     deps:
     - path: datasets/train_splits/rich_val.parquet
       hash: md5
-      md5: 7f8466c07502f16761af05db7c55b31e
-      size: 23595170
+      md5: 45657833f8c469730afba357ade3f4d1
+      size: 23595110
     - path: datasets/train_splits/rich_val_mol_properties.parquet
       hash: md5
-      md5: 4d399482891434395b625c0d74f6169f
-      size: 6680577
+      md5: fc457cfffb51e5f90898759999c1a157
+      size: 6680445
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1863,8 +1879,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         foundation_splits.seed: 42
@@ -1874,24 +1890,24 @@ stages:
     outs:
     - path: datasets/train_splits/maccs_probe/eval.parquet
       hash: md5
-      md5: 22367113a3f50c73c1503e9f671db8b1
-      size: 5071164
+      md5: 8927d6f7057910ed646ca0ade3587696
+      size: 5071285
     - path: datasets/train_splits/maccs_probe/eval_mol_properties.parquet
       hash: md5
-      md5: feb87ced1a4a2d1ff19bd310cf9d2ae2
-      size: 1611597
+      md5: d9770e94f0e1c5f1cd2db7b7593b4c08
+      size: 1611569
     - path: datasets/train_splits/maccs_probe/split_report.json
       hash: md5
       md5: 00d663a9c0be97973c27dd3771fdeef8
       size: 1159
     - path: datasets/train_splits/maccs_probe/train.parquet
       hash: md5
-      md5: 75d5e2f4fc1686b8281a4b48ed8344b2
-      size: 9711131
+      md5: 907e1d80326b48e05ce7edb8407faf71
+      size: 9711036
     - path: datasets/train_splits/maccs_probe/train_mol_properties.parquet
       hash: md5
-      md5: d1037a8c5ccb5be6717501b3e513d003
-      size: 2894665
+      md5: 978a546fea23dbbae19d8f8d8ca86ede
+      size: 2894721
   calculate_rich_properties:
     cmd: PYTHONPATH=scripts python 
       scripts/data/postprocess/calculate_mol_properties.py 
@@ -1902,8 +1918,8 @@ stages:
     deps:
     - path: datasets/cleaned/rich.parquet
       hash: md5
-      md5: 9fb226589ebeb183da234f8a1db9bae1
-      size: 778548111
+      md5: e4f6770590cb62562a14a4ef5a295269
+      size: 778547918
     - path: scripts/data/__init__.py
       hash: md5
       md5: a5094c4c302ee242c2e0be535ed8377f
@@ -1938,8 +1954,8 @@ stages:
       size: 10691
     - path: scripts/envs_scr/requirements/nmr-main.txt
       hash: md5
-      md5: 38c5e588e414feb96e4bfa7aa2584ced
-      size: 614
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
     params:
       params.yaml:
         mol_properties.records_per_task: 1000
@@ -1947,9 +1963,101 @@ stages:
     outs:
     - path: datasets/cleaned/rich_mol_properties.parquet
       hash: md5
-      md5: 8bc2570ee76a82476482853a1b9ce456
-      size: 229396761
+      md5: 809f8a9f6d01b95c0f1dbb4a44de5128
+      size: 229396639
     - path: datasets/cleaned/rich_mol_properties_report.json
       hash: md5
       md5: 2146580c9e4ca86475f3e931335496d4
       size: 465
+  create_structural_probe_dataset:
+    cmd: PYTHONPATH=scripts python 
+      scripts/model_benchmarks/create_structural_probe_dataset.py --nmr-input 
+      datasets/train_splits/rich_train.parquet --property-input 
+      datasets/train_splits/rich_train_mol_properties.parquet --test-input 
+      datasets/cleaned/test_benchmark.parquet --output-root 
+      datasets/downstream_structural_information --train-molecules 50000 
+      --validation-molecules 10000 --seed 42 --batch-size 50000 --report-output 
+      datasets/downstream_structural_information/build_report.json --overwrite 
+      --quiet
+    deps:
+    - path: datasets/cleaned/test_benchmark.parquet
+      hash: md5
+      md5: ee30609243b51284e001b847b46f9c10
+      size: 16138455
+    - path: datasets/train_splits/rich_train.parquet
+      hash: md5
+      md5: 6945cd4bc44b19cbb8696ee161531d04
+      size: 759651423
+    - path: datasets/train_splits/rich_train_mol_properties.parquet
+      hash: md5
+      md5: 05ffcd27cacdf64f2377733979dad938
+      size: 221949127
+    - path: scripts/data/__init__.py
+      hash: md5
+      md5: a5094c4c302ee242c2e0be535ed8377f
+      size: 1392
+    - path: scripts/data/canonicalize/common.py
+      hash: md5
+      md5: 0b3ab46d187e9ba0eb902d8b8ec48df9
+      size: 23898
+    - path: scripts/data/console.py
+      hash: md5
+      md5: d3c1bbeb1bf68f67c78fccf3fcf83575
+      size: 2396
+    - path: scripts/data/postprocess/common.py
+      hash: md5
+      md5: 7b3ca03a089a7583a630989165c53a72
+      size: 8989
+    - path: scripts/data/reporting.py
+      hash: md5
+      md5: 5c03d141ee42ecbeaa30322e695f3f45
+      size: 1749
+    - path: scripts/data/schema.py
+      hash: md5
+      md5: 66c6413f50373ee7b65f51f8872b68de
+      size: 4509
+    - path: scripts/data/validation.py
+      hash: md5
+      md5: 33cfe3e12196926143c0bb802a721c17
+      size: 10691
+    - path: scripts/envs_scr/requirements/nmr-main.txt
+      hash: md5
+      md5: ba8d40b167605ed8a4c0b682fd89591a
+      size: 627
+    - path: scripts/model_benchmarks/create_structural_probe_dataset.py
+      hash: md5
+      md5: 39bf5073ea48eb929aad88958a289624
+      size: 12509
+    params:
+      params.yaml:
+        structural_probe.batch_size: 50000
+        structural_probe.seed: 42
+        structural_probe.train_molecules: 50000
+        structural_probe.validation_molecules: 10000
+    outs:
+    - path: datasets/downstream_structural_information/build_report.json
+      hash: md5
+      md5: 88e382067a384a58906aabf3b327a5ab
+      size: 1584
+    - path: datasets/downstream_structural_information/split_manifest.json
+      hash: md5
+      md5: dd56b8dd288eab50c4345409487cfe29
+      size: 11247685
+    - path: datasets/downstream_structural_information/train.parquet
+      hash: md5
+      md5: 236997a5dbcb9e00ff9bc9349fa40d29
+      size: 27171923
+    - path: 
+        datasets/downstream_structural_information/train_mol_properties.parquet
+      hash: md5
+      md5: bd2db66c88424524a1b593aa992fd4c2
+      size: 6705360
+    - path: datasets/downstream_structural_information/validation.parquet
+      hash: md5
+      md5: da64fea677c3ac95c46710ad2edd47e8
+      size: 5770184
+    - path: 
+        datasets/downstream_structural_information/validation_mol_properties.parquet
+      hash: md5
+      md5: fa8f1a4c9d0adb6dd199cfea2ba00967
+      size: 1618123
