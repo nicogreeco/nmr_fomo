@@ -473,6 +473,46 @@ probe_command+=" --report-output ${probe_report}"
 probe_command+=" --overwrite --quiet"
 dvc "${probe_args[@]}" "${probe_command}"
 
+structural_probe_output_root=datasets/downstream_structural_information
+structural_probe_report=${structural_probe_output_root}/build_report.json
+structural_probe_manifest=${structural_probe_output_root}/split_manifest.json
+structural_probe_outputs=(
+    ${structural_probe_output_root}/train.parquet
+    ${structural_probe_output_root}/train_mol_properties.parquet
+    ${structural_probe_output_root}/validation.parquet
+    ${structural_probe_output_root}/validation_mol_properties.parquet
+)
+structural_probe_args=(
+    stage add --force --name create_structural_probe_dataset
+    --deps datasets/train_splits/rich_train.parquet
+    --deps datasets/train_splits/rich_train_mol_properties.parquet
+    --deps datasets/cleaned/test_benchmark.parquet
+    --deps scripts/model_benchmarks/create_structural_probe_dataset.py
+    "${postprocess_dep_args[@]}"
+    --params structural_probe.seed
+    --params structural_probe.batch_size
+    --params structural_probe.train_molecules
+    --params structural_probe.validation_molecules
+    --outs "${structural_probe_manifest}"
+    --outs "${structural_probe_report}"
+)
+for output_path in "${structural_probe_outputs[@]}"; do
+    structural_probe_args+=(--outs-no-cache "${output_path}")
+done
+structural_probe_command="PYTHONPATH=scripts python"
+structural_probe_command+=" scripts/model_benchmarks/create_structural_probe_dataset.py"
+structural_probe_command+=" --nmr-input datasets/train_splits/rich_train.parquet"
+structural_probe_command+=" --property-input datasets/train_splits/rich_train_mol_properties.parquet"
+structural_probe_command+=" --test-input datasets/cleaned/test_benchmark.parquet"
+structural_probe_command+=" --output-root ${structural_probe_output_root}"
+structural_probe_command+=" --train-molecules \${structural_probe.train_molecules}"
+structural_probe_command+=" --validation-molecules \${structural_probe.validation_molecules}"
+structural_probe_command+=" --seed \${structural_probe.seed}"
+structural_probe_command+=" --batch-size \${structural_probe.batch_size}"
+structural_probe_command+=" --report-output ${structural_probe_report}"
+structural_probe_command+=" --overwrite --quiet"
+dvc "${structural_probe_args[@]}" "${structural_probe_command}"
+
 analytics_deps=(
     datasets/cleaned/rich.parquet
     datasets/cleaned/test_benchmark.parquet

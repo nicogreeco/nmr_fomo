@@ -767,3 +767,44 @@ stages:
     outs:
     - datasets/cleaned/rich_mol_properties.parquet
     - datasets/cleaned/rich_mol_properties_report.json
+  create_structural_probe_dataset:
+    cmd: PYTHONPATH=scripts python
+      scripts/model_benchmarks/create_structural_probe_dataset.py --nmr-input
+      datasets/train_splits/rich_train.parquet --property-input
+      datasets/train_splits/rich_train_mol_properties.parquet --test-input
+      datasets/cleaned/test_benchmark.parquet --output-root
+      datasets/downstream_structural_information --train-molecules
+      ${structural_probe.train_molecules} --validation-molecules
+      ${structural_probe.validation_molecules} --seed ${structural_probe.seed}
+      --batch-size ${structural_probe.batch_size} --report-output
+      datasets/downstream_structural_information/build_report.json --overwrite
+      --quiet
+    deps:
+    - datasets/cleaned/test_benchmark.parquet
+    - datasets/train_splits/rich_train.parquet
+    - datasets/train_splits/rich_train_mol_properties.parquet
+    - scripts/data/__init__.py
+    - scripts/data/canonicalize/common.py
+    - scripts/data/console.py
+    - scripts/data/postprocess/common.py
+    - scripts/data/reporting.py
+    - scripts/data/schema.py
+    - scripts/data/validation.py
+    - scripts/envs_scr/requirements/nmr-main.txt
+    - scripts/model_benchmarks/create_structural_probe_dataset.py
+    params:
+    - structural_probe.batch_size
+    - structural_probe.seed
+    - structural_probe.train_molecules
+    - structural_probe.validation_molecules
+    outs:
+    - datasets/downstream_structural_information/build_report.json
+    - datasets/downstream_structural_information/split_manifest.json
+    - datasets/downstream_structural_information/train.parquet:
+        cache: false
+    - datasets/downstream_structural_information/train_mol_properties.parquet:
+        cache: false
+    - datasets/downstream_structural_information/validation.parquet:
+        cache: false
+    - datasets/downstream_structural_information/validation_mol_properties.parquet:
+        cache: false

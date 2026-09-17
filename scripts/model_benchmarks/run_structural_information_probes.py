@@ -271,7 +271,9 @@ def maybe_mlflow(args, parameters, metrics, output_dir):
         mlflow.log_params(parameters); mlflow.log_metrics(metrics); mlflow.log_artifacts(str(output_dir), artifact_path="structural_information")
 
 
-def main():
+def parse_arguments():
+    """Parse CLI options and resolve representation-specific cache paths."""
+
     load_dotenv("mlflow.env")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True, choices=MODELS)
@@ -279,18 +281,14 @@ def main():
     parser.add_argument("--input-mode", choices=("shifts", "rich"))
     parser.add_argument("--run-id")
     parser.add_argument("--checkpoint-path", type=Path)
-    parser.add_argument("--train-embeddings", type=Path)
-    parser.add_argument("--validation-embeddings", type=Path)
-    parser.add_argument("--test-embeddings", type=Path)
+    for split in ("train", "validation", "test"):
+        parser.add_argument(f"--{split}-embeddings", type=Path)
     parser.add_argument("--train-properties", type=Path, default=Path("datasets/downstream_structural_information/train_mol_properties.parquet"))
     parser.add_argument("--validation-properties", type=Path, default=Path("datasets/downstream_structural_information/validation_mol_properties.parquet"))
     parser.add_argument("--test-properties", type=Path, default=Path("datasets/cleaned/test_benchmark_mol_properties.parquet"))
     parser.add_argument("--split-manifest", type=Path, default=Path("datasets/downstream_structural_information/split_manifest.json"))
     parser.add_argument("--embeddings-root", type=Path, default=Path("embeddings/structural_information"))
-    parser.add_argument(
-        "--comparison-representations", nargs="+",
-        default=list(DEFAULT_COMPARISON_REPRESENTATIONS),
-    )
+    parser.add_argument("--comparison-representations", nargs="+", default=list(DEFAULT_COMPARISON_REPRESENTATIONS))
     parser.add_argument("--common-cohort-manifest", type=Path)
     parser.add_argument("--rebuild-common-cohort", action="store_true")
     parser.add_argument("--output-dir", type=Path, default=Path("results/structural_information"))
@@ -303,6 +301,7 @@ def main():
     parser.add_argument("--run-name")
     parser.add_argument("--no-mlflow", action="store_true")
     args = parser.parse_args()
+
     if args.model == "fomonmr":
         if args.input_mode is None:
             parser.error("FoMoNMR requires --input-mode shifts or rich")
@@ -310,59 +309,93 @@ def main():
             parser.error("FoMoNMR requires exactly one of --run-id or --checkpoint-path")
     elif args.input_mode or args.run_id or args.checkpoint_path:
         parser.error("FoMoNMR-specific options require --model fomonmr")
+
     representation_id = args.representation_id or args.model
     if args.model == "fomonmr" and args.representation_id is None:
         parser.error("FoMoNMR requires --representation-id")
     if representation_id not in args.comparison_representations:
         parser.error("--representation-id must be in --comparison-representations")
-    for split in ("train", "validation", "test"):
-        value = getattr(args, f"{split}_embeddings")
-        if value is None:
-            setattr(args, f"{split}_embeddings", args.embeddings_root / representation_id / f"{split}.parquet")
-    args.common_cohort_manifest = args.common_cohort_manifest or (
-        args.embeddings_root / "structural_common_cohort.json"
-    )
     if args.device == "cuda" and not torch.cuda.is_available():
         raise RuntimeError("CUDA requested but unavailable")
 
+    for split in ("train", "validation", "test"):
+        if getattr(args, f"{split}_embeddings") is None:
+            setattr(args, f"{split}_embeddings", args.embeddings_root / representation_id / f"{split}.parquet")
+    args.common_cohort_manifest = args.common_cohort_manifest or args.embeddings_root / "structural_common_cohort.json"
+    return args, representation_id
+
+
+def load_benchmark_splits(args, representation_id):
+    """Load the common cohort and its embeddings and labels for all splits."""
+
     manifest_ids = split_ids_from_manifest(args.split_manifest)
-    fields = FUNCTIONAL_GROUPS + DESCRIPTORS
     common_ids, _ = common_cohort(args, representation_id)
     if not common_ids["train"] <= manifest_ids["train"] or not common_ids["validation"] <= manifest_ids["validation"]:
         raise ValueError("common cohort contains train/validation records outside the split manifest")
-    train_ids, train_x, train_props, metadata = load_split("train", args.train_embeddings, args.train_properties, common_ids["train"], args.model, args, fields)
-    val_ids, val_x, val_props, _ = load_split("validation", args.validation_embeddings, args.validation_properties, common_ids["validation"], args.model, args, fields)
-    test_ids, test_x, test_props, _ = load_split("test", args.test_embeddings, args.test_properties, common_ids["test"], args.model, args, fields)
+
+    fields = FUNCTIONAL_GROUPS + DESCRIPTORS
+    splits = {}
+    for name in ("train", "validation", "test"):
+        splits[name] = load_split(
+            name, getattr(args, f"{name}_embeddings"), getattr(args, f"{name}_properties"),
+            common_ids[name], args.model, args, fields,
+        )
+    train_ids, train_x, train_props, metadata = splits["train"]
+    val_ids, val_x, val_props, _ = splits["validation"]
+    test_ids, test_x, test_props, _ = splits["test"]
     if set(row["smiles_canonical"] for row in train_props.values()) & set(row["smiles_canonical"] for row in val_props.values()):
         raise ValueError("train and validation molecular identities overlap")
     if train_x.shape[1] != val_x.shape[1] or train_x.shape[1] != test_x.shape[1]:
         raise ValueError("embedding dimensions differ across splits")
     train_x, val_x, test_x = standardize(train_x, val_x, test_x)
+    return (train_ids, train_x, train_props, metadata), (val_ids, val_x, val_props), (test_ids, test_x, test_props)
+
+
+def train_all_probes(args, splits, output_dir):
+    """Train fresh linear and optional MLP heads and return test metric rows."""
+
+    (train_ids, train_x, train_props, _), (val_ids, val_x, val_props), (test_ids, test_x, test_props) = splits
+    all_rows = []
     device = "cuda" if args.device == "cuda" else "cpu"
-    output_dir = args.output_dir / representation_id
-    if output_dir.exists():
-        raise FileExistsError(f"refusing to overwrite {output_dir}")
-    output_dir.mkdir(parents=True)
-    metrics = {}; all_rows = []
     for task, targets, scorer in (("functional", FUNCTIONAL_GROUPS, score_functional), ("descriptors", DESCRIPTORS, score_descriptors)):
         train_y = np.asarray([[train_props[key][field] for field in targets] for key in train_ids], dtype=np.float32)
         val_y = np.asarray([[val_props[key][field] for field in targets] for key in val_ids], dtype=np.float32)
         test_y = np.asarray([[test_props[key][field] for field in targets] for key in test_ids], dtype=np.float32)
         mean, std = (train_y.mean(0), train_y.std(0)) if task == "descriptors" else (np.zeros(len(targets)), np.ones(len(targets)))
-        if task == "descriptors" and np.any(std == 0): raise ValueError("a descriptor has zero train variance")
+        if task == "descriptors" and np.any(std == 0):
+            raise ValueError("a descriptor has zero train variance")
         for kind, seeds in (("linear", [42]), ("mlp", [] if args.no_mlp else args.mlp_seeds)):
             for seed in seeds:
-                model, prediction, details = train_one(kind, "functional" if task == "functional" else "descriptors", train_x, (train_y - mean) / std, val_x, (val_y - mean) / std, test_x, mean, std, seed, [0.0, 1e-5, 1e-4, 1e-3], args.epochs, device)
-                if task == "descriptors": prediction = prediction * std + mean
-                rows = scorer(test_y, prediction)
-                for row in rows: row.update({"model": args.model, "input_mode": args.input_mode or "native", "probe": kind, "seed": seed, **details})
-                all_rows.extend(rows); torch.save({"state_dict": model.state_dict(), "metadata": {"task": task, "probe": kind, "seed": seed, **details}}, output_dir / f"{task}_{kind}_seed{seed}.pt")
+                model, prediction, details = train_one(kind, task, train_x, (train_y - mean) / std, val_x, (val_y - mean) / std, test_x, mean, std, seed, [0.0, 1e-5, 1e-4, 1e-3], args.epochs, device)
+                if task == "descriptors":
+                    prediction = prediction * std + mean
+                for row in scorer(test_y, prediction):
+                    row.update({"model": args.model, "input_mode": args.input_mode or "native", "probe": kind, "seed": seed, **details})
+                    all_rows.append(row)
+                torch.save({"state_dict": model.state_dict(), "metadata": {"task": task, "probe": kind, "seed": seed, **details}}, output_dir / f"{task}_{kind}_seed{seed}.pt")
+    return all_rows
+
+
+def run(args, representation_id):
+    splits = load_benchmark_splits(args, representation_id)
+    output_dir = args.output_dir / representation_id
+    if output_dir.exists():
+        raise FileExistsError(f"refusing to overwrite {output_dir}")
+    output_dir.mkdir(parents=True)
+
+    all_rows = train_all_probes(args, splits, output_dir)
+    (train_ids, _, _, metadata), (val_ids, _, _), (test_ids, _, _) = splits
     write_csv(output_dir / "test_metrics.csv", all_rows)
     summary = {"model": args.model, "representation_id": representation_id, "input_mode": args.input_mode or "native", "embedding_metadata": metadata, "common_cohort_manifest": str(args.common_cohort_manifest), "n_train": len(train_ids), "n_validation": len(val_ids), "n_test": len(test_ids), "mlp_seeds": args.mlp_seeds, "metrics_file": "test_metrics.csv"}
     (output_dir / "run_manifest.json").write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     numeric = {f"{row['probe']}/{row['target']}/{key}": float(value) for row in all_rows for key, value in row.items() if key in {"roc_auc", "average_precision", "mae", "r2"} and np.isfinite(value)}
     maybe_mlflow(args, {"model": args.model, "input_mode": args.input_mode or "native", "n_train": len(train_ids), "n_validation": len(val_ids), "n_test": len(test_ids)}, numeric, output_dir)
     print(f"saved structural-probe artifacts to {output_dir}")
+
+
+def main():
+    args, representation_id = parse_arguments()
+    run(args, representation_id)
 
 
 if __name__ == "__main__":

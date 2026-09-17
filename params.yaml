@@ -25,5 +25,11 @@ maccs_probe:
   train_records: 20000
   eval_records: 10000
 
+structural_probe:
+  seed: 42
+  batch_size: 50000
+  train_molecules: 50000
+  validation_molecules: 10000
+
 analytics:
   sample_per_group: 20000
