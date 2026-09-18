@@ -17,7 +17,8 @@ __pycache__
 /embeddings
 /logs/lightning_logs/
 /lightning_logs/
-/results/
+/results/*
+/results/structural_information/analysis_exp/
 /models_release/
 
 *.sbatch
@@ -39,5 +40,28 @@ __pycache__
 *.env
 *.orig
 *.html
+
+# Small, publication-facing result bundles. Keep large checkpoints, embeddings,
+# experiment scratch directories, and all other results local.
+!/results/ablation/
+!/results/ablation/README.md
+!/results/ablation/*_analysis.ipynb
+!/results/ablation/*/
+!/results/ablation/*/*.csv
+!/results/property_prediction/
+!/results/property_prediction/*.csv
+!/results/fomonmr_finetune/
+!/results/fomonmr_finetune/*/
+!/results/fomonmr_finetune/*/*.csv
+!/results/structural_information/
+!/results/structural_information/structural_information_analysis.ipynb
+!/results/structural_information/*/
+/results/structural_information/*/*
+!/results/structural_information/*/test_metrics.csv
+!/results/structural_information/analysis/
+/results/structural_information/analysis/*
+!/results/structural_information/analysis/per_target.csv
+!/results/structural_information/analysis/macro_summary.csv
+!/results/structural_information/analysis/mean_rank.csv
 
 scripts/test_notebook.ipynb

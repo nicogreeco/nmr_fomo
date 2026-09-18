@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+ld50_zhu,regression,runs/fomonmr/final-posttrain-unimol-relational-lambda025-294/checkpoints/best/best-step=123000.ckpt,final-posttrain-unimol-relational-lambda025-294,2217,531,574,0.8411545699599099,1.549624983026591,50,1e-05,0.0001,0.5921002626419067,0.8353179346914634,0.04792672395706177

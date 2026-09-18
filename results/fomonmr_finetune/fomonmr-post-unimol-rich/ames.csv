@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,accuracy,balanced_accuracy,precision,recall,f1,roc_auc,average_precision
+ames,classification,runs/fomonmr/final-posttrain-unimol-relational-lambda025-294/checkpoints/best/best-step=123000.ckpt,final-posttrain-unimol-relational-lambda025-294,2021,506,455,0.5233819981808719,0.7015237096246782,50,1e-05,0.0001,0.6791208791208792,0.6753307192648923,0.6127450980392157,0.6510416666666666,0.6313131313131313,0.7170666983523448,0.6538131483687986

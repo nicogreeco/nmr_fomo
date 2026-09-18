@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+lipophilicity_astrazeneca,regression,runs/fomonmr/final-posttrain-unimol-relational-lambda025-294/checkpoints/best/best-step=123000.ckpt,final-posttrain-unimol-relational-lambda025-294,698,167,182,0.7817923271370505,0.9533504450714195,50,1e-05,0.0001,1.014306902885437,1.2643176261039486,0.17022103071212769

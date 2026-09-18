@@ -1,0 +1,19 @@
+representation,probe,mean_rank,n_primary_metrics
+FoMoNMR post / rich,linear,2.264705882352941,34
+NMRTrans,linear,3.1176470588235294,34
+UltraNMR,linear,4.088235294117647,34
+FoMoNMR post-UniMol / rich,linear,4.294117647058823,34
+NMRPeak-R,linear,4.823529411764706,34
+FoMoNMR pre / shifts,linear,5.0588235294117645,34
+FoMoNMR post / shifts,linear,5.9411764705882355,34
+NMR-Solver,linear,7.264705882352941,34
+FoMoNMR post-UniMol / shifts,linear,8.147058823529411,34
+NMRTrans,mlp,1.2647058823529411,34
+FoMoNMR post / rich,mlp,2.8823529411764706,34
+FoMoNMR post-UniMol / rich,mlp,4.029411764705882,34
+UltraNMR,mlp,4.647058823529412,34
+NMR-Solver,mlp,5.0588235294117645,34
+NMRPeak-R,mlp,5.382352941176471,34
+FoMoNMR pre / shifts,mlp,6.205882352941177,34
+FoMoNMR post / shifts,mlp,7.0,34
+FoMoNMR post-UniMol / shifts,mlp,8.529411764705882,34

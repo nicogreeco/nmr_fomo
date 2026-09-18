@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+solubility_aqsoldb,regression,8462a988a9264f40943d37429826d3d5,final-pretrain-lambda015-81,2988,789,770,0.4605929144435056,0.7439422482793981,50,1e-05,0.0001,1.2520400285720825,1.6249735903427858,0.3754323720932007

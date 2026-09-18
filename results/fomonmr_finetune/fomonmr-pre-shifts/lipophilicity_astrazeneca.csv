@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+lipophilicity_astrazeneca,regression,8462a988a9264f40943d37429826d3d5,final-pretrain-lambda015-81,698,167,182,0.822687117639416,1.0740652438048477,50,1e-05,0.0001,1.1198850870132446,1.3419775251249064,0.06515300273895264

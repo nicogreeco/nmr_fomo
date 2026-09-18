@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,accuracy,balanced_accuracy,precision,recall,f1,roc_auc,average_precision
+ames,classification,52a53277e18a471b97caf84992c50b39,final-posttrain-lambda015-shuffled-234,2021,506,455,0.5488654631871008,0.6538320823030157,50,1e-05,0.0001,0.6593406593406593,0.6462690114068441,0.6033519553072626,0.5625,0.5822102425876011,0.7203738910012675,0.6468594001795985

@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+sangster_logp,regression,8462a988a9264f40943d37429826d3d5,final-pretrain-lambda015-81,3690,875,1153,0.42164549119131906,0.3853071281639576,50,1e-05,0.0001,0.694197952747345,0.9543793663319731,0.5917925834655762

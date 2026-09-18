@@ -1,0 +1,2 @@
+dataset,task,run_id,run_name,n_train,n_validation,n_test,best_validation_loss,test_loss,epochs,backbone_lr,head_lr,mae,rmse,r2
+ld50_zhu,regression,8462a988a9264f40943d37429826d3d5,final-pretrain-lambda015-81,2217,531,574,0.8805810646373224,1.473235135294419,50,1e-05,0.0001,0.5980369448661804,0.8144689325129649,0.09485989809036255
