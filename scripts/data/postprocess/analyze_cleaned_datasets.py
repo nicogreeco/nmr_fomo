@@ -633,7 +633,11 @@ def write_peak_tables_and_plot(
             (pl.col("n_peaks") / pl.col("n_peaks").sum().over(group_column))
             .alias("fraction")
         )
-        .sort([group_column, "n_peaks"], descending=[False, True])
+        # Break count ties explicitly; group-by output order is not stable.
+        .sort(
+            [group_column, "n_peaks", "multiplicity"],
+            descending=[False, True, False],
+        )
         .collect(engine="streaming")
     )
     write_analytics_csv(multiplicity,
