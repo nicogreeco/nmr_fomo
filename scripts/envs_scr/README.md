@@ -1,8 +1,8 @@
-# Machine-local NMR environments
+# NMR environments
 
-These scripts keep Python environments on each VM's local disk while leaving
-code, datasets, checkpoints, and benchmark outputs on the shared project
-filesystem.
+These scripts create separate Python environments outside the repository. Code,
+datasets, checkpoints, and benchmark outputs can be stored wherever is
+convenient for the installation.
 
 Run the setup commands below from the repository root.
 
@@ -23,15 +23,13 @@ outside the main project environment.
 RDKit, DVC with the S3 remote extra, and the YAML libraries used by the pipeline
 generator are installed in the main `nmr_venv`. Use that environment for
 schema-v2 canonicalization and for `dvc dag`, `dvc repro`, and `dvc push`.
-Object-storage credentials are machine-local AWS configuration and are never
+Object-storage credentials are read from user AWS configuration and are never
 written by these setup scripts or committed to the repository.
 
 ## CPU VM
 
-Choose a path that is physically stored on the VM's local disk:
-
 ```bash
-./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/nmr-envs
 ```
 
 ## GPU VM
@@ -40,13 +38,13 @@ The NVIDIA driver and a working `nvidia-smi` must already be present in the VM
 image. The script lets `uv` choose a compatible PyTorch CUDA backend:
 
 ```bash
-./scripts/envs_scr/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr
+./scripts/envs_scr/setup_gpu_envs.sh /path/to/nmr-envs
 ```
 
 To force a backend:
 
 ```bash
-./scripts/envs_scr/setup_gpu_envs.sh /home/nicola-greco/.venvs/nmr \
+./scripts/envs_scr/setup_gpu_envs.sh /path/to/nmr-envs \
   --torch-backend cu121
 ```
 
@@ -57,7 +55,7 @@ NMRPeak, NMRTrans, and UniMol2 may use different PyTorch releases.
 ## Install or repair one environment
 
 ```bash
-./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr \
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/nmr-envs \
   --only ultranmr
 ```
 
@@ -68,8 +66,8 @@ never deleted automatically: move them aside and rerun the script.
 
 ## Activate an environment
 
-By default, either setup script installs a machine-local `nmr-env` shell
-function in `~/.bashrc`. Open a new terminal, or load it immediately:
+By default, either setup script installs an `nmr-env` shell function in
+`~/.bashrc`. Open a new terminal, or load it immediately:
 
 ```bash
 source ~/.bashrc
@@ -88,20 +86,19 @@ nmr-env list
 ```
 
 Switching environments automatically deactivates the current one. The helper
-configuration is stored in `~/.config/nmr/envs.sh`, so each VM can point to its
-own local environment root.
+configuration is stored in `~/.config/nmr/envs.sh`.
 
 To leave `~/.bashrc` unchanged:
 
 ```bash
-./scripts/envs_scr/setup_cpu_envs.sh /path/to/local/venvs --no-shell-helper
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/nmr-envs --no-shell-helper
 ```
 
 If the environments already exist and you only want to install or update the
 helper:
 
 ```bash
-./scripts/envs_scr/setup_cpu_envs.sh /home/nicola-greco/.venvs/nmr --only shell
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/nmr-envs --only shell
 ```
 
 ## Notes

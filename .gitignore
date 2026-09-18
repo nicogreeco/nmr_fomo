@@ -18,6 +18,7 @@ __pycache__
 /logs/lightning_logs/
 /lightning_logs/
 /results/
+/models_release/
 
 *.sbatch
 *.npy

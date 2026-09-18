@@ -54,19 +54,38 @@ large local assets and are deliberately not versioned here.
 
 ## Environments and local assets
 
-The model families have incompatible dependencies, so the project uses
-separate Python environments. Set them up on the VM's local
-disk, while keeping code and large assets on the shared filesystem:
+### Main environment only
+
+Most work in this repository needs only the main environment: canonical data
+conversion, DVC, FoMoNMR training and inference, and analysis of already
+extracted embedding Parquets. With [uv](https://docs.astral.sh/uv/), create it
+directly in the checkout:
 
 ```bash
-./scripts/envs_scr/setup_cpu_envs.sh /path/on/local/disk/nmr
-# or, on a prepared GPU VM:
-./scripts/envs_scr/setup_gpu_envs.sh /path/on/local/disk/nmr
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python --torch-backend auto "torch==2.6.0"
+uv pip install --python .venv/bin/python -r scripts/envs_scr/requirements/nmr-main.txt
 ```
 
-After setup, use `nmr-env main`, `nmr-env nmrpeak`, `nmr-env nmrtrans`,
-`nmr-env ultranmr`, or `nmr-env unimol2`. See [scripts/envs_scr/README.md](scripts/envs_scr/README.md)
-for the exact environment setup and repair commands.
+Use `--torch-backend cpu` instead of `auto` on a CPU-only machine. Activate
+the environment with `source .venv/bin/activate`.
+
+### Published-model embedding extraction
+
+The main environment is enough until you need to reproduce embeddings from the
+published benchmark models. Their upstream dependencies are not all compatible,
+so use the environment setup scripts for that step:
+
+```bash
+./scripts/envs_scr/setup_cpu_envs.sh /path/to/nmr-envs
+# or, on a prepared GPU VM:
+./scripts/envs_scr/setup_gpu_envs.sh /path/to/nmr-envs
+```
+
+They can also install only the environment needed for one model, for example
+`--only nmrpeak` or `--only unimol2`. See
+[scripts/envs_scr/README.md](scripts/envs_scr/README.md) for exact setup,
+activation, and repair commands.
 
 ## Repository map
 
