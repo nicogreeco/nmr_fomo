@@ -12,6 +12,7 @@ try:
         PROPERTY_COLUMNS,
         molecular_frame_from_aligned_parquet,
         sample_by_group,
+        write_analytics_csv,
     )
 except ModuleNotFoundError:
     pl = None
@@ -19,6 +20,20 @@ except ModuleNotFoundError:
 
 @unittest.skipUnless(pl is not None, "requires Polars and plotting dependencies")
 class AnalyzeCleanedDatasetsTest(unittest.TestCase):
+    def test_csv_precision_suppresses_observed_aggregation_noise(self):
+        values = [99.22496494748484, 99.22496494748728]
+        with tempfile.TemporaryDirectory() as directory:
+            contents = []
+            for index, value in enumerate(values):
+                frame = pl.DataFrame({"records": [105509616], "mean": [value],
+                                      "missing": [None]})
+                path = Path(directory) / f"summary-{index}.csv"
+                write_analytics_csv(frame, path)
+                contents.append(path.read_text())
+                self.assertEqual(frame["mean"][0], value)
+            self.assertEqual(contents[0], contents[1])
+            self.assertEqual(contents[0], "records,mean,missing\n105509616,99.22496495,\n")
+
     def test_sampling_keeps_records_from_every_source(self):
         frame = pl.DataFrame(
             {

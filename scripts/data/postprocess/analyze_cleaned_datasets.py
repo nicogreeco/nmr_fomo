@@ -42,6 +42,11 @@ ADMET_ENDPOINTS = (
 )
 ADMET_SPLITS = ("train_val", "test")
 
+
+def write_analytics_csv(frame: pl.DataFrame, path: Path) -> None:
+    """Limit floating-point aggregation noise in exported tables only."""
+    frame.write_csv(path, float_precision=8)
+
 PROPERTY_COLUMNS = (
     "exact_molecular_weight",
     "calculated_logp",
@@ -369,8 +374,8 @@ def write_molecular_tables_and_plot(
         .sort(group_column)
         .collect(engine="streaming")
     )
-    summary.write_csv(analytics_dir / f"{output_prefix}_molecular_property_summary.csv")
-    prevalence.write_csv(
+    write_analytics_csv(summary, analytics_dir / f"{output_prefix}_molecular_property_summary.csv")
+    write_analytics_csv(prevalence,
         analytics_dir / f"{output_prefix}_functional_group_prevalence.csv"
     )
 
@@ -597,7 +602,7 @@ def write_peak_tables_and_plot(
         .join(j_summary, on=group_column, how="left")
         .sort(group_column)
     )
-    peak_summary.write_csv(analytics_dir / f"{output_prefix}_peak_summary.csv")
+    write_analytics_csv(peak_summary, analytics_dir / f"{output_prefix}_peak_summary.csv")
 
     annotation_summary = (
         h_peaks.group_by(group_column)
@@ -615,7 +620,7 @@ def write_peak_tables_and_plot(
         .sort(group_column)
         .collect(engine="streaming")
     )
-    annotation_summary.write_csv(
+    write_analytics_csv(annotation_summary,
         analytics_dir / f"{output_prefix}_proton_annotation_completeness.csv"
     )
 
@@ -631,7 +636,7 @@ def write_peak_tables_and_plot(
         .sort([group_column, "n_peaks"], descending=[False, True])
         .collect(engine="streaming")
     )
-    multiplicity.write_csv(
+    write_analytics_csv(multiplicity,
         analytics_dir / f"{output_prefix}_multiplicity_distribution.csv"
     )
 
@@ -906,7 +911,7 @@ def analyze_main_dataset(
     dataset_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = main_records(parquet_path)
     inventory = inventory_by_source(records, dataset_name)
-    inventory.write_csv(
+    write_analytics_csv(inventory,
         dataset_analytics_dir / f"{dataset_name}_source_inventory.csv"
     )
 
@@ -951,7 +956,7 @@ def analyze_nmrsolver_dataset(
         print(f"Analyzing NMR-Solver dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
     inventory = nmrsolver_inventory(records)
-    inventory.write_csv(
+    write_analytics_csv(inventory,
         analytics_dir / "nmrsolver_source_inventory.csv"
     )
     molecular = molecular_frame_from_aligned_parquet(records, properties_path)
@@ -999,7 +1004,7 @@ def analyze_nmrgym_dataset(
         print(f"Analyzing NMRGym dataset: {parquet_path}", flush=True)
     records = main_records(parquet_path)
     inventory = inventory_by_source(records, "nmrgym")
-    inventory.write_csv(
+    write_analytics_csv(inventory,
         analytics_dir / "nmrgym_source_inventory.csv"
     )
     molecular = molecular_frame_from_aligned_parquet(records, properties_path)
@@ -1147,10 +1152,10 @@ def analyze_admet(
     admet_analytics_dir = analytics_dir / "admet"
     admet_analytics_dir.mkdir(parents=True, exist_ok=True)
     records = admet_records(cleaned_root)
-    admet_inventory(records).write_csv(
+    write_analytics_csv(admet_inventory(records),
         admet_analytics_dir / "admet_source_inventory.csv"
     )
-    admet_target_summary(cleaned_root).write_csv(
+    write_analytics_csv(admet_target_summary(cleaned_root),
         admet_analytics_dir / "admet_summary.csv"
     )
     molecular = admet_molecular_frame(records)
@@ -1310,7 +1315,7 @@ def main() -> None:
 
         collection_analytics_dir = analytics_dir / "collection"
         collection_analytics_dir.mkdir(parents=True, exist_ok=True)
-        pl.concat(inventories).write_csv(
+        write_analytics_csv(pl.concat(inventories),
             collection_analytics_dir / "source_inventory.csv"
         )
         if not args.skip_admet:
