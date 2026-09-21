@@ -20,6 +20,7 @@ __pycache__
 /results/*
 /results/structural_information/analysis_exp/
 /models_release/
+/scripts/*.html
 
 *.sbatch
 *.npy
@@ -39,7 +40,6 @@ __pycache__
 *.log
 *.env
 *.orig
-*.html
 
 # Small, publication-facing result bundles. Keep large checkpoints, embeddings,
 # experiment scratch directories, and all other results local.
