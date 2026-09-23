@@ -439,7 +439,24 @@ high-confidence `P` molecules and a deterministic full-InChIKey 80/20 split. Rep
 are excluded, and the single Ames identity occurring across official splits is
 removed from both splits. Full RDKit InChIKeys match the external structures to
 rich spectra. The union contains 8,169 matched molecules and removes 11,354 NMR
-records from pretraining, leaving 1,941,847 final `rich` records.
+records from rich pretraining, leaving 1,941,847 final `rich` records.
+
+ADMET spectra are selected from the filtered rich train/validation pool, not
+from `test_benchmark.parquet`. This choice maximizes matches between NMR records
+and experimental property labels as restricting matching to the smaller benchmark
+test pool yielded very small ADMET cohorts. Using the larger rich pool retains
+more labelled records for downstream evaluation.
+
+The rich pool combines the released training and validation splits of NMRPeak
+and NMRTrans, so the ADMET cohorts inherit records and molecules from those
+encoders' training data. Prior spectral exposure is therefore expected by
+construction.
+
+The exclusion applies only to `rich.parquet`:
+SimNMR and NMRGym are not explicitly decontaminated against ADMET, and the extent
+of exposure across all external encoders has not been fully audited. Therefore
+these cohorts do not guarantee unseen molecules across all pretraining sources,
+including those used by FoMoNMR.
 
 ### 6. Molecular properties, reports, and analytics
 
