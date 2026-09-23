@@ -106,9 +106,8 @@ scripts/
     download_raw_datasets.sh  pinned public-source downloader
     generate_dvc_pipeline.sh  generator for the root DVC DAG
   model/                    dataset, collator, and new foundation-model code
-  model_benchmarks/         processors and embedders for published-model comparison
+  model_benchmarks/         processors, embedders, downstream runners, and fine-tuning
   envs_scr/                 model-specific environment setup material
-  test_notebook.ipynb       exploratory work
 ```
 
 The reusable data layer remains independent of the published models:

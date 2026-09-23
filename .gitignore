@@ -59,6 +59,7 @@ __pycache__
 !/results/fomonmr_finetune/fomonmr_finetune_analysis.ipynb
 /results/fomonmr_finetune/analysis/
 !/results/structural_information/
+!/results/structural_information/README.md
 !/results/structural_information/structural_information_analysis.ipynb
 !/results/structural_information/*/
 /results/structural_information/*/*

@@ -239,14 +239,14 @@ The model never changes stage based on its epoch. Start pretraining from the
 repository root with:
 
 ```bash
-PYTHONPATH=scripts python scripts/model/train.py \
+PYTHONPATH=scripts python -m model.train \
     --stage pretrain --batch-size 128
 ```
 
 For a short local test without an MLflow server:
 
 ```bash
-PYTHONPATH=scripts python scripts/model/train.py \
+PYTHONPATH=scripts python -m model.train \
     --stage pretrain --batch-size 8 --num-workers 0 \
     --max-steps 100 --validation-interval 50 --no-mlflow
 ```
@@ -275,7 +275,7 @@ For continued pretraining, initialize a fresh posttrain run from the best
 pretraining checkpoint:
 
 ```bash
-PYTHONPATH=scripts python scripts/model/train.py \
+PYTHONPATH=scripts python -m model.train \
     --stage posttrain --batch-size 128 \
     --pretrained-checkpoint runs/fomonmr/PRETRAIN_RUN/checkpoints/best/BEST.ckpt
 ```
@@ -286,13 +286,34 @@ weights, and starts a fresh optimizer with the rich modules unfrozen.
 To resume an interrupted run instead:
 
 ```bash
-PYTHONPATH=scripts python scripts/model/train.py \
+PYTHONPATH=scripts python -m model.train \
     --stage pretrain --run-name PRETRAIN_RUN \
     --resume runs/fomonmr/PRETRAIN_RUN/checkpoints/latest/last.ckpt
 ```
 
 `--resume` restores model, optimizer, scheduler, and current step. It is
 different from `--pretrained-checkpoint`, which starts a new training stage.
+
+### Released training recipes
+
+The examples above illustrate the launcher. The published checkpoints use the
+three `final_*.yaml` configurations, which contain their architecture,
+objectives, augmentation, optimization, scheduling, early stopping, validation
+seed, and maximum step budget.
+
+| Variant | Configuration | MLflow run | Training revision | Validation/checkpoint interval | Selected step |
+| --- | --- | --- | --- | ---: | ---: |
+| Pretraining | [`final_pretrain.yaml`](configs/final_pretrain.yaml) | `8462a988a9264f40943d37429826d3d5` | `59c6088` | 10,000 | 720,000 |
+| Posttraining | [`final_posttrain.yaml`](configs/final_posttrain.yaml) | `52a53277e18a471b97caf84992c50b39` | `f5602b1` | 1,000 | 92,000 |
+| UniMol2 relational | [`final_posttrain_unimol_relational.yaml`](configs/final_posttrain_unimol_relational.yaml) | `f89fff6cef6848c29425ab3b4ff72fe0` | `8c9f35b` | 1,000 | 123,000 |
+
+MLflow records show that all three used a per-process batch size of 2,048,
+accumulation of 1, 10 workers, seed 42, `bf16-mixed` precision, complete
+logging, and the MACCS probe at every validation. The original launcher did not
+log its accelerator, DDP world size, or the exact `--pretrained-checkpoint`
+path used by the posttraining runs. The diary records pretraining on two H100
+nodes, but not enough launch detail to reconstruct the exact global batch.
+The same provenance summary accompanies the separately published model release.
 
 ## Optimization and checkpoints
 
@@ -417,7 +438,7 @@ do not import or run UniMol2. Existing canonical data and sidecars are unchanged
 
 ```bash
 nmr-env main
-PYTHONPATH=scripts python scripts/model/train.py \
+PYTHONPATH=scripts python -m model.train \
     --stage posttrain \
     --config scripts/model/configs/final_posttrain_unimol_relational.yaml \
     --pretrained-checkpoint runs/fomonmr/PRETRAIN_RUN/checkpoints/best/BEST.ckpt \
