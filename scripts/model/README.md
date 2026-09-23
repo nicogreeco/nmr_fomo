@@ -304,16 +304,16 @@ seed, and maximum step budget.
 | Variant | Configuration | MLflow run | Training revision | Validation/checkpoint interval | Selected step |
 | --- | --- | --- | --- | ---: | ---: |
 | Pretraining | [`final_pretrain.yaml`](configs/final_pretrain.yaml) | `8462a988a9264f40943d37429826d3d5` | `59c6088` | 10,000 | 720,000 |
-| Posttraining | [`final_posttrain.yaml`](configs/final_posttrain.yaml) | `52a53277e18a471b97caf84992c50b39` | `f5602b1` | 1,000 | 92,000 |
+| Posttraining | [`final_posttrain.yaml`](configs/final_posttrain.yaml) | `52a53277e18a471b97caf84992c50b39` | `f5602b1` | 10,000 | 92,000 |
 | UniMol2 relational | [`final_posttrain_unimol_relational.yaml`](configs/final_posttrain_unimol_relational.yaml) | `f89fff6cef6848c29425ab3b4ff72fe0` | `8c9f35b` | 1,000 | 123,000 |
 
 MLflow records show that all three used a per-process batch size of 2,048,
 accumulation of 1, 10 workers, seed 42, `bf16-mixed` precision, complete
-logging, and the MACCS probe at every validation. The original launcher did not
-log its accelerator, DDP world size, or the exact `--pretrained-checkpoint`
-path used by the posttraining runs. The diary records pretraining on two H100
-nodes, but not enough launch detail to reconstruct the exact global batch.
-The same provenance summary accompanies the separately published model release.
+logging, and the MACCS probe at every validation. Training used DDP on two H100
+nodes, with one process and one GPU per node, giving a world size of 2 and an
+effective global batch size of 4,096. The two posttraining runs continued from
+the released pretraining lineage. The same provenance summary accompanies the
+separately published model release.
 
 ## Optimization and checkpoints
 
