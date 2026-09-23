@@ -50,9 +50,14 @@ __pycache__
 !/results/ablation/*/*.csv
 !/results/property_prediction/
 !/results/property_prediction/*.csv
+!/results/property_prediction/README.md
+!/results/property_prediction/property_prediction_analysis.ipynb
 !/results/fomonmr_finetune/
 !/results/fomonmr_finetune/*/
 !/results/fomonmr_finetune/*/*.csv
+!/results/fomonmr_finetune/README.md
+!/results/fomonmr_finetune/fomonmr_finetune_analysis.ipynb
+/results/fomonmr_finetune/analysis/
 !/results/structural_information/
 !/results/structural_information/structural_information_analysis.ipynb
 !/results/structural_information/*/

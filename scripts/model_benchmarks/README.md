@@ -50,9 +50,15 @@ approximate the validation fraction. The per-record groups are passed through
 GridSearchCV to the MLP in each training fold and in the final refit. Direct
 calls to `TorchMLP.fit` must also supply `groups`.
 
-This fixes the earlier record-level internal holdout. Existing result CSVs
-were not regenerated; their MLP scores still describe the earlier protocol.
-The official train/test assignments and linear probes are unchanged.
+The uniform rerun recipe and frozen-result analysis are in
+[`results/property_prediction/README.md`](../../results/property_prediction/README.md).
+Fine-tuning has a separate
+[`analysis notebook`](../../results/fomonmr_finetune/fomonmr_finetune_analysis.ipynb).
+
+ADMET matching excludes molecules from rich pretraining only, not explicitly
+from SimNMR, NMRGym, or external encoders' pretraining corpora. Grouped supervised
+validation does not establish that these molecules were unseen in pretraining.
+See [`Properties Dataset`](../../contex/Properties%20Dataset.md).
 
 
 ## Fine-tuning a local FoMoNMR checkpoint
