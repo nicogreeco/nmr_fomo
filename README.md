@@ -90,17 +90,85 @@ They can also install only the environment needed for one model, for example
 [scripts/envs_scr/README.md](scripts/envs_scr/README.md) for exact setup,
 activation, and repair commands.
 
+## Quick start: extract FoMoNMR embeddings
+
+Download the standard posttraining checkpoint and the public benchmark test
+set from Hugging Face:
+
+```bash
+hf download niccogreek/fomonmr \
+  posttraining/fomonmr-posttrain.ckpt \
+  --local-dir models_release
+
+hf download niccogreek/nmr-canonical-cleaned \
+  test_benchmark.parquet \
+  --repo-type dataset \
+  --local-dir datasets/cleaned
+```
+
+`CanonicalParquetDataset` streams model-independent records from the Parquet.
+`FoundationNMRProcessor` validates and pads a batch, builds the availability
+masks, and converts it to the tensors expected by FoMoNMR. Run the example from
+the repository root with `scripts` on `PYTHONPATH`, for example as
+`PYTHONPATH=scripts python example.py`:
+
+```python
+import torch
+from torch.utils.data import DataLoader
+
+from data import CanonicalParquetDataset
+from model import FoundationNMRProcessor
+from model.FoMoNMR import FoMoNMR
+
+dataset = CanonicalParquetDataset(
+    "datasets/cleaned/test_benchmark.parquet"
+)
+loader = DataLoader(
+    dataset,
+    batch_size=8,
+    num_workers=0,
+    collate_fn=FoundationNMRProcessor(),
+)
+
+model = FoMoNMR.load_from_checkpoint(
+    "models_release/posttraining/fomonmr-posttrain.ckpt",
+    map_location="cpu",
+    weights_only=True,
+)
+model.eval()
+
+batch = next(iter(loader))
+with torch.inference_mode():
+    embeddings, peak_states, peak_mask = model(batch)
+
+print(embeddings.shape)  # torch.Size([8, 512])
+```
+
+To encode the complete Parquet and save one embedding per `record_id`, use the
+streaming extractor:
+
+```bash
+PYTHONPATH=scripts python -m model_benchmarks.extract_embeddings \
+  --model fomonmr \
+  --checkpoint models_release/posttraining/fomonmr-posttrain.ckpt \
+  --input-mode rich \
+  --input datasets/cleaned/test_benchmark.parquet \
+  --output embeddings/fomonmr-post-rich/test.parquet \
+  --device cpu --batch-size 32
+```
+
+The standard posttraining checkpoint uses the rich proton annotations that are
+available in each record. Local record construction is documented in
+[scripts/data/README.md](scripts/data/README.md); shift-only inference and
+training are covered by [scripts/model/README.md](scripts/model/README.md), and
+the complete extraction interface by
+[scripts/model_benchmarks/README.md](scripts/model_benchmarks/README.md).
+
 ## Repository map
 
 ```text
-contex/                     project diary, literature notes, decisions, and analyses
-  NMR/DL Methods/           notes on the relevant papers and repositories
-datasets/
-  raw/                      DVC-pinned upstream releases
-  canonical/                reproducible source conversions
-  intermediate/             reproducible merge, overlap, and audit outputs
-  cleaned/                  final datasets, molecular properties, and analytics
-  train_splits/             local no-cache train/validation Parquets
+datasets/                   workspace for downloaded sources, DVC outputs, and released data
+docs/                       project report and standalone visual material
 models/                     pinned upstream repositories (Git submodules)
 results/                    tracked result CSVs, notebooks, and reproduction notes
 scripts/
@@ -108,7 +176,6 @@ scripts/
     canonicalize/           source-specific conversion and dataset-analysis tools
     postprocess/            derived-data and benchmark-preparation utilities
     download_raw_datasets.sh  pinned public-source downloader
-    generate_dvc_pipeline.sh  generator for the root DVC DAG
   model/                    dataset, collator, and new foundation-model code
   model_benchmarks/         processors, embedders, downstream runners, and fine-tuning
   envs_scr/                 model-specific environment setup material
@@ -133,17 +200,20 @@ hf download niccogreek/nmr-canonical-cleaned \
   --local-dir datasets/cleaned
 ```
 
-To create the molecule-safe train/validation files used by FoMoNMR, run the
-last two DVC stages from the repository root:
+To create the molecule-safe train/validation files used by FoMoNMR from the
+published release, run the two split utilities directly:
 
 ```bash
-dvc repro --single-item split_foundation_datasets
-dvc repro --single-item split_maccs_probe
+PYTHONPATH=scripts python -m data.postprocess.split_foundation_datasets
+PYTHONPATH=scripts python -m data.postprocess.split_maccs_probe \
+  datasets/train_splits/rich_val.parquet \
+  datasets/train_splits/rich_val_mol_properties.parquet
 ```
 
 The first stage creates `datasets/train_splits/`; the second creates the fixed
-MACCS probe split from rich validation. Both use the cleaned NMR and
-molecular-property Parquets downloaded from Hugging Face.
+MACCS probe split from rich validation. These commands use the cleaned NMR and
+molecular-property Parquets downloaded from Hugging Face without changing the
+root DVC lock.
 
 To reproduce or modify the collection, activate the main environment, download
 the pinned raw sources, then let DVC rebuild the complete graph:
@@ -181,19 +251,16 @@ and instructions for reproducing each evaluation:
 Each maintained result README identifies the dataset, embeddings, runner, and
 notebook needed to regenerate its tables.
 
-## How to navigate the project
-
-Use `contex/` for the project notes and design rationale:
-
-- [NMR foundations and AI](<contex/NMR%20foundations%20and%20AI.md>) and
-  [DL Methods](<contex/NMR/DL%20Methods/>) collect the literature context.
-- [Datasets](<contex/Datasets.md>), [Dataset Analysis](<contex/Dataset%20Analysis.md>),
-  and [Dataset Filtering and Processing](<contex/Dataset_Filtering_and_Processing.md>) explain the data choices and observed distributions.
-- [Embedding Pipeline Architecture](<contex/Embedding_Pipeline_Architecture.md>) and
-  [Canonicalization Implementation Notes](<contex/Canonicalization_Implementation_Notes.md>) describe the current implementation decisions.
+## Documentation
 
 Each `scripts/` subfolder has a practical README for that part of the code.
-Start from [scripts/README.md](scripts/README.md) to choose a workflow.
+Start from [scripts/README.md](scripts/README.md) to choose a workflow. Dataset
+provenance and schema are documented in
+[datasets/cleaned/README.md](datasets/cleaned/README.md), while each tracked
+evaluation under `results/` includes its inputs and reproduction procedure.
+
+A paper-style project report is in preparation and will be added under
+[`docs/`](docs/README.md).
 
 Before a push, check `git status`, `git diff --cached`, and
 `git submodule status`.

@@ -41,9 +41,7 @@ unavailable peak annotations stay null. Invalid structures fail with source
 context, except for the large SimNMR converter, which writes rejected rows to
 an adjacent JSONL audit and continues. Parquet metadata records schema version
 2 and the RDKit version. See [`../README.md`](../README.md) for the Python
-objects and
-[Canonicalization Implementation Notes](../../../contex/Canonicalization_Implementation_Notes.md)
-for the exact semantic rules.
+objects, field semantics, and validation rules.
 
 Each converter also writes a compact deterministic processing JSON beside its
 Parquet (`<output>_report.json`). It records the stage, input, output, and
@@ -109,9 +107,8 @@ PYTHONPATH=scripts python -m data.canonicalize.convert_nmrgym \
 ```
 
 The canonical fields and the rules to preserve during future conversions are
-in [Canonicalization Implementation Notes](../../../contex/Canonicalization_Implementation_Notes.md).
-For the reason different source releases need different treatment, see
-[Dataset Filtering and Processing](../../../contex/Dataset_Filtering_and_Processing.md).
+documented in [`../README.md`](../README.md). Source-specific handling remains
+explicit in each converter and in the maintained DVC stage that invokes it.
 
 Converter parameters used by the maintained pipeline are in `params.yaml`.
 Run the converter directly for a local experiment; use `dvc repro

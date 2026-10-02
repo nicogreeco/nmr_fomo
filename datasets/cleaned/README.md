@@ -57,7 +57,7 @@ deduplication rule described below.
 | NMRTrans / NMRSpec | Experimental peak tables mined from chemistry Supporting Information published between 2013 and 2025; this collection uses the released 212,440-record model dataset. | [NMRTrans](https://arxiv.org/abs/2602.10158) |
 | SimNMR-PubChem / NMR-Solver | PubChem-scale simulated atom-level `1H` and `13C` shifts grouped through supplied equivalence classes. | [NMR-Solver](https://doi.org/10.1038/s41467-026-71315-0) |
 | NMRGym | Experimental paired `1H` and `13C` shift lists released as the scaffold-split NMRGym benchmark used by UltraNMR. | [UltraNMR](https://arxiv.org/abs/2606.20756), [source repository](https://github.com/wuycM/UltraNMR) |
-| ADMET labels | Ames, LD50 Zhu, AqSolDB solubility, and AstraZeneca lipophilicity use official Therapeutics Data Commons splits; Sangster logP uses the high-confidence `P` subset from Zenodo. | [Property benchmark notes](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Properties%20Dataset.md) |
+| ADMET labels | Ames, LD50 Zhu, AqSolDB solubility, and AstraZeneca lipophilicity use official Therapeutics Data Commons splits; Sangster logP uses the high-confidence `P` subset from Zenodo. | [Preparation implementation](https://github.com/nicogreeco/nmr_fomo/tree/main/scripts/data/postprocess) |
 
 The source papers describe collection and upstream curation. This repository
 starts from the released processed representations and records the additional
@@ -541,10 +541,8 @@ structure representation; salts, protonation states, tautomers, and missing
 stereochemical information retain the distinctions present in the source
 SMILES and identity rules described above.
 
-Further implementation rationale and source audits are documented in
-[`Datasets.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Datasets.md),
-[`Canonicalization_Implementation_Notes.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Canonicalization_Implementation_Notes.md),
-[`Multiplicity analysis.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Multiplicity%20analysis.md),
-[`Dataset_Filtering_and_Processing.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Dataset_Filtering_and_Processing.md),
-[`Dataset Analysis.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Dataset%20Analysis.md), and
-[`Properties Dataset.md`](https://github.com/nicogreeco/nmr_fomo/blob/main/contex/Properties%20Dataset.md).
+The repository documents the reusable data API, canonical converters, and
+postprocessing commands in
+[`scripts/data`](https://github.com/nicogreeco/nmr_fomo/tree/main/scripts/data).
+Generated source, schema, filtering, and property summaries are indexed in
+[`ANALYTICS.md`](ANALYTICS.md).

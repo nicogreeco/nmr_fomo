@@ -54,9 +54,9 @@ generate final analytics
 ```
 
 NMR-to-NMR overlap commands compare exact `smiles_canonical`. External ADMET
-labels are matched with full RDKit InChIKeys. The rationale and full filtering
-policy are documented in
-[`contex/Dataset_Filtering_and_Processing.md`](../../../contex/Dataset_Filtering_and_Processing.md).
+labels are matched with full RDKit InChIKeys. The released source inventory,
+identity rules, and filtering summary are documented in the
+[`datasets/cleaned` data card](../../../datasets/cleaned/README.md).
 
 ## Common command conventions
 
@@ -182,8 +182,8 @@ PYTHONPATH=scripts python -m data.postprocess.calculate_mol_properties \
 ```
 
 Morgan is stored as 256 fingerprint bytes and expanded to 2,048 bits by the
-FoMoNMR processor. The complete sidecar columns are documented in
-[`contex/Dataset Analysis.md`](../../../contex/Dataset%20Analysis.md).
+FoMoNMR processor. The complete released schema is documented in the
+[`datasets/cleaned` data card](../../../datasets/cleaned/README.md).
 
 ## `split_foundation_datasets.py`
 
@@ -192,7 +192,7 @@ under `datasets/train_splits/`. Molecules are assigned consistently across all
 three sources.
 
 ```bash
-dvc repro split_foundation_datasets
+PYTHONPATH=scripts python -m data.postprocess.split_foundation_datasets
 ```
 
 The NMR and molecular-property outputs retain matching rows and row groups.
@@ -203,7 +203,9 @@ Creates fixed, molecule-disjoint MACCS linear-probe train and evaluation pairs
 from rich validation.
 
 ```bash
-dvc repro split_maccs_probe
+PYTHONPATH=scripts python -m data.postprocess.split_maccs_probe \
+  datasets/train_splits/rich_val.parquet \
+  datasets/train_splits/rich_val_mol_properties.parquet
 ```
 
 The aligned outputs live under `datasets/train_splits/maccs_probe/`.

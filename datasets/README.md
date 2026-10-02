@@ -39,12 +39,15 @@ hf download niccogreek/nmr-canonical-cleaned \
 Create the training-only splits when needed:
 
 ```bash
-dvc repro --single-item split_foundation_datasets
-dvc repro --single-item split_maccs_probe
+PYTHONPATH=scripts python -m data.postprocess.split_foundation_datasets
+PYTHONPATH=scripts python -m data.postprocess.split_maccs_probe \
+  datasets/train_splits/rich_val.parquet \
+  datasets/train_splits/rich_val_mol_properties.parquet
 ```
 
 The first command creates aligned NMR and molecular-property files under
-`train_splits/`; the second creates the fixed MACCS diagnostic split.
+`train_splits/`; the second creates the fixed MACCS diagnostic split. Running
+the utilities directly keeps the committed full-build DVC lock unchanged.
 
 ## Rebuild from source
 
@@ -94,8 +97,9 @@ Do not edit generated canonical or derived files by hand. Change the relevant
 script or parameter and rerun its DVC stage.
 
 The Python schema and processing commands are documented in
-[`scripts/data/README.md`](../scripts/data/README.md). The scientific meaning
-of the sources and historical measured counts are
-in [Datasets](<../contex/Datasets.md>) and
-[Dataset Analysis](<../contex/Dataset%20Analysis.md>). The exact processing
-rules are in [Dataset Filtering and Processing](<../contex/Dataset_Filtering_and_Processing.md>).
+[`scripts/data/README.md`](../scripts/data/README.md). Source provenance,
+released counts, schema fields, and generated dataset audits are documented in
+[`cleaned/README.md`](cleaned/README.md) and
+[`cleaned/ANALYTICS.md`](cleaned/ANALYTICS.md). Exact transformation commands
+are described in
+[`scripts/data/postprocess/README.md`](../scripts/data/postprocess/README.md).

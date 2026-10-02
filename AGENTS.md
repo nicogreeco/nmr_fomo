@@ -73,19 +73,15 @@
 - **DVC/data DAG:** `README.md`, `datasets/README.md`, `scripts/data/README.md`,
   `dvc.yaml`, and `params.yaml`; regenerate stage definitions with
   `scripts/data/generate_dvc_pipeline.sh`.
-- **Canonical schema/converters:** `contex/Datasets.md`,
-  `contex/Canonicalization_Implementation_Notes.md`,
-  `contex/Multiplicity analysis.md`, and the relevant converter README.
-- **Filtering, analysis, or ADMET:**
-  `contex/Dataset_Filtering_and_Processing.md`, `contex/Dataset Analysis.md`,
-  `contex/Properties Dataset.md`, and `contex/Property Prediction.md`.
-- **FoMoNMR architecture or training:** `contex/FoMoNMR_Model_Architecture.md`,
-  `contex/FoMoNMR Ablation Studies.md`, `scripts/model/README.md`, and the
-  relevant training configuration.
-- **Published-model extraction:** `contex/Embedding_Pipeline_Architecture.md`,
-  `contex/Baseline NMR Encoders.md`, the relevant note in
-  `contex/NMR/DL Methods/`, and the selected upstream model README under
-  `models/`.
+- **Canonical schema/converters:** `scripts/data/README.md`,
+  `scripts/data/canonicalize/README.md`, `datasets/cleaned/README.md`, and the
+  relevant converter implementation.
+- **Filtering, analysis, or ADMET:** `scripts/data/postprocess/README.md`,
+  `datasets/cleaned/README.md`, and the relevant README under `results/`.
+- **FoMoNMR architecture or training:** `scripts/model/README.md`, the relevant
+  training configuration, and `results/ablation/README.md`.
+- **Published-model extraction:** `scripts/model_benchmarks/README.md` and the
+  selected upstream model README under `models/`.
 
 ## Implementation Boundaries
 
