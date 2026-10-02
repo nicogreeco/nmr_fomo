@@ -18,7 +18,7 @@ checkpoint limits, and pooling belong to the model that consumes them.
 
 Explore the test-set embeddings in an interactive 3D UMAP:
 
-[![3D UMAP visualization](docs/3d_umap.png)](https://nicogreeco.github.io/nmr_fomo/umap_3d_properties_test_images.html)
+[![3D UMAP visualization](docs/umap_3d_properties_test_images.png)](https://nicogreeco.github.io/nmr_fomo/umap_3d_properties_test_images.html)
 
 *Click the figure to explore the interactive 3D visualization.*
 
