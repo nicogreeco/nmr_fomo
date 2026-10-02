@@ -1,8 +1,6 @@
 # NMR environments
 
-These scripts create separate Python environments outside the repository. Code,
-datasets, checkpoints, and benchmark outputs can be stored wherever is
-convenient for the installation.
+These scripts create separate Python environments for the repository.
 
 Run the setup commands below from the repository root.
 
@@ -23,8 +21,6 @@ outside the main project environment.
 RDKit, DVC with the S3 remote extra, and the YAML libraries used by the pipeline
 generator are installed in the main `nmr_venv`. Use that environment for
 schema-v2 canonicalization and for `dvc dag`, `dvc repro`, and `dvc push`.
-Object-storage credentials are read from user AWS configuration and are never
-written by these setup scripts or committed to the repository.
 
 ## CPU VM
 
