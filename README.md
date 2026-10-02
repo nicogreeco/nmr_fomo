@@ -193,6 +193,14 @@ See [scripts/model/README.md](scripts/model/README.md) for checkpoint loading,
 inference, and training examples. Canonical schema and reader examples are in
 [scripts/data/README.md](scripts/data/README.md).
 
+## Models
+
+The three selected FoMoNMR checkpoints are published in the
+[FoMoNMR Hugging Face model repository](https://huggingface.co/niccogreek/fomonmr).
+It contains the shift-only pretraining model, the recommended rich-input
+posttraining model, and the UniMol2-relational posttraining variant, together
+with their model cards, training configurations, and release manifests.
+
 ## Datasets
 
 The final processed collection is public on
