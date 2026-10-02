@@ -21,6 +21,7 @@ __pycache__
 /results/structural_information/analysis_exp/
 /models_release/
 /scripts/*.html
+/cookbook*/
 
 *.sbatch
 *.npy
@@ -71,3 +72,4 @@ __pycache__
 !/results/structural_information/analysis/mean_rank.csv
 
 scripts/test_notebook.ipynb
+AGENTS.md

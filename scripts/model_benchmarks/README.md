@@ -156,21 +156,39 @@ comparisons. Their dimensions and exact pooling rules are listed in
 ## Downstream runners
 
 The runners consume saved embedding Parquets and never invoke an encoder.
+This separation makes embedding extraction reusable: changing a probe does not
+rerun a large encoder, and changing an encoder does not change labels, splits,
+or downstream code.
+
+| Runner | Inputs | What it fits | Main outputs |
+| --- | --- | --- | --- |
+| `run_structural_information_probes.py` | train, validation, and test embedding Parquets | one linear probe and seeded MLP probes for each structural target | one representation directory with `test_metrics.csv` and run metadata |
+| `run_property_prediction.py` | endpoint labels plus train/test embedding Parquets | grouped-CV linear and MLP probes for each endpoint and representation | one CSV per endpoint |
+| `finetune_fomonmr_property_prediction.py` | canonical endpoint Parquets and a FoMoNMR checkpoint | a fresh property head while updating FoMoNMR end to end | endpoint CSVs and selected fine-tuned states |
+
+An experiment name identifies a representation, not an extraction command.
+For example, `fomonmr-post-rich` is one saved embedding family used across
+splits and endpoints. A name such as `morgan+fomonmr-post-rich` tells the ADMET
+runner to align the two existing caches by `record_id` and concatenate them;
+there is no separate combined encoder or embedding file.
 
 ### Structural information
 
-The benchmark is run with `run_structural_information_probes` and uses a fixed
-molecule-disjoint train/validation split, one common embedding intersection,
-linear seed 42, and MLP seeds 13, 42, and 73. Complete
+The benchmark asks which molecular attributes are linearly or nonlinearly
+recoverable from frozen embeddings. The runner uses a fixed molecule-disjoint
+train/validation split and one common record intersection across
+representations. It trains the same heads for every representation, using
+linear seed 42 and MLP seeds 13, 42, and 73. Complete
 commands from dataset preparation through notebook analysis are in
 [`results/structural_information/README.md`](../../results/structural_information/README.md).
 
 ### Frozen ADMET probes
 
-`run_property_prediction.py` evaluates standalone embeddings and `+`-joined
-representations on the same record intersection. Combined representations are
-concatenated by the runner and do not require separate cache files. Outer CV
-and the MLP early-stopping split group records by full InChIKey.
+`run_property_prediction.py` evaluates how frozen representations transfer to
+five labelled ADMET endpoints. Standalone and `+`-joined representations use
+the same per-endpoint record intersection. Outer CV and the MLP early-stopping
+split group records by full InChIKey, and classification/regression metrics are
+selected from the endpoint definition.
 
 Complete extraction, runner, and analysis commands are in
 [`results/property_prediction/README.md`](../../results/property_prediction/README.md).

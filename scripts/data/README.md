@@ -1,37 +1,26 @@
-# Canonical data
+# Canonical data package
 
-This package contains the reusable, model-independent data layer. It can be
-used by the existing-model benchmarks and later by training code for a new
-model.
+`scripts/data` is the model-independent data layer. It defines the Python
+representation of one spectrum, validates canonical records, streams canonical
+Parquets, and contains the commands that build derived datasets. It does not
+tokenize, pad, mask, or otherwise adapt a record for a neural network.
 
-- `schema.py` defines canonical records and multiplicity normalization.
-- `validation.py` checks common schema rules without imposing model-specific
-  requirements.
-- `dataset.py` provides an in-memory dataset, a small JSONL reader, and a
-  streaming Parquet dataset.
-- `canonicalize/` contains source-specific conversion and dataset-analysis tools.
-- `postprocess/` contains derived-data and benchmark-preparation utilities.
-- `reporting.py` writes the small JSON processing reports shared by both
-  conversion and post-processing commands.
-- `download_raw_datasets.sh` retrieves pinned public releases into
-  `datasets/raw/` and verifies them against the committed DVC pointers.
+| Path | Purpose |
+| --- | --- |
+| `schema.py` | `CanonicalRecord`, `ProtonPeak`, `CarbonPeak`, and multiplicity normalization |
+| `validation.py` | common schema checks without model-specific requirements |
+| `dataset.py` | in-memory, JSONL, and streaming Parquet readers |
+| `canonicalize/` | source-specific raw-to-canonical converters |
+| `postprocess/` | merge, filtering, splitting, sidecar, ADMET, and analytics tools |
+| `reporting.py` | compact processing reports shared by commands |
+| `download_raw_datasets.sh` | downloader for the pinned public source releases |
+| `generate_dvc_pipeline.sh` | generator for the root `dvc.yaml` |
 
-Raw inputs are pinned by the `.dvc` files under `datasets/raw/`.
-`datasets/raw/sources.yaml` records their upstream identity and role without
-duplicating DVC hashes, while the tunable pipeline defaults live in the root
-`params.yaml`.
+Run Python commands from the repository root with `scripts` on `PYTHONPATH`.
 
-Every maintained pipeline transformation, plus final analytics, writes a
-deterministic processing report. The common top-level fields are `stage`,
-`inputs`, `outputs`, and `counts`; `details` appears only for useful
-stage-specific breakdowns such as filtering reasons or ADMET cohorts. Git and
-DVC already record code, commands, parameters, and exact data hashes, so
-reports intentionally omit timestamps, hosts, and library dumps.
+## Reproduce the data pipeline
 
-## DVC pipeline
-
-The explicit root pipeline is [`dvc.yaml`](../../dvc.yaml). Its dependency
-graph is:
+The root [`dvc.yaml`](../../dvc.yaml) connects the scripts in this package:
 
 ```text
 raw source releases
@@ -47,73 +36,49 @@ raw source releases
   -> final collection analytics
 ```
 
-Regenerate stage definitions only after changing this topology or a stage
-command:
-
-```bash
-source ~/.bashrc
-nmr-env main
-scripts/data/generate_dvc_pipeline.sh
-```
-
-The generator calls `dvc stage add`, updates existing stage definitions, and
-validates the DAG. It does not call `dvc repro` or process any dataset. Ordinary
-parameter changes belong in `params.yaml`; its values are referenced directly
-by the affected stages and do not require regenerating `dvc.yaml`.
-
-Canonical Parquets, intermediate Parquets, and removal audits remain in the
-local DVC cache with `push: false`. Final cleaned datasets, molecular-property
-sidecars, analytics, and the small processing reports use the normal push
-policy for the private maintainer cache and are released publicly through
-Hugging Face. Reports are ordinary cached DVC outputs rather than no-cache metrics,
-so they do not disable the stage run cache.
-
-The physical foundation-model splits under `datasets/train_splits/` are local
-outputs with `cache: false`. DVC records the stage and its report, but does not
-copy the large split Parquets into its cache or remote storage.
-
-After downloading the pinned public raw releases, inspect or execute the
-pipeline with:
+For the full build, download the pinned sources and let DVC run the required
+commands:
 
 ```bash
 scripts/data/download_raw_datasets.sh all
-dvc dag
 dvc repro
 ```
 
-`dvc repro` includes the full SimNMR conversion and is intentionally not run
-by the generator. A targeted command such as `dvc repro filter_test` also runs
-whatever upstream stages are missing or stale. Maintained stage commands use
-`--quiet`: each script shows a start line, one progress bar, a completion line,
-and real errors, while suppressing non-essential library warnings. Run an
-individual command without `--quiet` when detailed intermediate messages are
-useful; `--no-progress` disables only its bar. After a successful run,
-`dvc.lock` pins commands, parameters, dependencies, and output hashes and must
-be committed with the code changes that produced it.
+Inspect the graph or reproduce only one target with:
 
-The downloader, private Nebius maintainer cache, public Hugging Face release,
-directory ownership, and clean-checkout procedure are documented in
-[`datasets/README.md`](../../datasets/README.md).
+```bash
+dvc dag
+dvc repro STAGE
+```
 
-The post-processing commands, including benchmark disjoining, common
-filtering, ADMET preparation, same-order RDKit molecular-property Parquet
-generation, and final analytics modes, are documented in
-[`postprocess/README.md`](postprocess/README.md). Those descriptors and fingerprints are derived sidecars; they are not canonical
-schema fields or filter acceptance criteria.
+Pipeline parameters live in `params.yaml`; `dvc.lock` records the commands,
+parameters, dependencies, and hashes of the current run. Regenerate
+`dvc.yaml` with `scripts/data/generate_dvc_pipeline.sh` only when a stage or
+dependency changes. The generator updates stage definitions but does not
+process data.
 
-The data package deliberately stops at canonical records and derived files.
-The training-only pairing, row-group sharding, Morgan expansion, and padded
-model batch are documented in [`../model/README.md`](../model/README.md).
+For individual command examples, see
+[`canonicalize/README.md`](canonicalize/README.md) and
+[`postprocess/README.md`](postprocess/README.md). Dataset download and directory
+layout are covered by [`datasets/README.md`](../../datasets/README.md).
 
-NMR-to-NMR overlap uses exact `smiles_canonical` equality. Full RDKit
-InChIKeys are reserved for matching external ADMET property structures.
+The package stops at canonical records and derived files. Training-only
+pairing, padding, masking, and model tensors are documented in
+[`../model/README.md`](../model/README.md).
 
-Canonical schema version 2 stores the record identifier and provenance,
-source and canonical SMILES, molecular formula, acquisition metadata, an
-atom-symbol list, and the two nested resonance lists. It deliberately has no
-coordinate column. Structure fields are not encoder inputs: source converters
-derive canonical SMILES, formula, and atoms with RDKit before these readers see
-the data.
+## Canonical schema
+
+Canonical schema v2 represents one source spectrum as a `CanonicalRecord`.
+
+| Object | Main fields |
+| --- | --- |
+| `CanonicalRecord` | `record_id`, provenance, source/canonical SMILES, formula, atoms, acquisition metadata, H peaks, C peaks |
+| `ProtonPeak` | shift plus optional integration, raw/normalized multiplicity, J values, range, and equivalence metadata |
+| `CarbonPeak` | shift plus optional integral, intensity, and width |
+
+Structure fields are metadata, not automatic encoder inputs. Converters derive
+`smiles_canonical`, `molecular_formula`, and `atoms` with RDKit. Coordinates,
+padding, tokens, split labels, and training targets are intentionally absent.
 
 `atoms` is a list of element symbols in the order obtained by parsing the
 stored canonical SMILES. It normally excludes implicit hydrogens, while the
@@ -132,14 +97,65 @@ All currently maintained source and final-release Parquet files use schema v2.
 The reader still ignores extra physical columns so that small fixtures and
 older external files can be inspected without changing the in-memory model.
 
-The readers only consume records that are already canonical. They do not
-tokenize spectra, adapt fields for a model, or convert a raw dataset.
+`None` means that an annotation was unavailable. An empty H or C tuple means
+that the record has no peaks for that modality. Normalized multiplicity
+`<unk>` means an annotation was observed but is outside the supported
+vocabulary; `multiplicity_raw` still preserves its source value.
+
+### Construct a record in Python
+
+This is useful in notebooks, tests, or for running a processor on a few spectra:
+
+```python
+from data import CanonicalRecord, CarbonPeak, ProtonPeak
+
+record = CanonicalRecord(
+    record_id="example-001",
+    source="local",
+    smiles="CCO",
+    smiles_canonical="CCO",
+    molecular_formula="C2H6O",
+    atoms=("C", "C", "O"),
+    h_nmr_peaks=(
+        ProtonPeak(
+            shift=1.18,
+            integration=3,
+            multiplicity_raw="triplet",
+            multiplicity="t",
+            j_values=(7.0,),
+        ),
+        ProtonPeak(shift=3.65, integration=2, multiplicity="q"),
+    ),
+    c_nmr_peaks=(CarbonPeak(shift=18.3), CarbonPeak(shift=58.1)),
+)
+```
+
+The schema accepts nullable structural metadata for small fixtures, while the
+maintained converters require valid source SMILES and populate the derived
+structure fields.
+
+### Stream canonical Parquets
+
+`CanonicalParquetDataset` is an `IterableDataset`; it yields one validated
+`CanonicalRecord` at a time and does not load the complete file into memory:
 
 ```python
 from data import CanonicalParquetDataset
 
-dataset = CanonicalParquetDataset("datasets/canonical/mst_nmr/test.parquet")
+dataset = CanonicalParquetDataset("datasets/cleaned/test_benchmark.parquet")
+record = next(iter(dataset))
+
+print(record.record_id)
+print([peak.shift for peak in record.h_nmr_peaks])
 ```
 
-Add shared canonical fields or validation rules here. Model-specific input
-requirements belong in `scripts/model_benchmarks/processors/`.
+The reader can receive one path or a list of paths. Worker sharding happens by
+file, so use `num_workers=0` when a `DataLoader` reads one large Parquet. The
+reader ignores extra physical columns and fills omitted optional fields with
+their dataclass defaults, but it never parses a raw source or creates
+model-specific tensors.
+
+Use `CanonicalNMRDataset([record, ...])` for a small in-memory collection and
+`JsonlCanonicalReader` for canonical JSONL. FoMoNMR batching is described in
+[`../model/README.md`](../model/README.md); published-model processors live in
+[`../model_benchmarks/processors/`](../model_benchmarks/processors/).

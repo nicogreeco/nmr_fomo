@@ -1,13 +1,18 @@
-# NMR FoMo
+# FoMoNMR
 
-This is the private working repository for an NMR foundation-model project.
-It contains the project notes, canonical NMR-data code, reproducible
-DVC data-preparation pipeline, and a small bridge for comparing a future model
-with published NMR encoders.
+FoMoNMR is a foundation encoder for structured, combined `1H + 13C` NMR
+resonance lists. This repository contains the canonical data pipeline, the
+FoMoNMR implementation, adapters for published baseline encoders, and the
+downstream evaluations used in the project.
 
-The central goal is to learn useful representations from combined `1H + 13C`
-NMR spectra. This README explains the repository layout; `contex/` contains the
-scientific rationale, data design, and benchmarking notes.
+The code follows one consistent boundary:
+
+```text
+canonical dataset -> model-specific processor/collator -> native batch -> encoder
+```
+
+Canonical records remain model independent. Tokenization, padding, masking,
+checkpoint limits, and pooling belong to the model that consumes them.
 
 ## Clone
 
@@ -97,6 +102,7 @@ datasets/
   cleaned/                  final datasets, molecular properties, and analytics
   train_splits/             local no-cache train/validation Parquets
 models/                     pinned upstream repositories (Git submodules)
+results/                    tracked result CSVs, notebooks, and reproduction notes
 scripts/
   data/                     canonical data code and data-preparation utilities
     canonicalize/           source-specific conversion and dataset-analysis tools
@@ -108,29 +114,9 @@ scripts/
   envs_scr/                 model-specific environment setup material
 ```
 
-The reusable data layer remains independent of the published models:
-
-```text
-CanonicalParquetDataset -> processor/collator -> model batch -> embedder -> embeddings
-```
-
-Foundation-model training can additionally pair each final NMR Parquet with
-its same-order molecular-property sidecar:
-
-```text
-NMR Parquet + molecular-property Parquet
-    -> PairedFoundationDataset
-    -> FoundationNMRProcessor
-    -> NMR tensors + float32 Morgan fingerprints
-```
-
-See [scripts/model/README.md](scripts/model/README.md) for a complete PyTorch
-`DataLoader` example and the Lightning device-transfer behavior.
-
-Canonical Parquet schema version 2 stores source SMILES plus RDKit-derived
-canonical SMILES, molecular formula, and atom symbols. Conversion and schema details are in
-`scripts/data/canonicalize/README.md` and the canonicalization
-implementation note linked below.
+See [scripts/model/README.md](scripts/model/README.md) for checkpoint loading,
+inference, and training examples. Canonical schema and reader examples are in
+[scripts/data/README.md](scripts/data/README.md).
 
 ## Datasets
 
@@ -163,8 +149,6 @@ To reproduce or modify the collection, activate the main environment, download
 the pinned raw sources, then let DVC rebuild the complete graph:
 
 ```bash
-source ~/.bashrc
-nmr-env main
 scripts/data/download_raw_datasets.sh all
 dvc repro
 ```
@@ -177,9 +161,25 @@ eight CPU workers (four for SimNMR canonicalization), took about 15 hours in a
 successful run, and should be budgeted for up to 20 hours on a comparable
 machine, excluding raw-download time.
 
-See [datasets/README.md](datasets/README.md)
-for the directory layout and publication details, and [scripts/data/README.md](scripts/data/README.md)
-for the pipeline and scripts.
+See [datasets/README.md](datasets/README.md) for the directory layout and why
+some folders are empty in a clean checkout, and
+[scripts/data/README.md](scripts/data/README.md) for the Python data API and
+pipeline tools.
+
+## Results
+
+The tracked result folders contain compact CSV outputs, analysis notebooks,
+and instructions for reproducing each evaluation:
+
+| Directory | Contents |
+| --- | --- |
+| [`results/ablation`](results/ablation) | FoMoNMR architecture and objective ablations |
+| [`results/structural_information`](results/structural_information) | frozen structural-information probes |
+| [`results/property_prediction`](results/property_prediction) | frozen ADMET probes across molecular, NMR, and combined representations |
+| [`results/fomonmr_finetune`](results/fomonmr_finetune) | end-to-end FoMoNMR ADMET fine-tuning |
+
+Each maintained result README identifies the dataset, embeddings, runner, and
+notebook needed to regenerate its tables.
 
 ## How to navigate the project
 
@@ -192,10 +192,8 @@ Use `contex/` for the project notes and design rationale:
 - [Embedding Pipeline Architecture](<contex/Embedding_Pipeline_Architecture.md>) and
   [Canonicalization Implementation Notes](<contex/Canonicalization_Implementation_Notes.md>) describe the current implementation decisions.
 
-Each `scripts/` subfolder has a short README with the practical details for
-that part of the code. In particular, start from `scripts/README.md` for the
-Python layout, and from `scripts/data/canonicalize/README.md` for conversion or
-canonical-dataset analysis.
+Each `scripts/` subfolder has a practical README for that part of the code.
+Start from [scripts/README.md](scripts/README.md) to choose a workflow.
 
 Before a push, check `git status`, `git diff --cached`, and
 `git submodule status`.
