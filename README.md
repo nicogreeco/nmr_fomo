@@ -32,9 +32,7 @@ then commit the new submodule pointer in this repository.
 ## Published-model benchmarks
 
 `models/` contains code from published repositories, used here only to extract
-latent representations from their existing encoders. Those embeddings are a
-benchmark for the future foundation model; the upstream models are not part of
-the new model itself.
+latent representations from their existing encoders as a benchmark.
 
 | Local path | Published repository | Role here |
 |---|---|---|
@@ -130,8 +128,7 @@ See [scripts/model/README.md](scripts/model/README.md) for a complete PyTorch
 `DataLoader` example and the Lightning device-transfer behavior.
 
 Canonical Parquet schema version 2 stores source SMILES plus RDKit-derived
-canonical SMILES, molecular formula, and atom symbols. It deliberately omits
-3D coordinates; no current spectral benchmark consumes them. Conversion and schema details are in
+canonical SMILES, molecular formula, and atom symbols. Conversion and schema details are in
 `scripts/data/canonicalize/README.md` and the canonicalization
 implementation note linked below.
 
