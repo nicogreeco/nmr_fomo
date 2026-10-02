@@ -1,8 +1,0 @@
-[core]
-    remote = nebius
-[cache]
-    type = hardlink
-['remote "nebius"']
-    url = s3://nmr-datasets/dvc-cache
-    endpointurl = https://storage.eu-west1.nebius.cloud
-    region = eu-west1
