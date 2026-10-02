@@ -14,6 +14,14 @@ canonical dataset -> model-specific processor/collator -> native batch -> encode
 Canonical records remain model independent. Tokenization, padding, masking,
 checkpoint limits, and pooling belong to the model that consumes them.
 
+### Interactive embedding visualization
+
+Explore the test-set embeddings in an interactive 3D UMAP:
+
+[![3D UMAP visualization](docs/3d_umap.png)](https://nicogreeco.github.io/nmr_fomo/umap_3d_properties_test_images.html)
+
+*Click the figure to explore the interactive 3D visualization.*
+
 ## Clone
 
 The published model repositories are included as Git submodules. Clone them
