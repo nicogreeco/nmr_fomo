@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from math import log10
+from math import ceil, log10
 
 
 class FourierFeatures(nn.Module):
@@ -21,6 +21,7 @@ class FourierFeatures(nn.Module):
             "random",
             "voronov_et_al",
             "lin_float_int",
+            "linear",
             "log_spaced",
         }:
             raise ValueError(f"unknown Fourier strategy: {strategy!r}")
@@ -48,12 +49,23 @@ class FourierFeatures(nn.Module):
 
         if strategy == "random":
             frequencies = torch.randn(num_freqs) * sigma
-        elif strategy == "lin_float_int":
+        elif strategy == "linear":
             frequencies = torch.linspace(
                 1.0 / value_span,
                 1.0 / resolution,
                 steps=num_freqs,
             )
+        elif strategy == "lin_float_int":
+            # UltraNMR's x_min is a positive shift resolution, rather than
+            # the signed lower bound of the chemical-shift domain.
+            ultranmr_x_min = resolution
+            ultranmr_x_max = x_max
+            frequencies = torch.tensor(
+                [1 / (ultranmr_x_min * i) for i in range(2, ceil(1 / ultranmr_x_min), 2)]
+                + [1 / i for i in range(2, ceil(ultranmr_x_max))]
+            )
+            if frequencies.numel() == 0:
+                raise ValueError("lin_float_int produced no frequencies for this domain")
         else:
             # Log spacing applies to positive periods, not to the physical input
             # range. Chemical shifts themselves may therefore be negative.

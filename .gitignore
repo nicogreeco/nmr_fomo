@@ -22,6 +22,7 @@ __pycache__
 /models_release/
 /scripts/*.html
 /cookbook*/
+/context/
 
 *.sbatch
 *.npy
